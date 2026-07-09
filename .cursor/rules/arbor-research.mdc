@@ -1,0 +1,26 @@
+---
+description: Use Arbor keyless research workflow (skills + MCP) for idea iteration
+alwaysApply: true
+---
+
+# Arbor Research Iteration (Cursor, no API key)
+
+When the user brings a research idea, progress update, or asks to iterate/optimize:
+
+1. Prefer the Arbor skill suite under `.cursor/skills/` (or `~/.cursor/skills/`).
+   Entry: `arbor-research-agent` → `arbor-agent-orchestrator` → phase skills.
+2. Use Arbor MCP tools when available (`arbor` server): `tree_view`, `tree_add_node`,
+   `tree_update_node`, `tree_prune`, `tree_set_meta`, `eval_run`, `worktree_create`,
+   `worktree_remove`, `git_merge_branch`, `generate_report`, `open_dashboard`,
+   `scaffold_benchmark`. Do not invent Arbor API keys — Cursor is the brain.
+3. Persist state under `<project>/.arbor/sessions/<run_name>/` with Idea Tree as
+   durable memory. Do not rely on chat history alone.
+4. Idea discipline: mechanism-level hypotheses (Mechanism / Hypothesis / Observable /
+   Conflicts), not parameter tweaks. Read constraints via tree view before IDEATE.
+5. Eval discipline: iterate on B_dev; use B_test only for merge/final verification.
+   Run experiments in isolated git worktrees; protect eval/data paths.
+6. Capture findings (leverage/pitfall) into session experience so later runs can recall.
+7. Before training, package installs, or B_test, ask the user unless they already approved.
+
+If MCP is unavailable, fall back to
+`arbor-agent-tools/scripts/arbor_state.py` for tree/eval/worktree/merge/report.

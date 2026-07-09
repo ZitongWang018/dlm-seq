@@ -1,0 +1,310 @@
+{
+  "dataset": "mbpp",
+  "sampler": "lcr",
+  "accuracy": 0.0,
+  "correct": 0,
+  "total": 50,
+  "records": [
+    {
+      "idx": 0,
+      "task_id": 11,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 1,
+      "task_id": 12,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 2,
+      "task_id": 13,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 3,
+      "task_id": 14,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 4,
+      "task_id": 15,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 5,
+      "task_id": 16,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 6,
+      "task_id": 17,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 7,
+      "task_id": 18,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 8,
+      "task_id": 19,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 9,
+      "task_id": 20,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 10,
+      "task_id": 21,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 11,
+      "task_id": 22,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 12,
+      "task_id": 23,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 13,
+      "task_id": 24,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 14,
+      "task_id": 25,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 15,
+      "task_id": 26,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 16,
+      "task_id": 27,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 17,
+      "task_id": 28,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 18,
+      "task_id": 29,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 19,
+      "task_id": 30,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 20,
+      "task_id": 31,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 21,
+      "task_id": 32,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 22,
+      "task_id": 33,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 23,
+      "task_id": 34,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 24,
+      "task_id": 35,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 25,
+      "task_id": 36,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 26,
+      "task_id": 37,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 27,
+      "task_id": 38,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 28,
+      "task_id": 39,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 29,
+      "task_id": 40,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 30,
+      "task_id": 41,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 31,
+      "task_id": 42,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 32,
+      "task_id": 43,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 33,
+      "task_id": 44,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 34,
+      "task_id": 45,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 35,
+      "task_id": 46,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 36,
+      "task_id": 47,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 37,
+      "task_id": 48,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 38,
+      "task_id": 49,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 39,
+      "task_id": 50,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 40,
+      "task_id": 51,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 41,
+      "task_id": 52,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 42,
+      "task_id": 53,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 43,
+      "task_id": 54,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 44,
+      "task_id": 55,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 45,
+      "task_id": 56,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 46,
+      "task_id": 57,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 47,
+      "task_id": 58,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 48,
+      "task_id": 59,
+      "correct": false,
+      "nfe": 64
+    },
+    {
+      "idx": 49,
+      "task_id": 60,
+      "correct": false,
+      "nfe": 64
+    }
+  ],
+  "elapsed_sec": 925.697832107544
+}

@@ -1,0 +1,25 @@
+model_path: /root/autodl-tmp/model/LLaDA/instruct
+dataset_root: /root/autodl-tmp/dataset
+results_root: /root/autodl-tmp/dlm-seq-flow/results
+
+# generation
+steps: 64
+gen_length: 128
+block_length: 128
+mbpp_steps: 256
+mbpp_gen_length: 256
+mbpp_block_length: 256
+temperature: 0.0
+mask_id: 126336
+
+# experiment scale
+gsm8k_limit: 50
+mbpp_limit: 50
+observation_limit: 10
+
+# trajectory sampler hyperparams
+top_k_track: 32
+recent_window: 4
+coupling_threshold: 0.15
+convergence_weight: 0.6
+stability_weight: 0.4
