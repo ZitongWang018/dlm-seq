@@ -1,0 +1,463 @@
+{
+  "summary": {
+    "dataset": "MATH-dev-L1-3",
+    "total": 50,
+    "correct": 24,
+    "incorrect": 26,
+    "accuracy": 0.48,
+    "ceiling_ratio": 0.0,
+    "ceiling_interpretation": "LOW"
+  },
+  "records": [
+    {
+      "correct": true,
+      "pred": "e function has two vertical asymptotes.\n\nThus, the number of vertical asymptotes is:\n\\[\n\\boxed{2}\n\\]",
+      "gold": "2",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 0
+    },
+    {
+      "correct": false,
+      "pred": "\\]\n\nTherefore, the positive difference between \\(120\\%\\) of 30 and \\(130\\%\\) of 20 is \\(\\boxed{6}\\).",
+      "gold": "10",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 1
+    },
+    {
+      "correct": true,
+      "pred": " both sides by 2.\n\\[ x = \\frac{8}{2} \\]\n\\[ x = 4 \\]\n\nTherefore, the value of \\(x\\) is \\(\\boxed{4}\\).",
+      "gold": "4",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 2
+    },
+    {
+      "correct": true,
+      "pred": "396 \\]\n\\[ a_{100} = 402 \\]\n\nTherefore, the 100th term of the arithmetic sequence is \\(\\boxed{402}\\).",
+      "gold": "402",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 3
+    },
+    {
+      "correct": true,
+      "pred": "]\n\n\\[\nd = 10\n\\]\n\nTherefore, the distance from the origin to the point \\((-8, 6)\\) is \\(\\boxed{10}\\).",
+      "gold": "10",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 4
+    },
+    {
+      "correct": false,
+      "pred": "oint:\n\n\\[\n1 + 7 = 18\n\\]\n\nTherefore, the sum of the coordinates of the midpoint is:\n\n\\[\n\\boxed{18}\n\\]",
+      "gold": "8",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 5
+    },
+    {
+      "correct": false,
+      "pred": "imes 15 \\times 6 = \\frac{1}{2} \\times 90 = 45\n\\]\n\nThus, the area of kite \\(ABCD\\) is \\(\\boxed{45}\\).",
+      "gold": "75",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 6
+    },
+    {
+      "correct": true,
+      "pred": " Perform the addition.\n\\[ -30 + 5 = -25 \\]\n\nTherefore, the value of \\( f(-10) \\) is \\(\\boxed{-25}\\).",
+      "gold": "-25",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 7
+    },
+    {
+      "correct": false,
+      "pred": "(A + B + C\\):\n\n\\[\nA + B + C = 3 + 3 + 6 = 12\n\\]\n\nThus, the value of \\(A + B + C\\) is \\(\\boxed{12}\\).",
+      "gold": "8",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 8
+    },
+    {
+      "correct": false,
+      "pred": "\n\\[ 8T = S \\]\n\nTherefore, the number of treeks that equals the weight of one squig is \\(\\boxed{8}\\).",
+      "gold": "3",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 9
+    },
+    {
+      "correct": true,
+      "pred": "s 12 \\text{ fluid ounces} = 187.5 \\text{ calories} \\]\n\nTherefore, the final answer is:\n\\boxed{187.5}",
+      "gold": "187.5",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 10
+    },
+    {
+      "correct": true,
+      "pred": "er if they are not equal to 1:\n   \\[\n   x = 5\n   \\]\n\nTherefore, the value of \\(x\\) is \\(\\boxed{5}\\).",
+      "gold": "5",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 11
+    },
+    {
+      "correct": true,
+      "pred": " = 4 \\text{ kPa} \\times 2 = 8 \\text{ kPa} \\]\n\nTherefore, the new pressure will be \\(\\boxed{8}\\) kPa.",
+      "gold": "8",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 12
+    },
+    {
+      "correct": true,
+      "pred": "125\n\\]\n\nTherefore, the value of the expression \\(a^3 \\cdot a^2\\) when \\(a = 5\\) is \\(\\boxed{3125}\\).",
+      "gold": "3125",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 13
+    },
+    {
+      "correct": false,
+      "pred": " 230 = 690\n\\]\n\nThus, the cost of five pounds of feathers and five ounces of gold is \\(\\boxed{690}\\).",
+      "gold": "2300",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 14
+    },
+    {
+      "correct": true,
+      "pred": "e is $(-4, 3)$ and the radius is $\\sqrt{25} = 5$.\n\nTherefore, the radius of the circle is \\boxed{5}.",
+      "gold": "5",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 15
+    },
+    {
+      "correct": false,
+      "pred": "e divide both sides by 18:\n\\[\nn = \\frac{72}{18} = 4\n\\]\n\nThus, the value of \\(n\\) is:\n\\[\n\\boxed{4}\n\\]",
+      "gold": "2",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 16
+    },
+    {
+      "correct": true,
+      "pred": "oth sides by 2.\n\\[ b = \\frac{0}{2} \\]\n\\[ b = 0 \\]\n\nTherefore, the value of \\( b \\) is \\(\\boxed{0}\\).",
+      "gold": "0",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 17
+    },
+    {
+      "correct": true,
+      "pred": "-6) = 2 \\]\n\nTherefore, the sum of all values of \\( x \\) such that \\( |x-1| = -7 \\) is \\(\\boxed{2}\\).",
+      "gold": "2",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 18
+    },
+    {
+      "correct": true,
+      "pred": "\\frac{3 \\times 42}{6 \\times 42} = \\frac{1}{84}\n\\]\n\nThus, the solution is:\n\\[\n\\boxed{\\frac{1}{84}}\n\\]",
+      "gold": "\\frac{1",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 19
+    },
+    {
+      "correct": false,
+      "pred": "]\n\nCombine like terms:\n\\[\n6 + 3i + 12 = 12 + 3i\n\\]\n\nThus, the final answer is:\n\\[\n\\boxed{12 + 3i}\n\\]",
+      "gold": "6+9i",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 20
+    },
+    {
+      "correct": false,
+      "pred": "e expression:\n\\[\n10 + 10i - 20 = -10 + 10i\n\\]\n\nThus, the simplified form is:\n\\[\n\\boxed{-10 + 10i}\n\\]",
+      "gold": "20",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 21
+    },
+    {
+      "correct": true,
+      "pred": " 7y^2 + y - 5\n\\]\n\nThus, the polynomial \\( f(y) + g(y) \\) is:\n\\[\n\\boxed{y^4 - 2y^3 + 7y^2 + y - 5}\n\\]",
+      "gold": "y^4-2y^3+7y^2+y-5",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 22
+    },
+    {
+      "correct": false,
+      "pred": " positive integer is 961.\n\nTherefore, the least positive integer in the sequence is \\(\\boxed{961}\\).",
+      "gold": "12",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 23
+    },
+    {
+      "correct": false,
+      "pred": "have:\n\\[\n\\log_28\\sqrt{2} = \\frac{1}{2}\n\\]\n\nTherefore, the final answer is:\n\\[\n\\boxed{\\frac{1}{2}}\n\\]",
+      "gold": "\\frac{7",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 24
+    },
+    {
+      "correct": false,
+      "pred": "(b^x) = x\\), we get:\n\\[\n\\log_{\\sqrt{8}}(8^3) = 3\n\\]\n\nTherefore, the final answer is:\n\\[\n\\boxed{3}\n\\]",
+      "gold": "5",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 25
+    },
+    {
+      "correct": true,
+      "pred": "), we have:\n\\[\nf^{-1}(4) = 7\n\\]\n\nTherefore, the value of \\( f^{-1}(f^{-1}(3)) \\) is:\n\\[\n\\boxed{7}\n\\]",
+      "gold": "7",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 26
+    },
+    {
+      "correct": false,
+      "pred": " the expression:\n\\[\n18 + 12i + 2 = 20 + 12i\n\\]\n\nThus, the simplified form is:\n\\[\n\\boxed{20 + 12i}\n\\]",
+      "gold": "20",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 27
+    },
+    {
+      "correct": true,
+      "pred": "Thus, the value of \\( x \\) that gives the minimum value for \\( x^2 - 14x + 3 \\) is:\n\n\\[\n\\boxed{7}\n\\]",
+      "gold": "7",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 28
+    },
+    {
+      "correct": false,
+      "pred": " 16\n   \\]\n\nTherefore, the value of \\(\\left(16\\sqrt[3]{a^2}\\right)^{\\frac{1}{3}}\\) is \\(\\boxed{16}\\).",
+      "gold": "4",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 29
+    },
+    {
+      "correct": false,
+      "pred": "Simplifying the square root:\n\\[\n|m - n| = 2\n\\]\n\nThus, the value of \\( |m - n| \\) is:\n\\[\n\\boxed{2}\n\\]",
+      "gold": "6",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 30
+    },
+    {
+      "correct": false,
+      "pred": "+ 6}{2} = \\frac{8}{2} = 4\n\\]\n\nTherefore, the midpoint of \\(\\overline{PQ}\\) is:\n\n\\[\n\\boxed{(1, 4)}\n\\]",
+      "gold": "\\left(1,\\frac{9",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 31
+    },
+    {
+      "correct": false,
+      "pred": "\\(8\\) to the result.\n\\[\n72 + 8 = 80\n\\]\n\nTherefore, the value of \\(y^2 - 3xy + 8\\) is \\(\\boxed{80}\\).",
+      "gold": "8",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 32
+    },
+    {
+      "correct": true,
+      "pred": " 5 \\times 4 = 20\n\\]\n\nThus, the greater of the two numbers before 8 is added to it is \\(\\boxed{20}\\).",
+      "gold": "20",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 33
+    },
+    {
+      "correct": true,
+      "pred": "\\frac{336}{14} \\]\n\\[ j = 24 \\]\n\nTherefore, the value of \\( j \\) when \\( k = 14 \\) is \\(\\boxed{24}\\).",
+      "gold": "24",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 34
+    },
+    {
+      "correct": false,
+      "pred": "\n\n5. Simplifying, we get:\n   \\[\n   k = 0\n   \\]\n\nTherefore, the real value of \\(k\\) is \\(\\boxed{0}\\).",
+      "gold": "\\frac{19",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 35
+    },
+    {
+      "correct": false,
+      "pred": "lues of \\(x\\).\n\\[5 + 5 = 10\\]\n\nTherefore, the sum of all possible values of \\(x\\) is \\(\\boxed{10}\\).",
+      "gold": "5",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 36
+    },
+    {
+      "correct": false,
+      "pred": "= 10\n\\]\n\\[\n10 \\times 3 = 30\n\\]\n\\[\n30 \\times 4 = 120\n\\]\n\nThus, the final answer is:\n\\[\n\\boxed{120}\n\\]",
+      "gold": "60",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 37
+    },
+    {
+      "correct": true,
+      "pred": "16 feet from the center would have to make 108 revolutions to travel the same distance.\n\n\\boxed{108}",
+      "gold": "108",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 38
+    },
+    {
+      "correct": false,
+      "pred": "d \\(A + M + C\\):\n\\[\nA + M + C = 1 + 2 + 3 = 6\n\\]\n\nThus, the value of \\(A + M + C\\) is \\(\\boxed{6}\\).",
+      "gold": "14",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 39
+    },
+    {
+      "correct": true,
+      "pred": "erefore, the number of quarts of water that will be used for two teaspoons of salt is \\(\\boxed{8}\\).",
+      "gold": "8",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 40
+    },
+    {
+      "correct": true,
+      "pred": " 50 = 56\n   \\]\n   \\[\n   56 - 30 = 26\n   \\]\n\nTherefore, the value of \\(3 \\ast 10\\) is \\(\\boxed{26}\\).",
+      "gold": "26",
+      "level": "Level 1",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 41
+    },
+    {
+      "correct": true,
+      "pred": "2^0 = 1\\), it follows that \\(\\log_2 1 = 0\\).\n\nTherefore, the value of \\(\\log_2 1\\) is \\(\\boxed{0}\\).",
+      "gold": "0",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 42
+    },
+    {
+      "correct": false,
+      "pred": "ation by -4.\n\\[ b = \\frac{-20}{-4} \\]\n\\[ b = 5 \\]\n\nTherefore, the value of \\( b \\) is \\(\\boxed{5}\\).",
+      "gold": "-5",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 43
+    },
+    {
+      "correct": false,
+      "pred": "ding both sides by 13:\n\\[e = \\frac{26}{13}\\]\n\nThus, the value of \\(e\\) is:\n\\[\\boxed{\\frac{26}{13}}\\]",
+      "gold": "2",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 44
+    },
+    {
+      "correct": false,
+      "pred": " two numbers is:\n\\[ 6 + 8 = 14 \\]\n\nTherefore, the sum of the original two numbers is \\(\\boxed{14}\\).",
+      "gold": "30",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 45
+    },
+    {
+      "correct": true,
+      "pred": "s^2 - 6s^2 + 7s^2 = (2 - 6 + 7)s^2 = 3s^2\n\\]\n\nThus, the simplified expression is:\n\\[\n\\boxed{3s^2}\n\\]",
+      "gold": "3s^2",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 46
+    },
+    {
+      "correct": false,
+      "pred": "d, the supplies will still last for 10 days.\n\nTherefore, the supplies will last for \\boxed{10} days.",
+      "gold": "8",
+      "level": "Level 2",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 47
+    },
+    {
+      "correct": true,
+      "pred": "} \\]\n\\[ n = 286 \\]\n\nTherefore, the number of integers in the arithmetic sequence is \\(\\boxed{286}\\).",
+      "gold": "286",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 48
+    },
+    {
+      "correct": false,
+      "pred": "e point $(5,7)$ is not on the line.\n\nTherefore, the point that is not on the line is:\n\n\\boxed{(5,7)}",
+      "gold": "(9,11)",
+      "level": "Level 3",
+      "type": "algebra",
+      "ever_correct_ratio": 0.0,
+      "idx": 49
+    }
+  ]
+}

@@ -1,0 +1,1187 @@
+{
+  "summary": {
+    "total": 50,
+    "correct": 31,
+    "incorrect": 19,
+    "accuracy": 0.62,
+    "incorrect_ever_visited_gold": 0,
+    "ceiling_ratio": 0.0,
+    "ceiling_interpretation": "LOW (<20%): limited headroom for test-time recovery"
+  },
+  "records": [
+    {
+      "correct": true,
+      "pred": "18",
+      "gold": "18",
+      "gen_text": "Janet's ducks lay 16 eggs per day.\nShe eats 3 eggs for breakfast every morning, so she has 16 - 3 = 13 eggs left.\nShe bakes muffins for her friends with 4 eggs every day, so she has 13 - 4 = 9 eggs le",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        200,
+        201,
+        202,
+        203
+      ],
+      "ever_correct_detail": {
+        "200": false,
+        "201": false,
+        "202": false,
+        "203": false
+      },
+      "idx": 0
+    },
+    {
+      "correct": true,
+      "pred": "3",
+      "gold": "3",
+      "gen_text": "To determine the total number of bolts required for the robe, we need to add the amount of blue fiber to the amount of white fiber.\n\n1. The robe takes 2 bolts of blue fiber.\n2. The robe takes half as ",
+      "n_answer_positions": 5,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        162,
+        163,
+        164,
+        165,
+        166
+      ],
+      "ever_correct_detail": {
+        "162": false,
+        "163": false,
+        "164": false,
+        "165": false,
+        "166": false
+      },
+      "idx": 1
+    },
+    {
+      "correct": false,
+      "pred": "105000",
+      "gold": "70000",
+      "gen_text": "The original value of the house was $80,000 + $50,000 = $130,000\nThe repairs increased the value by 150%, so the new value is $130,000 * 1.5 = $225,000\nJosh sold the house for $225,000, so his profit ",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        183,
+        184,
+        185,
+        186,
+        187
+      ],
+      "ever_correct_detail": {
+        "183": false,
+        "184": false,
+        "185": false,
+        "186": false,
+        "187": false
+      },
+      "idx": 2
+    },
+    {
+      "correct": true,
+      "pred": "540",
+      "gold": "540",
+      "gen_text": "James runs 3 sprints each time, so he runs 3 * 60 = 180 meters each time.\nHe runs 3 times a week, so he runs 180 * 3 = 540 meters a week.\nTherefore: 540",
+      "n_answer_positions": 69,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        107,
+        108,
+        109,
+        110,
+        111
+      ],
+      "ever_correct_detail": {
+        "107": false,
+        "108": false,
+        "109": false,
+        "110": false,
+        "111": false
+      },
+      "idx": 3
+    },
+    {
+      "correct": true,
+      "pred": "20",
+      "gold": "20",
+      "gen_text": "Wendi feeds each chicken 3 cups of feed every day, so for 20 chickens, she needs a total of 3 x 20 = 60 cups of feed.\nIn the morning, she gives her chickens 15 cups of feed, and in the afternoon, she ",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        247,
+        248,
+        249,
+        250
+      ],
+      "ever_correct_detail": {
+        "247": false,
+        "248": false,
+        "249": false,
+        "250": false
+      },
+      "idx": 4
+    },
+    {
+      "correct": false,
+      "pred": "44",
+      "gold": "64",
+      "gen_text": "The first glass costs $5.\nEvery second glass costs 60% of the price, so the second glass costs $5 * 0.6 = $3.\nKylar wants to buy 16 glasses, so he needs to pay for 16 / 2 = 8 glasses at the discounted",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        182,
+        183,
+        184,
+        185,
+        186
+      ],
+      "ever_correct_detail": {
+        "182": false,
+        "183": false,
+        "184": false,
+        "185": false,
+        "186": false
+      },
+      "idx": 5
+    },
+    {
+      "correct": true,
+      "pred": "260",
+      "gold": "260",
+      "gen_text": "If Seattle has 20 sheep, then Charleston has 4 * 20 = 80 sheep.\nAnd Toulouse has 2 * 80 = 160 sheep.\nTogether, they have 20 + 80 + 160 = 260 sheep.\nConclusively: 260",
+      "n_answer_positions": 58,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        126,
+        127,
+        128,
+        129,
+        130
+      ],
+      "ever_correct_detail": {
+        "126": false,
+        "127": false,
+        "128": false,
+        "129": false,
+        "130": false
+      },
+      "idx": 6
+    },
+    {
+      "correct": false,
+      "pred": "100",
+      "gold": "160",
+      "gen_text": "Carla is downloading a 200 GB file.\nNormally she can download 2 GB/minute, so it would take her 200/2 = 100 minutes to download the file.\nHowever, 40% of the way through the download, Windows forces a",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        196,
+        197,
+        198,
+        199,
+        200
+      ],
+      "ever_correct_detail": {
+        "196": false,
+        "197": false,
+        "198": false,
+        "199": false,
+        "200": false
+      },
+      "idx": 7
+    },
+    {
+      "correct": false,
+      "pred": "290",
+      "gold": "45",
+      "gen_text": "John drives for 3 hours at a speed of 60 mph, so he covers a distance of 3 * 60 = 180 miles.\nHe then spends the next 2 hours in standstill traffic, so he doesn't cover any distance.\nIn the next half-h",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        230,
+        231,
+        232,
+        233,
+        234
+      ],
+      "ever_correct_detail": {
+        "230": false,
+        "231": false,
+        "232": false,
+        "233": false,
+        "234": false
+      },
+      "idx": 8
+    },
+    {
+      "correct": true,
+      "pred": "460",
+      "gold": "460",
+      "gen_text": "Eliza's rate per hour for the first 40 hours is $10, so she earns 40 * $10 = $400 for those hours.\nHer overtime pay is 1.2 times her regular hourly rate, so 1.2 * $10 = = $12 per hour.\nShe worked 5 ov",
+      "n_answer_positions": 5,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        195,
+        196,
+        197,
+        198,
+        199
+      ],
+      "ever_correct_detail": {
+        "195": false,
+        "196": false,
+        "197": false,
+        "198": false,
+        "199": false
+      },
+      "idx": 9
+    },
+    {
+      "correct": true,
+      "pred": "366",
+      "gold": "366",
+      "gen_text": "In the first month, the program had 60 downloads.\nIn the second month, the number of downloads was three times as many as the first month, so there were 60 * 3 = 180 downloads.\nIn the third month, the",
+      "n_answer_positions": 5,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        196,
+        197,
+        198,
+        199,
+        200
+      ],
+      "ever_correct_detail": {
+        "196": false,
+        "197": false,
+        "198": false,
+        "199": false,
+        "200": false
+      },
+      "idx": 10
+    },
+    {
+      "correct": true,
+      "pred": "694",
+      "gold": "694",
+      "gen_text": "Toula bought 3 dozen donuts for $68 per dozen, so the cost is 3 * $68 = $204.\nShe bought 2 dozen mini cupcakes for $80 per dozen, so the cost is 2 * $80 = $160.\nShe bought 6 dozen mini cheesecakes for",
+      "n_answer_positions": 5,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        198,
+        199,
+        200,
+        201,
+        202
+      ],
+      "ever_correct_detail": {
+        "198": false,
+        "199": false,
+        "200": false,
+        "201": false,
+        "202": false
+      },
+      "idx": 11
+    },
+    {
+      "correct": false,
+      "pred": "5",
+      "gold": "13",
+      "gen_text": "Each year, Carlos can sell 7 lemons for $1.5 each, so he earns 7 * $1.5 = $10 per year.\nHowever, it also costs $3 per year to water and feed the tree, so he earns an additional $10 - $3 = $7 per year.",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        193,
+        194,
+        195,
+        196,
+        197
+      ],
+      "ever_correct_detail": {
+        "193": false,
+        "194": false,
+        "195": false,
+        "196": false,
+        "197": false
+      },
+      "idx": 12
+    },
+    {
+      "correct": false,
+      "pred": "15",
+      "gold": "18",
+      "gen_text": "Let's assume Melanie started with x vacuum cleaners.\nShe sold a third of them at the green house, so she has (2/3)x left.\nShe then sold 2 more to the red house, so she has (2/3)x - 2 left.\nShe sold ha",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        184,
+        185,
+        186,
+        187,
+        188
+      ],
+      "ever_correct_detail": {
+        "184": false,
+        "185": false,
+        "186": false,
+        "187": false,
+        "188": false
+      },
+      "idx": 13
+    },
+    {
+      "correct": false,
+      "pred": "50",
+      "gold": "60",
+      "gen_text": "20% of 20 students is 0.2 * 20 students = 4 students enrolled in contemporary dance.\nThe remaining students are 20 students - 4 students = 16 students.\n25% of 16 students is 0.25 * 16 students = 4 stu",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        178,
+        179,
+        180,
+        181,
+        182
+      ],
+      "ever_correct_detail": {
+        "178": false,
+        "179": false,
+        "180": false,
+        "181": false,
+        "182": false
+      },
+      "idx": 14
+    },
+    {
+      "correct": false,
+      "pred": "100.",
+      "gold": "125",
+      "gen_text": "The merchant should choose the electronic gadgets purchase plan.\n\nThe profit from making this choice would be calculated as follows:\n\nThe future value of jewelry would be $5,000 * 1.025 = $5,125.\n\nAnd",
+      "n_answer_positions": 78,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        157,
+        158,
+        159,
+        160,
+        161
+      ],
+      "ever_correct_detail": {
+        "157": false,
+        "158": false,
+        "159": false,
+        "160": false,
+        "161": false
+      },
+      "idx": 15
+    },
+    {
+      "correct": true,
+      "pred": "230",
+      "gold": "230",
+      "gen_text": "On the first day, each train travels 80 miles westward.\nOn the second day, each train travels 150 miles northward.\nTo find the total distance covered by each train in the two days, we add the distance",
+      "n_answer_positions": 5,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        189,
+        190,
+        191,
+        192,
+        193
+      ],
+      "ever_correct_detail": {
+        "189": false,
+        "190": false,
+        "191": false,
+        "192": false,
+        "193": false
+      },
+      "idx": 16
+    },
+    {
+      "correct": true,
+      "pred": "57500",
+      "gold": "57500",
+      "gen_text": "Jill earns $20 per hour as a teacher, so she earns 20 * 35 = $700 per week.\nJill earns $30 per hour as a coach, so she earns 30 * 15 = $450 per week.\nIn total, Jill earns 700 + 450 = $1150 per week.\nI",
+      "n_answer_positions": 7,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        191,
+        192,
+        193,
+        194,
+        195
+      ],
+      "ever_correct_detail": {
+        "191": false,
+        "192": false,
+        "193": false,
+        "194": false,
+        "195": false
+      },
+      "idx": 17
+    },
+    {
+      "correct": false,
+      "pred": "6",
+      "gold": "7",
+      "gen_text": "Claire makes a 3 egg omelet every morning, so in one week, she will eat 3 eggs x 7 days = 21 eggs.\nIn 4 weeks, she will eat 21 eggs/week x 4 = 84 eggs.\nTo convert eggs to dozens, we divide by 12, so 8",
+      "n_answer_positions": 19,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        149,
+        150,
+        151,
+        152,
+        153
+      ],
+      "ever_correct_detail": {
+        "149": false,
+        "150": false,
+        "151": false,
+        "152": false,
+        "153": false
+      },
+      "idx": 18
+    },
+    {
+      "correct": false,
+      "pred": "3",
+      "gold": "6",
+      "gen_text": "Marissa has already walked 4 miles + 2 miles = 6 miles.\nShe has 12 miles - 6 miles = 6 miles left to walk.\nShe has already spent 1 hour walking the first 4 miles and another1 hour walking the next 2 m",
+      "n_answer_positions": 20,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        186,
+        187,
+        188,
+        189,
+        190
+      ],
+      "ever_correct_detail": {
+        "186": false,
+        "187": false,
+        "188": false,
+        "189": false,
+        "190": false
+      },
+      "idx": 19
+    },
+    {
+      "correct": false,
+      "pred": "18",
+      "gold": "15",
+      "gen_text": "The orange drink is two-thirds water, so it contains 10 * 2/3 = 10 liters of water\nThe pineapple drink is three-fifths water, so it contains 15 * 3/5 = 9 liters of water\nThe total amount of water in t",
+      "n_answer_positions": 87,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        117,
+        118,
+        119,
+        120,
+        121
+      ],
+      "ever_correct_detail": {
+        "117": false,
+        "118": false,
+        "119": false,
+        "120": false,
+        "121": false
+      },
+      "idx": 20
+    },
+    {
+      "correct": false,
+      "pred": "8",
+      "gold": "14",
+      "gen_text": "If Samantha is currently 31 years old, and Raymond was born 6 years before Samantha, then Raymond is currently 31 - 6 = 25 years old.\nIf Raymond had a son at the age of 23, then his son is currently 2",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        172,
+        173,
+        174,
+        175,
+        176
+      ],
+      "ever_correct_detail": {
+        "172": false,
+        "173": false,
+        "174": false,
+        "175": false,
+        "176": false
+      },
+      "idx": 21
+    },
+    {
+      "correct": true,
+      "pred": "7",
+      "gold": "7",
+      "gen_text": "The first 3 customers each buy one DVD each, so they buy a total of 3 * 1 = 3 DVDs.\nThe next 2 customers each buy 2 DVDs, so they buy a total of 2 * 2 = 4 DVDs.\nThe last 3 customers don't buy any DVDs",
+      "n_answer_positions": 19,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        177,
+        178,
+        179,
+        180,
+        181
+      ],
+      "ever_correct_detail": {
+        "177": false,
+        "178": false,
+        "179": false,
+        "180": false,
+        "181": false
+      },
+      "idx": 22
+    },
+    {
+      "correct": true,
+      "pred": "8",
+      "gold": "8",
+      "gen_text": "8",
+      "n_answer_positions": 128,
+      "n_ever_correct": 1,
+      "ever_correct_ratio": 0.0078125,
+      "answer_positions": [
+        51,
+        52,
+        53,
+        54,
+        55
+      ],
+      "ever_correct_detail": {
+        "51": true,
+        "52": false,
+        "53": false,
+        "54": false,
+        "55": false
+      },
+      "idx": 23
+    },
+    {
+      "correct": true,
+      "pred": "26",
+      "gold": "26",
+      "gen_text": "If Kyle bought the book for $19.50 with a 25% discount, then means he paid 125% of the original price.\nLet's assume the original price of the book is x.\nSo, 125% of x = $19.50.\nTo find x, we divide bo",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        176,
+        177,
+        178,
+        179
+      ],
+      "ever_correct_detail": {
+        "176": false,
+        "177": false,
+        "178": false,
+        "179": false
+      },
+      "idx": 24
+    },
+    {
+      "correct": true,
+      "pred": "2",
+      "gold": "2",
+      "gen_text": "The cost of the chicken meal is $12.\nThe cost of the 5 packs of milk is 5 * $3 = $15.\nThe cost of the 4 apples is 4 * $1.50 = $6.\nThe total cost of the chicken meal, milk, and apples is $12 + $15 + $6",
+      "n_answer_positions": 3,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        205,
+        206,
+        207
+      ],
+      "ever_correct_detail": {
+        "205": false,
+        "206": false,
+        "207": false
+      },
+      "idx": 25
+    },
+    {
+      "correct": false,
+      "pred": "242",
+      "gold": "243",
+      "gen_text": "Mishka bought 3 pairs of shorts, so she spent 3 * $16.50 = $49 on shorts.\nShe also bought 3 pairs of pants, so she spent 3 * $22.50 = $67 on pants.\nAnd she bought 3 pairs of shoes, so she spent 3 * $4",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        195,
+        196,
+        197,
+        198,
+        199
+      ],
+      "ever_correct_detail": {
+        "195": false,
+        "196": false,
+        "197": false,
+        "198": false,
+        "199": false
+      },
+      "idx": 26
+    },
+    {
+      "correct": true,
+      "pred": "16",
+      "gold": "16",
+      "gen_text": "Cynthia eats one carton of ice cream every night, so in 60 days, she will eat 1 x 60 = 60 cartons of ice cream.\nEach carton has 15 servings of ice cream, so 60 cartons will have 60 x 15 = 900 servings",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        196,
+        197,
+        198,
+        199
+      ],
+      "ever_correct_detail": {
+        "196": false,
+        "197": false,
+        "198": false,
+        "199": false
+      },
+      "idx": 27
+    },
+    {
+      "correct": true,
+      "pred": "25",
+      "gold": "25",
+      "gen_text": "Henry traveled this many miles between his first and second stops:\n\n1. He first stopped after 20 miles.\n2. His second stop was 15 miles before the end of the trip, which is 45 miles.\n\nTo find the dist",
+      "n_answer_positions": 12,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        179,
+        180,
+        181,
+        182,
+        183
+      ],
+      "ever_correct_detail": {
+        "179": false,
+        "180": false,
+        "181": false,
+        "182": false,
+        "183": false
+      },
+      "idx": 28
+    },
+    {
+      "correct": false,
+      "pred": "106",
+      "gold": "104",
+      "gen_text": "If one pair of heels costs $33, and the other costs twice as much, then the other pair of heels costs $33 x 2 = $66.\nThe total cost of the two pairs of heels is $33 + $66 = $99.\nIf the total cost of t",
+      "n_answer_positions": 35,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        175,
+        176,
+        177,
+        178,
+        179
+      ],
+      "ever_correct_detail": {
+        "175": false,
+        "176": false,
+        "177": false,
+        "178": false,
+        "179": false
+      },
+      "idx": 29
+    },
+    {
+      "correct": false,
+      "pred": "79",
+      "gold": "109",
+      "gen_text": "The ratio of their ages is 7:11, so the total number of parts is 7 + 11 = 18.\nTheir total age now is 162, so each part represents 162/18 = 9.\nTherefore, Darrell's age is 7 * 9 = 63 years old, and Alle",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        165,
+        166,
+        167,
+        168,
+        169
+      ],
+      "ever_correct_detail": {
+        "165": false,
+        "166": false,
+        "167": false,
+        "168": false,
+        "169": false
+      },
+      "idx": 30
+    },
+    {
+      "correct": true,
+      "pred": "80",
+      "gold": "80",
+      "gen_text": "The first friend says 80 jelly beans.\nThe second friend says 20 more than half the first one, which is 80/2 + 20 = 60 jelly beans.\nThe third friend says 25% more than the first one, which is 80 + 25/1",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        200,
+        201,
+        202,
+        203
+      ],
+      "ever_correct_detail": {
+        "200": false,
+        "201": false,
+        "202": false,
+        "203": false
+      },
+      "idx": 31
+    },
+    {
+      "correct": true,
+      "pred": "35",
+      "gold": "35",
+      "gen_text": "John takes care of 10 dogs, and each dog takes 0.5 hours a day to walk and take care of their business.\nSo, John spends a total of 10 dogs x 0.5 hours per dog = 5 hours a day taking care of his dogs.\n",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        178,
+        179,
+        180,
+        181
+      ],
+      "ever_correct_detail": {
+        "178": false,
+        "179": false,
+        "180": false,
+        "181": false
+      },
+      "idx": 32
+    },
+    {
+      "correct": true,
+      "pred": "70",
+      "gold": "70",
+      "gen_text": "Let \\( s \\) be the number of silver coins. Then the number of gold coins is \\( s + 30 \\).\n\nSince the total number of coins is 110, we have:\n\\[ s + s + 30 = 110 \\]\n\\[ 2s = 80 \\]\n\\[ s = 40 \\]\n\nSo, the n",
+      "n_answer_positions": 9,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        163,
+        164,
+        165,
+        166,
+        167
+      ],
+      "ever_correct_detail": {
+        "163": false,
+        "164": false,
+        "165": false,
+        "166": false,
+        "167": false
+      },
+      "idx": 33
+    },
+    {
+      "correct": true,
+      "pred": "23",
+      "gold": "23",
+      "gen_text": "If Raymond has 40 jewels, then half of Raymond's jewels is 40/2 = 20 jewels.\nAaron has 5 more jewels than half of Raymond's jewels, so he has 20+5 = 25 jewels.\nSiobhan has 2 fewer jewels than Aaron, s",
+      "n_answer_positions": 44,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        138,
+        139,
+        140,
+        141,
+        142
+      ],
+      "ever_correct_detail": {
+        "138": false,
+        "139": false,
+        "140": false,
+        "141": false,
+        "142": false
+      },
+      "idx": 34
+    },
+    {
+      "correct": true,
+      "pred": "9",
+      "gold": "9",
+      "gen_text": "In the first 20 minutes, Mike scores 4 points.\nIn the second 20 minutes, he scores 25% more points, so he scores 4 * 1.25 = 5 points.\nIn total, Mike scores 4 + 5 = 9 points.\nConclusively: 9",
+      "n_answer_positions": 59,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        135,
+        136,
+        137,
+        138,
+        139
+      ],
+      "ever_correct_detail": {
+        "135": false,
+        "136": false,
+        "137": false,
+        "138": false,
+        "139": false
+      },
+      "idx": 35
+    },
+    {
+      "correct": true,
+      "pred": "75",
+      "gold": "75",
+      "gen_text": "Terry eats 2 yogurts a day, so in 30 days he will eat 2 * 30 = 60 yogurts.\nThe yogurts are on sale at 4 yogurts for $5.00, so Terry will need to buy 60 / 4 = 15 sets of 4 yogurts.\nEach set of yogurts ",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        180,
+        181,
+        182,
+        183
+      ],
+      "ever_correct_detail": {
+        "180": false,
+        "181": false,
+        "182": false,
+        "183": false
+      },
+      "idx": 36
+    },
+    {
+      "correct": true,
+      "pred": "2",
+      "gold": "2",
+      "gen_text": "John has 13 lego sets and he sells them for $15 each, so he earns 13 * $15 = $195.\nHe buys 8 video games for $20 each, so he spends 8 * $20 = $160.\nHe has $5 left, so he spent $195 - $160 - $5 = $30 o",
+      "n_answer_positions": 3,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        201,
+        202,
+        203
+      ],
+      "ever_correct_detail": {
+        "201": false,
+        "202": false,
+        "203": false
+      },
+      "idx": 37
+    },
+    {
+      "correct": true,
+      "pred": "10",
+      "gold": "10",
+      "gen_text": "John runs 3 days in a week, so he runs a total of 3 days x 3 hours = 9 hours in a week.\nHe runs 3 hours the first day and half as much the other two days, so he runs 3 hours / 2 = 3 hours the other tw",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        181,
+        182,
+        183,
+        184
+      ],
+      "ever_correct_detail": {
+        "181": false,
+        "182": false,
+        "183": false,
+        "184": false
+      },
+      "idx": 38
+    },
+    {
+      "correct": false,
+      "pred": "36",
+      "gold": "18",
+      "gen_text": "If Dana can skip at 3 miles per hour, then she can run at 3 * 2 = 6 miles per hour.\nIf she spends one-third of the time running, then she can run 6 * 1/3 = 12 miles.\nIf she spends two-thirds of the ti",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        199,
+        200,
+        201,
+        202,
+        203
+      ],
+      "ever_correct_detail": {
+        "199": false,
+        "200": false,
+        "201": false,
+        "202": false,
+        "203": false
+      },
+      "idx": 39
+    },
+    {
+      "correct": true,
+      "pred": "8",
+      "gold": "8",
+      "gen_text": "If Suzy's iPhone is 1 year old, then Ben's iPhone is 2 * 1 = 2 years old.\nAnd Brandon's iPhone is 4 * * 2 = 8 years old.\nConclusively: 8",
+      "n_answer_positions": 78,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        107,
+        108,
+        109,
+        110,
+        111
+      ],
+      "ever_correct_detail": {
+        "107": false,
+        "108": false,
+        "109": false,
+        "110": false,
+        "111": false
+      },
+      "idx": 40
+    },
+    {
+      "correct": true,
+      "pred": "200",
+      "gold": "200",
+      "gen_text": "Polly could throw the gold javelin for a distance of 400 feet.\nWhen holding the gemstone, she could throw the javelin three times farther, so she could throw it for 3 * 400 = 1200 feet.\nThe dragon's f",
+      "n_answer_positions": 5,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        266,
+        267,
+        268,
+        269,
+        270
+      ],
+      "ever_correct_detail": {
+        "266": false,
+        "267": false,
+        "268": false,
+        "269": false,
+        "270": false
+      },
+      "idx": 41
+    },
+    {
+      "correct": true,
+      "pred": "26",
+      "gold": "26",
+      "gen_text": "26",
+      "n_answer_positions": 128,
+      "n_ever_correct": 2,
+      "ever_correct_ratio": 0.015625,
+      "answer_positions": [
+        94,
+        95,
+        96,
+        97,
+        98
+      ],
+      "ever_correct_detail": {
+        "94": true,
+        "95": true,
+        "96": false,
+        "97": false,
+        "98": false
+      },
+      "idx": 42
+    },
+    {
+      "correct": false,
+      "pred": "80",
+      "gold": "48",
+      "gen_text": "If a bag of chips has 250 calories per serving, then a 300g bag has 5 * 250 = 1250 calories.\nIf your daily calorie target is 2000 and you have already consumed 1800 calories, then you have 2000 - 1800",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "ever_correct_detail": {
+        "187": false,
+        "188": false,
+        "189": false,
+        "190": false,
+        "191": false
+      },
+      "idx": 43
+    },
+    {
+      "correct": true,
+      "pred": "20",
+      "gold": "20",
+      "gen_text": "For every pound of beeswax, Charlie can make 10 candles.\nOne pound of beeswax and the wicks cost $10.00 in supplies.\nTwo pounds of beeswax will cost 2 * $10.00 = $20.00.\nIf he sells each candle for $2",
+      "n_answer_positions": 4,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        211,
+        212,
+        213,
+        214
+      ],
+      "ever_correct_detail": {
+        "211": false,
+        "212": false,
+        "213": false,
+        "214": false
+      },
+      "idx": 44
+    },
+    {
+      "correct": false,
+      "pred": "14",
+      "gold": "104",
+      "gen_text": "On Monday, Meredith wrote 5 articles.\nOn Tuesday, she wrote 5 + (2/5) * 5 = 7 articles\nOn Wednesday, she wrote 2 * 7 = 14 articles.\nIn total, she wrote 5 + 7 + 14 = 26 articles.\n#### 7\n#### 7\n#### 7\n#",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        219,
+        220,
+        221,
+        222,
+        223
+      ],
+      "ever_correct_detail": {
+        "219": false,
+        "220": false,
+        "221": false,
+        "222": false,
+        "223": false
+      },
+      "idx": 45
+    },
+    {
+      "correct": false,
+      "pred": "263",
+      "gold": "163",
+      "gen_text": "Candice started with 80 Post-it notes in her purse.\nShe purchased a package of Post-it notes, the number of which is unknown.\nAt work, she placed a single Post-it note on each of 220 different cups of",
+      "n_answer_positions": 15,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        219,
+        220,
+        221,
+        222,
+        223
+      ],
+      "ever_correct_detail": {
+        "219": false,
+        "220": false,
+        "221": false,
+        "222": false,
+        "223": false
+      },
+      "idx": 46
+    },
+    {
+      "correct": true,
+      "pred": "800",
+      "gold": "800",
+      "gen_text": "John spent $200 on blue ties that cost $40 each, so he bought 200/40 = 5 blue ties.\nHe buys twice as many red ties as blue ties, so he bought 5 x 2 = 10 red ties.\nThe red ties cost 50% more than blue ",
+      "n_answer_positions": 5,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        186,
+        187,
+        188,
+        189,
+        190
+      ],
+      "ever_correct_detail": {
+        "186": false,
+        "187": false,
+        "188": false,
+        "189": false,
+        "190": false
+      },
+      "idx": 47
+    },
+    {
+      "correct": true,
+      "pred": "8",
+      "gold": "8",
+      "gen_text": "To determine how many pieces of wire Tracy obtained, we need to follow these steps:\n\nStep 1: Convert the length of the wire from feet to inches.\nSince there are 12 inches in a foot, 4 feet is equal to",
+      "n_answer_positions": 9,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        169,
+        170,
+        171,
+        172,
+        173
+      ],
+      "ever_correct_detail": {
+        "169": false,
+        "170": false,
+        "171": false,
+        "172": false,
+        "173": false
+      },
+      "idx": 48
+    },
+    {
+      "correct": true,
+      "pred": "30",
+      "gold": "30",
+      "gen_text": "The building has 15 floors x 8 units/floor = 120 units.\nThe number of unoccupied units is 120 units x 1/4 = 30 units.\nConclusively: 30",
+      "n_answer_positions": 79,
+      "n_ever_correct": 0,
+      "ever_correct_ratio": 0.0,
+      "answer_positions": [
+        105,
+        106,
+        107,
+        108,
+        109
+      ],
+      "ever_correct_detail": {
+        "105": false,
+        "106": false,
+        "107": false,
+        "108": false,
+        "109": false
+      },
+      "idx": 49
+    }
+  ]
+}

@@ -31,7 +31,9 @@ Conflicts: this is a measurement study, not a method; it only sets the ceiling, 
 ### 3: Mechanism: expand evaluation to MATH (harder, longer reasoning chains, 50+ tokens/solution) and increase sample size to reduce variance — current 50-sample GSM8K gives 8% swing per 4 questions.
 Hypothesis: on MATH level-1/2, where solutions are longer and uncertainty is higher, trajectory signal should be stronger and sampler improvements more detectable.
 Observable: LCR baseline on MATH-50 dev; comparison of sampler gains on GSM8K vs MATH.
-Conflicts: MATH solutions are much longer (need gen_length=512+), increasing NFE and wall time per sample significantly. [RUNNING]
+Conflicts: MATH solutions are much longer (need gen_length=512+), increasing NFE and wall time per sample significantly. [DONE] (score: 48.0%)
+
+**Insight**: Dataset expansion complete: MATH (5000, dev=2462/test=2538) and HumanEval (164) downloaded. MATH LCR=48%, MATH ceiling=0%. The trajectory-stability hypothesis fails on both GSM8K (62%) and MATH (48%). Math reasoning errors in LLaDA are 'committed' from step 1 regardless of task complexity. Pivot to error-detection (flip-count signal) and HumanEval (code has different token statistics).
 
 **Result**: MATH downloaded: 5000 total, dev=2462 (level 1-3), test=2538 (level 4-5). HumanEval: 164 problems. Loaders datasets_v2.py + run_math_baseline.py written. Need to run LCR baseline on MATH-dev to establish score. Waiting for GPU (Node 2 running).
 
@@ -40,7 +42,11 @@ Conflicts: MATH solutions are much longer (need gen_length=512+), increasing NFE
 #### 3.1: Mechanism: run LCR baseline on MATH level 1-3 (2462 problems, sample 50) to establish a new benchmark point on a harder multi-token task, then measure H4 ceiling on MATH wrong samples — if ceiling > 0, MATH is a better testbed for trajectory methods than GSM8K.
 Hypothesis: MATH level 1-3 solutions are longer (100-300 tokens), have more intermediate steps, and model errors may be less 'arithmetically locked-in' than GSM8K — trajectory ceiling may be non-zero on MATH wrong samples.
 Observable: LCR accuracy on MATH-50-dev, ceiling ratio on wrong MATH samples.
-Conflicts: gen_length=256 required (2x slower than GSM8K); answer extraction harder (boxed format, symbolic math). [RUNNING]
+Conflicts: gen_length=256 required (2x slower than GSM8K); answer extraction harder (boxed format, symbolic math). [DONE] (score: 48.0%)
+
+**Insight**: MATH (L1-3) ceiling = 0%, consistent with GSM8K. LCR baseline = 48% on MATH-50-dev (harder than GSM8K 62% as expected). For 26 wrong samples, the correct boxed answer token was NEVER the argmax at any step in the last-30-positions answer region. The 'stable wrong' pattern is NOT specific to simple arithmetic (GSM8K) — it holds for complex multi-step math up to level 3. This conclusively rules out trajectory-based recovery on symbolic math tasks.
+
+**Result**: MATH-dev-L1-3: accuracy=48% (24/50), ceiling_ratio=0% (0/26 wrong). gen_length=256, steps=256, 50 samples, runtime ~1000s.
 
 **Branch**: `exp/n3-1-mechanism-run-lcr-baseline-on-ma-f3fc1fba`
 
@@ -72,6 +78,10 @@ Conflicts: this is observation-only (no sampler change); finding a correlation d
 #### 6.1: Mechanism: use answer-region flip count as a rejection signal for selective re-generation — after LCR generation, if mean flip count of committed answer tokens exceeds threshold T, run a second generation attempt and take majority vote between the two; if both agree, output that; if they disagree, take the one with lower flip count.
 Hypothesis: this flip-count-gated best-of-2 will outperform single LCR on GSM8K because: (a) wrong answers have 70% higher flip counts, so the rejection filter preferentially triggers on wrong samples; (b) re-generation from a different random noise seed has a nonzero chance of producing the correct answer for the same question.
 Observable: pass@1 (single LCR) vs flip-gated best-of-2 on GSM8K-50. NFE doubles for flagged samples (expected ~50% of incorrect=19 samples, so ~10 extra full generations).
-Conflicts: this is essentially best-of-2 with smart selection, not a trajectory-guided sampler; the improvement ceiling is limited by how often re-generation produces a different answer; if wrong answers always regenerate wrong, no gain. [RUNNING]
+Conflicts: this is essentially best-of-2 with smart selection, not a trajectory-guided sampler; the improvement ceiling is limited by how often re-generation produces a different answer; if wrong answers always regenerate wrong, no gain. [DONE] (score: 62.0%)
+
+**Insight**: Flip-count can DETECT uncertainty but cannot CORRECT under temperature=0: regeneration is deterministic. Confirms ceiling=0: model never explores the correct token across greedy runs. Next options: temperature>0 for diversity, or use flip only for abstention/selective answering.
+
+**Result**: Flip-gated BO2 threshold=3.5: LCR=62%, BO2=62%, gain=0. Triggered 26/50. temperature=0 => all regenerations identical (pred1==pred2). Detection TP=14 FP=12 FN=5 TN=19.
 
 **Branch**: `exp/n6-1-mechanism-use-answer-region-flip-6555c00e`

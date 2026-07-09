@@ -1,6 +1,6 @@
 {
   "session_started_at": 1783565018.06494,
-  "updated_at": 1783566305.0700328,
+  "updated_at": 1783568660.2758613,
   "nodes": {
     "ROOT": {
       "created_at": 1783565018.06494,
@@ -18,7 +18,8 @@
     },
     "3": {
       "created_at": 1783565038.8307085,
-      "started_at": 1783565207.419276
+      "started_at": 1783565207.419276,
+      "finished_at": 1783567234.863278
     },
     "4": {
       "created_at": 1783565044.211112,
@@ -36,11 +37,13 @@
     },
     "3.1": {
       "created_at": 1783565785.4835682,
-      "started_at": 1783565806.028637
+      "started_at": 1783565806.028637,
+      "finished_at": 1783567231.8868952
     },
     "6.1": {
       "created_at": 1783566197.2190042,
-      "started_at": 1783566251.5817347
+      "started_at": 1783567239.9152968,
+      "finished_at": 1783568660.2758613
     }
   },
   "events": [
@@ -192,6 +195,33 @@
       "kind": "running",
       "node_id": "5",
       "label": "exp/n5-mechanism-shift-from-arithmetic--af21ac3a"
+    },
+    {
+      "ts": 1783567231.8868952,
+      "kind": "done",
+      "node_id": "3.1",
+      "label": "exp/n3-1-mechanism-run-lcr-baseline-on-ma-f3fc1fba",
+      "score": 48.0
+    },
+    {
+      "ts": 1783567234.863278,
+      "kind": "done",
+      "node_id": "3",
+      "label": "exp/n3-mechanism-expand-evaluation-to-m-b3da5c5b",
+      "score": 48.0
+    },
+    {
+      "ts": 1783567239.9152968,
+      "kind": "running",
+      "node_id": "6.1",
+      "label": "exp/n6-1-mechanism-use-answer-region-flip-6555c00e"
+    },
+    {
+      "ts": 1783568660.2758613,
+      "kind": "done",
+      "node_id": "6.1",
+      "label": "exp/n6-1-mechanism-use-answer-region-flip-6555c00e",
+      "score": 62.0
     }
   ]
 }
