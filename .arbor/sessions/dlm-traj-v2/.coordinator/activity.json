@@ -1,0 +1,91 @@
+{
+  "session_started_at": 1783565018.06494,
+  "updated_at": 1783565511.368478,
+  "nodes": {
+    "ROOT": {
+      "created_at": 1783565018.06494,
+      "started_at": 1783565018.06494
+    },
+    "1": {
+      "created_at": 1783565026.4528556,
+      "started_at": 1783565511.368478
+    },
+    "2": {
+      "created_at": 1783565030.8844368,
+      "started_at": 1783565066.1242228
+    },
+    "3": {
+      "created_at": 1783565038.8307085,
+      "started_at": 1783565207.419276
+    },
+    "4": {
+      "created_at": 1783565044.211112
+    }
+  },
+  "events": [
+    {
+      "ts": 1783565018.06494,
+      "kind": "running",
+      "node_id": "ROOT"
+    },
+    {
+      "ts": 1783565026.4528556,
+      "kind": "proposed",
+      "node_id": "1",
+      "label": "Mechanism: replace scalar-confidence path with argmax-identity stability across steps.\nHypothesis: positions whose argmax token remains unchanged for ≥k consecutive steps before commit are more likely to be correct than recently-flipped positions; gating on this stability can outperform LCR.\nObservable: accuracy on GSM8K-50 with stability-gated sampler vs LCR 62%.\nConflicts: selection bias — positions with long histories are exactly the uncertain ones LCR deferred; stability may not correlate with correctness if model oscillates around the correct token."
+    },
+    {
+      "ts": 1783565030.8844368,
+      "kind": "proposed",
+      "node_id": "2",
+      "label": "Mechanism: measure the theoretical ceiling before designing any sampler — how often does LLaDA visit the correct token mid-trajectory but commit to a wrong one at the end.\nHypothesis: if ≥15% of wrong answers had the correct token as argmax at some intermediate step, test-time recovery is viable; if <5%, trajectory-based approaches have negligible headroom.\nObservable: fraction of incorrect samples where answer-region argmax was correct at any step t < final step.\nConflicts: this is a measurement study, not a method; it only sets the ceiling, not the path to reach it."
+    },
+    {
+      "ts": 1783565038.8307085,
+      "kind": "proposed",
+      "node_id": "3",
+      "label": "Mechanism: expand evaluation to MATH (harder, longer reasoning chains, 50+ tokens/solution) and increase sample size to reduce variance — current 50-sample GSM8K gives 8% swing per 4 questions.\nHypothesis: on MATH level-1/2, where solutions are longer and uncertainty is higher, trajectory signal should be stronger and sampler improvements more detectable.\nObservable: LCR baseline on MATH-50 dev; comparison of sampler gains on GSM8K vs MATH.\nConflicts: MATH solutions are much longer (need gen_length=512+), increasing NFE and wall time per sample significantly."
+    },
+    {
+      "ts": 1783565044.211112,
+      "kind": "proposed",
+      "node_id": "4",
+      "label": "Mechanism: exploit top-K candidate-set Jaccard stability (set intersection / union across last k steps) as a richer signal than scalar confidence — captures whether the same tokens compete across steps regardless of their rank order.\nHypothesis: positions with high top-K Jaccard stability (same candidates competing) but low current confidence should be delayed; positions with low Jaccard (candidates changing entirely) indicate context-sensitivity and should also be delayed; only positions with converging Jaccard AND rising confidence should be advanced.\nObservable: accuracy vs LCR on GSM8K-50; also correlation between Jaccard stability and final correctness.\nConflicts: computing full top-K Jaccard requires storing token-level history (memory cost); K must be tuned."
+    },
+    {
+      "ts": 1783565064.7239726,
+      "kind": "running",
+      "node_id": "2"
+    },
+    {
+      "ts": 1783565066.1242228,
+      "kind": "running",
+      "node_id": "2",
+      "label": "exp/n2-mechanism-measure-the-theoretica-441dcc62"
+    },
+    {
+      "ts": 1783565206.9965758,
+      "kind": "running",
+      "node_id": "3",
+      "label": "exp/n3-mechanism-expand-evaluation-to-m-b3da5c5b"
+    },
+    {
+      "ts": 1783565207.419276,
+      "kind": "running",
+      "node_id": "3",
+      "label": "exp/n3-mechanism-expand-evaluation-to-m-b3da5c5b"
+    },
+    {
+      "ts": 1783565229.6015854,
+      "kind": "running",
+      "node_id": "1",
+      "label": "exp/n1-mechanism-replace-scalar-confide-aa515c34"
+    },
+    {
+      "ts": 1783565511.368478,
+      "kind": "running",
+      "node_id": "1",
+      "label": "exp/n1-mechanism-replace-scalar-confide-aa515c34"
+    }
+  ]
+}
