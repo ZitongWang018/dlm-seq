@@ -1,6 +1,6 @@
 {
   "session_started_at": 1783565018.06494,
-  "updated_at": 1783565511.368478,
+  "updated_at": 1783566305.0700328,
   "nodes": {
     "ROOT": {
       "created_at": 1783565018.06494,
@@ -8,18 +8,39 @@
     },
     "1": {
       "created_at": 1783565026.4528556,
-      "started_at": 1783565511.368478
+      "started_at": 1783565511.368478,
+      "finished_at": 1783565759.5569704
     },
     "2": {
       "created_at": 1783565030.8844368,
-      "started_at": 1783565066.1242228
+      "started_at": 1783565066.1242228,
+      "finished_at": 1783565752.5174665
     },
     "3": {
       "created_at": 1783565038.8307085,
       "started_at": 1783565207.419276
     },
     "4": {
-      "created_at": 1783565044.211112
+      "created_at": 1783565044.211112,
+      "started_at": 1783565044.211112,
+      "finished_at": 1783565761.6983953
+    },
+    "5": {
+      "created_at": 1783565773.5096297,
+      "started_at": 1783566305.0700328
+    },
+    "6": {
+      "created_at": 1783565779.3332534,
+      "started_at": 1783565955.070511,
+      "finished_at": 1783566183.659138
+    },
+    "3.1": {
+      "created_at": 1783565785.4835682,
+      "started_at": 1783565806.028637
+    },
+    "6.1": {
+      "created_at": 1783566197.2190042,
+      "started_at": 1783566251.5817347
     }
   },
   "events": [
@@ -86,6 +107,91 @@
       "kind": "running",
       "node_id": "1",
       "label": "exp/n1-mechanism-replace-scalar-confide-aa515c34"
+    },
+    {
+      "ts": 1783565752.5174665,
+      "kind": "done",
+      "node_id": "2",
+      "label": "exp/n2-mechanism-measure-the-theoretica-441dcc62",
+      "score": 62.0
+    },
+    {
+      "ts": 1783565759.5569704,
+      "kind": "pruned",
+      "node_id": "1",
+      "label": "Ceiling=0%: model never visits correct token for wrong samples. Identity-stable scoring assumes there's a correct candidate to stabilize toward — this assumption is violated. The wrong arithmetic prediction is stable from step 1, leaving no signal to gate on."
+    },
+    {
+      "ts": 1783565761.6983953,
+      "kind": "pruned",
+      "node_id": "4",
+      "label": "Same as Node 1: Jaccard top-K stability assumes the correct token competes in the top-K across steps. Ceiling=0% means correct token never reaches top-1 for wrong samples — likely not in top-K either. No basis for Jaccard gating."
+    },
+    {
+      "ts": 1783565773.5096297,
+      "kind": "proposed",
+      "node_id": "5",
+      "label": "Mechanism: shift from arithmetic (GSM8K) to code generation (HumanEval), where output structure differs fundamentally — code has stable scaffolding (def name, return structure) AND variable body tokens, and a single wrong token can produce a correct-looking but failing function, creating a different error profile.\nHypothesis: in HumanEval, wrong code samples will show non-zero ceiling (correct token visited mid-trajectory) because code has more diverse candidate sets and longer chains where intermediate states matter; trajectory-gated resampling of uncertain body tokens can improve pass@1.\nObservable: H4 ceiling on HumanEval (pass@1 baseline), and pass@1 of trajectory-gated sampler vs LCR.\nConflicts: HumanEval requires code execution to evaluate (slower); pass@1 variance is high at 164 samples; LLaDA may not be optimised for Python code generation specifically."
+    },
+    {
+      "ts": 1783565779.3332534,
+      "kind": "proposed",
+      "node_id": "6",
+      "label": "Mechanism: instead of recovering the final answer, use trajectory instability as a DIAGNOSTIC signal to detect intermediate reasoning errors — positions in the chain-of-thought that are low-stability may indicate where the arithmetic went wrong, enabling targeted re-generation of those steps only.\nHypothesis: in GSM8K, incorrect samples will show higher token-flip counts at intermediate calculation result positions (the = X tokens) than correct samples; this instability can serve as a quality signal without requiring recovery.\nObservable: compare flip-count distribution at intermediate vs answer positions for correct vs incorrect GSM8K samples; Pearson correlation between mean flip-count in reasoning region and final correctness.\nConflicts: this is observation-only (no sampler change); finding a correlation doesn't directly improve accuracy but would confirm trajectory has diagnostic value beyond the answer region."
+    },
+    {
+      "ts": 1783565785.4835682,
+      "kind": "proposed",
+      "node_id": "3.1",
+      "label": "Mechanism: run LCR baseline on MATH level 1-3 (2462 problems, sample 50) to establish a new benchmark point on a harder multi-token task, then measure H4 ceiling on MATH wrong samples — if ceiling > 0, MATH is a better testbed for trajectory methods than GSM8K.\nHypothesis: MATH level 1-3 solutions are longer (100-300 tokens), have more intermediate steps, and model errors may be less 'arithmetically locked-in' than GSM8K — trajectory ceiling may be non-zero on MATH wrong samples.\nObservable: LCR accuracy on MATH-50-dev, ceiling ratio on wrong MATH samples.\nConflicts: gen_length=256 required (2x slower than GSM8K); answer extraction harder (boxed format, symbolic math)."
+    },
+    {
+      "ts": 1783565804.6468565,
+      "kind": "running",
+      "node_id": "3.1"
+    },
+    {
+      "ts": 1783565806.028637,
+      "kind": "running",
+      "node_id": "3.1",
+      "label": "exp/n3-1-mechanism-run-lcr-baseline-on-ma-f3fc1fba"
+    },
+    {
+      "ts": 1783565843.6219761,
+      "kind": "running",
+      "node_id": "6",
+      "label": "exp/n6-mechanism-instead-of-recovering--f8cd4600"
+    },
+    {
+      "ts": 1783565955.070511,
+      "kind": "running",
+      "node_id": "6",
+      "label": "exp/n6-mechanism-instead-of-recovering--f8cd4600"
+    },
+    {
+      "ts": 1783566183.659138,
+      "kind": "done",
+      "node_id": "6",
+      "label": "exp/n6-mechanism-instead-of-recovering--f8cd4600",
+      "score": 62.0
+    },
+    {
+      "ts": 1783566197.2190042,
+      "kind": "proposed",
+      "node_id": "6.1",
+      "label": "Mechanism: use answer-region flip count as a rejection signal for selective re-generation — after LCR generation, if mean flip count of committed answer tokens exceeds threshold T, run a second generation attempt and take majority vote between the two; if both agree, output that; if they disagree, take the one with lower flip count.\nHypothesis: this flip-count-gated best-of-2 will outperform single LCR on GSM8K because: (a) wrong answers have 70% higher flip counts, so the rejection filter preferentially triggers on wrong samples; (b) re-generation from a different random noise seed has a nonzero chance of producing the correct answer for the same question.\nObservable: pass@1 (single LCR) vs flip-gated best-of-2 on GSM8K-50. NFE doubles for flagged samples (expected ~50% of incorrect=19 samples, so ~10 extra full generations).\nConflicts: this is essentially best-of-2 with smart selection, not a trajectory-guided sampler; the improvement ceiling is limited by how often re-generation produces a different answer; if wrong answers always regenerate wrong, no gain."
+    },
+    {
+      "ts": 1783566251.5817347,
+      "kind": "running",
+      "node_id": "6.1",
+      "label": "exp/n6-1-mechanism-use-answer-region-flip-6555c00e"
+    },
+    {
+      "ts": 1783566305.0700328,
+      "kind": "running",
+      "node_id": "5",
+      "label": "exp/n5-mechanism-shift-from-arithmetic--af21ac3a"
     }
   ]
 }
