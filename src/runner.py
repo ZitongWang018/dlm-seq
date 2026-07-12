@@ -9,7 +9,7 @@ import yaml
 from tqdm import tqdm
 
 from src.analysis import plot_coupling_heatmap, plot_method_comparison, plot_path_scatter, save_json, summarize_trajectory
-from src.datasets import extract_code_block, extract_number, load_gsm8k, load_mbpp, mbpp_prompt, run_mbpp_tests
+from src.datasets import answer_evidence, extract_code_block, extract_number, load_gsm8k, load_mbpp, mbpp_prompt, run_mbpp_tests
 from src.model_loader import encode_prompt, load_llada
 from src.samplers import generate_with_sampler
 
@@ -20,7 +20,7 @@ def load_config(path: str) -> dict:
 
 
 def eval_gsm8k(model, tokenizer, cfg: dict, sampler: str, limit: int, track: bool = False, lateral: bool = False) -> dict[str, Any]:
-    items = load_gsm8k(cfg["dataset_root"], limit=limit)
+    items = load_gsm8k(cfg["dataset_root"], limit=limit, start_index=cfg.get("gsm8k_start_index", 0))
     correct = 0
     records = []
     traj_summaries = []
@@ -33,12 +33,32 @@ def eval_gsm8k(model, tokenizer, cfg: dict, sampler: str, limit: int, track: boo
             temperature=cfg["temperature"], mask_id=cfg["mask_id"],
             sampler=sampler, track_trajectory=track, top_k_track=cfg.get("top_k_track", 32),
             lateral=lateral,
+            local_spacing=cfg.get("local_spacing", 1),
+            local_spacing_until=cfg.get("local_spacing_until", 0.5),
+            response_weight=cfg.get("response_weight", 0.1),
+            response_cap=cfg.get("response_cap", 1.0),
+            response_conf_max=cfg.get("response_conf_max", 0.85),
+            response_min_delta=cfg.get("response_min_delta", 0.0),
+            response_local_window=cfg.get("response_local_window", 4),
+            response_refresh_threshold=cfg.get("response_refresh_threshold", 0.30),
+            response_lookahead_threshold=cfg.get("response_lookahead_threshold", 0.40),
+            response_lookahead_max_steps=cfg.get("response_lookahead_max_steps", 2),
+            response_budget_threshold=cfg.get("response_budget_threshold", 0.35),
+            response_budget_factor=cfg.get("response_budget_factor", 0.5),
+            response_persistence_max_drift=cfg.get("response_persistence_max_drift", 0.15),
+            wavefront_size=cfg.get("wavefront_size", 8),
+            wavefront_radius=cfg.get("wavefront_radius", 4),
+            terminal_refine_tokens=cfg.get("terminal_refine_tokens", 4),
+            terminal_refine_threshold=cfg.get("terminal_refine_threshold", 0.35),
+            eos_token_id=tokenizer.eos_token_id,
         )
         gen_text = tokenizer.decode(out["tokens"][0, input_ids.shape[1]:], skip_special_tokens=True)
         pred = extract_number(gen_text)
         is_correct = pred is not None and pred == item["answer"]
         correct += int(is_correct)
         rec = {"idx": idx, "correct": is_correct, "pred": pred, "gold": item["answer"], "nfe": out["nfe"]}
+        rec.update(answer_evidence(gen_text, pred))
+        rec.update(out.get("diagnostics", {}))
         records.append(rec)
         if out["trajectory"] is not None:
             traj_summaries.append(summarize_trajectory(out["trajectory"]))
@@ -71,12 +91,32 @@ def eval_mbpp(model, tokenizer, cfg: dict, sampler: str, limit: int, track: bool
             temperature=cfg["temperature"], mask_id=cfg["mask_id"],
             sampler=sampler, track_trajectory=track, top_k_track=cfg.get("top_k_track", 32),
             lateral=lateral,
+            local_spacing=cfg.get("local_spacing", 1),
+            local_spacing_until=cfg.get("local_spacing_until", 0.5),
+            response_weight=cfg.get("response_weight", 0.1),
+            response_cap=cfg.get("response_cap", 1.0),
+            response_conf_max=cfg.get("response_conf_max", 0.85),
+            response_min_delta=cfg.get("response_min_delta", 0.0),
+            response_local_window=cfg.get("response_local_window", 4),
+            response_refresh_threshold=cfg.get("response_refresh_threshold", 0.30),
+            response_lookahead_threshold=cfg.get("response_lookahead_threshold", 0.40),
+            response_lookahead_max_steps=cfg.get("response_lookahead_max_steps", 2),
+            response_budget_threshold=cfg.get("response_budget_threshold", 0.35),
+            response_budget_factor=cfg.get("response_budget_factor", 0.5),
+            response_persistence_max_drift=cfg.get("response_persistence_max_drift", 0.15),
+            wavefront_size=cfg.get("wavefront_size", 8),
+            wavefront_radius=cfg.get("wavefront_radius", 4),
+            terminal_refine_tokens=cfg.get("terminal_refine_tokens", 4),
+            terminal_refine_threshold=cfg.get("terminal_refine_threshold", 0.35),
+            eos_token_id=tokenizer.eos_token_id,
         )
         gen_text = tokenizer.decode(out["tokens"][0, input_ids.shape[1]:], skip_special_tokens=True)
         code = extract_code_block(gen_text)
         passed = run_mbpp_tests(code, item["test_list"], item.get("test_setup_code", ""))
         correct += int(passed)
-        records.append({"idx": idx, "task_id": item["task_id"], "correct": passed, "nfe": out["nfe"]})
+        rec = {"idx": idx, "task_id": item["task_id"], "correct": passed, "nfe": out["nfe"]}
+        rec.update(out.get("diagnostics", {}))
+        records.append(rec)
 
     return {
         "dataset": "mbpp",

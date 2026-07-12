@@ -1,0 +1,288 @@
+{
+  "summary": {
+    "methods": [
+      "base",
+      "temp03",
+      "strong03",
+      "strong10"
+    ],
+    "total": 200,
+    "base_accuracy": 0.605
+  },
+  "best_rules": [
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 8.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.015,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.45,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.035,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.28,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.065,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 7.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.065,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.4,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.1,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 6.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.155,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.26,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.19,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.35,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.205,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 5.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.295,
+      "switch_rate": 0.005
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.24,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.34,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.3,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.37,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 4.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.37,
+      "switch_rate": 0.005
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.25,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.545,
+      "switch_rate": 0.005
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.22,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.55,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.2,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.755,
+      "switch_rate": 0.01
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.2,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.805,
+      "switch_rate": 0.005
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.18,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.915,
+      "switch_rate": 0.005
+    }
+  ],
+  "rules": [
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 8.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.015,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.45,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.035,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.28,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.065,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 7.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.065,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.4,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.1,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 6.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.155,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.26,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.19,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.35,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.205,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 5.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.295,
+      "switch_rate": 0.005
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.24,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.34,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.3,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.37,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "answer_flip_mean",
+      "threshold": 4.0,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.37,
+      "switch_rate": 0.005
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.25,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.545,
+      "switch_rate": 0.005
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.22,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.55,
+      "switch_rate": 0.0
+    },
+    {
+      "risk": "response_selected_delta_mean",
+      "threshold": 0.2,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.755,
+      "switch_rate": 0.01
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.2,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.805,
+      "switch_rate": 0.005
+    },
+    {
+      "risk": "response_mean_delta",
+      "threshold": 0.18,
+      "accuracy": 0.605,
+      "correct": 121,
+      "trigger_rate": 0.915,
+      "switch_rate": 0.005
+    }
+  ]
+}

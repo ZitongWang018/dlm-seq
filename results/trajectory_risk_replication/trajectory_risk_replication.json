@@ -1,0 +1,43 @@
+{
+  "calibration_size": 200,
+  "test_size": 400,
+  "quantile": 0.8,
+  "signals": {
+    "Lateral response": {
+      "key": "response_selected_delta_mean",
+      "calibration_threshold": 0.34656824251063656,
+      "calibration_error_auc": 0.649762121672234,
+      "test_error_auc": 0.6764410058027079,
+      "calibration_high_signal": {
+        "count": 40,
+        "rate": 0.2,
+        "accuracy": 0.375,
+        "error_rate": 0.625
+      },
+      "test_high_signal": {
+        "count": 54,
+        "rate": 0.135,
+        "accuracy": 0.37037037037037035,
+        "error_rate": 0.6296296296296297
+      }
+    },
+    "Longitudinal flips": {
+      "key": "answer_flip_mean",
+      "calibration_threshold": 5.8,
+      "calibration_error_auc": 0.5897358032189493,
+      "test_error_auc": 0.5367504835589942,
+      "calibration_high_signal": {
+        "count": 41,
+        "rate": 0.205,
+        "accuracy": 0.43902439024390244,
+        "error_rate": 0.5609756097560976
+      },
+      "test_high_signal": {
+        "count": 82,
+        "rate": 0.205,
+        "accuracy": 0.6219512195121951,
+        "error_rate": 0.3780487804878049
+      }
+    }
+  }
+}

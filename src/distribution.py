@@ -21,9 +21,9 @@ def kl_divergence(p_logits: torch.Tensor, q_logits: torch.Tensor, top_k: int = 3
     """KL(p||q) on union support of top-k from both distributions."""
     p = softmax_dist(p_logits)
     q = softmax_dist(q_logits)
-    pk, _ = torch.topk(p, k=min(top_k, p.shape[-1]))
-    qk, _ = torch.topk(q, k=min(top_k, q.shape[-1]))
-    support = torch.unique(torch.cat([pk, qk])).long()
+    _, pi = torch.topk(p, k=min(top_k, p.shape[-1]))
+    _, qi = torch.topk(q, k=min(top_k, q.shape[-1]))
+    support = torch.unique(torch.cat([pi, qi])).long()
     p_s = p[support].clamp_min(1e-12)
     q_s = q[support].clamp_min(1e-12)
     p_s = p_s / p_s.sum()
@@ -34,9 +34,9 @@ def kl_divergence(p_logits: torch.Tensor, q_logits: torch.Tensor, top_k: int = 3
 def _topk_l1(p_logits: torch.Tensor, q_logits: torch.Tensor, k: int = 8) -> float:
     p = softmax_dist(p_logits)
     q = softmax_dist(q_logits)
-    pk, pi = torch.topk(p, k=min(k, p.shape[-1]))
-    qk, qi = torch.topk(q, k=min(k, q.shape[-1]))
-    support = torch.unique(torch.cat([pk, qk])).long()
+    _, pi = torch.topk(p, k=min(k, p.shape[-1]))
+    _, qi = torch.topk(q, k=min(k, q.shape[-1]))
+    support = torch.unique(torch.cat([pi, qi])).long()
     return float((p[support] - q[support]).abs().sum().item())
 
 

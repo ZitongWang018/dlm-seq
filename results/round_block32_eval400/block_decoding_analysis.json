@@ -1,0 +1,13 @@
+{
+  "total": 400,
+  "base_accuracy": 0.5875,
+  "method_accuracy": 0.7125,
+  "difference": 0.125,
+  "base_only": 30,
+  "method_only": 80,
+  "both_correct": 205,
+  "both_wrong": 85,
+  "mcnemar_exact_pvalue": 2.018378768224273e-06,
+  "base_avg_nfe": 64.0,
+  "method_avg_nfe": 64.0
+}
