@@ -89,6 +89,12 @@ class LLaDAEvalHarness(LM):
         dependency_threshold=None,
         dependency_trace_dir=None,
         dependency_diagnostics_dir=None,
+        candidate_memory_topk=None,
+        candidate_memory_confidence_threshold=0.0,
+        candidate_memory_fallback="confidence",
+        candidate_memory_exact_jsd=False,
+        candidate_memory_trace_dir=None,
+        candidate_memory_diagnostics_dir=None,
         **kwargs,
     ):
         '''
@@ -165,6 +171,16 @@ class LLaDAEvalHarness(LM):
         self.dependency_threshold = dependency_threshold
         self.dependency_trace_dir = dependency_trace_dir
         self.dependency_diagnostics_dir = dependency_diagnostics_dir
+        self.candidate_memory_topk = candidate_memory_topk
+        self.candidate_memory_confidence_threshold = candidate_memory_confidence_threshold
+        self.candidate_memory_fallback = candidate_memory_fallback
+        self.candidate_memory_exact_jsd = (
+            candidate_memory_exact_jsd.lower() == "true"
+            if isinstance(candidate_memory_exact_jsd, str)
+            else bool(candidate_memory_exact_jsd)
+        )
+        self.candidate_memory_trace_dir = candidate_memory_trace_dir
+        self.candidate_memory_diagnostics_dir = candidate_memory_diagnostics_dir
 
     @property
     def rank(self):
@@ -348,7 +364,33 @@ class LLaDAEvalHarness(LM):
 
             decode_diagnostics = None
             step_records = None
-            if self.dependency_threshold is not None:
+            active_trace_dir = None
+            active_diagnostics_dir = None
+            step_diagnostics_schema = None
+            trace_evaluator_version = None
+            if self.candidate_memory_topk is not None:
+                generated_answer, nfe, decode_diagnostics = generate_candidate_memory(
+                    self.model,
+                    input_ids,
+                    steps=self.steps,
+                    gen_length=self.gen_length,
+                    block_length=self.block_length,
+                    temperature=0,
+                    remasking=self.remasking,
+                    mask_id=self.mask_id,
+                    early_stop=self.early_stop,
+                    candidate_topk=int(self.candidate_memory_topk),
+                    confidence_threshold=float(self.candidate_memory_confidence_threshold),
+                    fallback_mode=self.candidate_memory_fallback,
+                    collect_exact_jsd=self.candidate_memory_exact_jsd,
+                    collect_step_diagnostics=self.candidate_memory_diagnostics_dir is not None,
+                )
+                step_records = decode_diagnostics.pop("_step_records", None)
+                active_trace_dir = self.candidate_memory_trace_dir
+                active_diagnostics_dir = self.candidate_memory_diagnostics_dir
+                step_diagnostics_schema = "candidate_memory_steps_v2"
+                trace_evaluator_version = "candidate_memory_trace_v2"
+            elif self.dependency_threshold is not None:
                 generated_answer, nfe, decode_diagnostics = generate_attention_stability(
                     self.model,
                     input_ids,
@@ -363,6 +405,10 @@ class LLaDAEvalHarness(LM):
                     collect_step_diagnostics=self.dependency_diagnostics_dir is not None,
                 )
                 step_records = decode_diagnostics.pop("_step_records", None)
+                active_trace_dir = self.dependency_trace_dir
+                active_diagnostics_dir = self.dependency_diagnostics_dir
+                step_diagnostics_schema = "attention_stability_steps_v1"
+                trace_evaluator_version = "attention_stability_trace_v1"
             elif self.relaxed_threshold is not None:
                 generated_answer, nfe = generate_localleap(self.model, input_ids, steps=self.steps, gen_length=self.gen_length, block_length=self.block_length, temperature=0, remasking=self.remasking, mask_id=self.mask_id, early_stop=self.early_stop,
                     threshold=self.threshold, relaxed_threshold=self.relaxed_threshold, radius=self.radius)
@@ -396,17 +442,17 @@ class LLaDAEvalHarness(LM):
 
             diagnostics_path = None
             diagnostics_bytes = None
-            if step_records is not None and self.dependency_diagnostics_dir is not None:
-                os.makedirs(self.dependency_diagnostics_dir, exist_ok=True)
+            if step_records is not None and active_diagnostics_dir is not None:
+                os.makedirs(active_diagnostics_dir, exist_ok=True)
                 task_id = str(req.doc.get("task_id", f"index_{i}"))
                 safe_task_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", task_id)
                 diagnostics_path = os.path.join(
-                    self.dependency_diagnostics_dir,
+                    active_diagnostics_dir,
                     f"{i:03d}_{safe_task_id}.pt",
                 )
                 temporary_path = diagnostics_path + ".tmp"
                 diagnostics_payload = {
-                    "schema_version": "attention_stability_steps_v1",
+                    "schema_version": step_diagnostics_schema,
                     "absolute_index": i,
                     "task_id": req.doc.get("task_id"),
                     "prompt_hash": hashlib.sha256(question.encode("utf-8")).hexdigest(),
@@ -425,7 +471,12 @@ class LLaDAEvalHarness(LM):
                         "block_length": self.block_length,
                         "temperature": 0,
                         "remasking": self.remasking,
+                        "mask_id": self.mask_id,
                         "dependency_threshold": self.dependency_threshold,
+                        "candidate_memory_topk": self.candidate_memory_topk,
+                        "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
+                        "candidate_memory_fallback": self.candidate_memory_fallback,
+                        "candidate_memory_exact_jsd": self.candidate_memory_exact_jsd,
                     },
                     "decode_summary": decode_diagnostics,
                     "steps": step_records,
@@ -434,9 +485,9 @@ class LLaDAEvalHarness(LM):
                 os.replace(temporary_path, diagnostics_path)
                 diagnostics_bytes = os.path.getsize(diagnostics_path)
 
-            if decode_diagnostics is not None and self.dependency_trace_dir is not None:
-                os.makedirs(self.dependency_trace_dir, exist_ok=True)
-                trace_path = os.path.join(self.dependency_trace_dir, f"rank_{self.rank}.jsonl")
+            if decode_diagnostics is not None and active_trace_dir is not None:
+                os.makedirs(active_trace_dir, exist_ok=True)
+                trace_path = os.path.join(active_trace_dir, f"rank_{self.rank}.jsonl")
                 trace_record = {
                     "absolute_index": i,
                     "task_id": req.doc.get("task_id"),
@@ -453,13 +504,18 @@ class LLaDAEvalHarness(LM):
                         "block_length": self.block_length,
                         "temperature": 0,
                         "remasking": self.remasking,
+                        "mask_id": self.mask_id,
                         "dependency_threshold": self.dependency_threshold,
+                        "candidate_memory_topk": self.candidate_memory_topk,
+                        "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
+                        "candidate_memory_fallback": self.candidate_memory_fallback,
+                        "candidate_memory_exact_jsd": self.candidate_memory_exact_jsd,
                     },
-                    "evaluator_version": "attention_stability_trace_v1",
+                    "evaluator_version": trace_evaluator_version,
                     "seed": {"lm_eval_random": 0, "numpy": 1234, "torch": 1234, "fewshot": 1234},
                     "decode_diagnostics": decode_diagnostics,
                     "step_diagnostics_schema": (
-                        "attention_stability_steps_v1" if diagnostics_path is not None else None
+                        step_diagnostics_schema if diagnostics_path is not None else None
                     ),
                     "step_diagnostics_path": diagnostics_path,
                     "step_diagnostics_bytes": diagnostics_bytes,

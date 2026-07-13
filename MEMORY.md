@@ -1,5 +1,37 @@
 # Memory
 
+## 2026-07-14
+
+- Completed the first attention-stability sensitivity sweep. Exact-baseline
+  HumanEval results were tau 0.005 = 69/164 (42.07%), tau 0.02 = 66/164
+  (40.24%), and tau 0.05 = 67/164 (40.85%), versus baseline 67/164. The tau
+  0.005 paired gain was 6 method-only versus 4 baseline-only tasks (exact
+  McNemar p=0.7539), so it is exploratory rather than conclusive.
+
+- Audited 650,752 cross-step candidates per threshold. Tau 0.005 had 10.903%
+  changed candidates and `P(change|strong)=11.395%`; tau 0.02 had 10.750%
+  changed candidates but `P(change|strong)=8.337%`, lower than its weak-pair
+  rate of 11.114%. Win/loss samples were separated more by candidate volatility
+  than by attention strength, motivating direct stability and a conservative
+  confidence-frontier rule.
+
+- Implemented `candidate_memory_stability_v2` in the protected LocalLeap tree
+  and mirrored it in this repository. It preserves the baseline TopB budget,
+  stores Top-8 candidates only for remaining masks, compares adjacent top-1,
+  uses previous-Top-K-plus-OTHER partition JSD, and records directional
+  attention arrival plus extensive per-candidate diagnostics. Exact JSD is an
+  explicit off-by-default diagnostic only; formal runs retain zero full-vocab
+  history elements and never write full distributions to disk.
+
+- Added a no-extra-size-parameter frontier improvement: only confidence rank
+  `<= b_t+1` may replace the baseline choice based on stability. Five selector
+  selector/generator tests pass (10 total), including argmax/Top-K ties and a
+  true three-candidate frontier.
+  Candidate full runs require a same-source-hash one-task end-to-end preflight
+  before the 164-task run. Started locked,
+  fail-fast full queue `cross_step_full_queue_20260714_v1` for tau 0.004,
+  0.0025, 0.001, 0.0005, direct stability, and frontier stability.
+
 ## 2026-07-13
 
 - Added a fail-fast sequential tau sweep (`0.005`, `0.02`, `0.05`) for the

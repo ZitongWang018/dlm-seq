@@ -101,3 +101,70 @@ maturity flags, maximum dependency on the preceding transfer set, ordering,
 selected/rejected positions, budget and mask counts, dependency/asymmetry
 statistics, and fallback/underfill flags. The run validates all files and writes
 `audit/step_diagnostics_summary.json`; the one-item smoke file is about 2.46 MB.
+
+Completed threshold results under the same 164-task protocol are:
+
+| tau | Correct | pass@1 | Method-only | Baseline-only | McNemar p |
+|--:|--:|--:|--:|--:|--:|
+| 0.005 | 69/164 | 42.07% | 6 | 4 | 0.7539 |
+| 0.02 | 66/164 | 40.24% | 3 | 4 | 1.0 |
+| 0.05 | 67/164 | 40.85% | pending paired export | pending paired export | pending |
+
+The positive difference at tau 0.005 is only two tasks and is not statistically
+significant. Candidate-level diagnostics also show that symmetric attention is
+a weak maturity signal: at tau 0.005, `P(top1 change | strong)=11.395%` versus
+`10.204%` for weak pairs; at tau 0.02 the relationship reverses (`8.337%`
+versus `11.114%`). This motivates testing candidate stability directly rather
+than treating attention as the main hard gate.
+
+## Cross-step candidate-memory extension (2026-07-14)
+
+`generate_candidate_memory` keeps the exact baseline transfer budget and uses
+the preceding prediction only to prioritize positions. The first step of every
+block is bit-for-bit baseline `torch.topk`; later steps put positions whose
+top-1 remains unchanged first, then use confidence. If no eligible position is
+available, the decoder fills the original budget and records a forced commit,
+so every full HumanEval run still uses exactly 256 NFE per task.
+
+Persistent candidate state contains only the still-masked positions' Top-8
+token ids, probabilities, and an OTHER-mass bucket. The implementation reports
+two JSD quantities:
+
+- optional full-vocabulary JSD, computed only when an explicit diagnostic
+  ablation retains a one-step FP32 probability buffer (disabled in full runs);
+- a mathematically valid coarsened JSD on the preceding Top-K partition plus
+  OTHER, which is the O(|M|K) version and is never presented as exact full JSD.
+
+The formal runs keep only Top-K+OTHER across steps and use the coarsened JSD for
+`Delta` and `I`; their recorded peak full-probability history must therefore be
+zero. An earlier one-task exact-JSD smoke quantified the approximation but is
+not treated as the main algorithm. Neither JSD nor attention receives a tuned
+weight in the main confidence/frontier selector. The directional new-condition
+arrival is recorded as
+`sum_i A[current_mask_j, previous_selected_i]`, along with the reverse
+direction, asymmetry, full/sparse JSD, their gap, Top-K overlap, entropy,
+confidence rank and loss, selection reason, runtime memory, and the complete
+32x32 attention matrices.
+
+The data-driven conservative variant is `candidate_memory_fallback=frontier`.
+It allows stability to replace the baseline choice only within the confidence
+frontier of size `b_t+1`; thus it adds no independently tuned frontier size and
+prevents high-volatility examples from jumping to a deeply ranked position.
+The direct stability run uses `candidate_memory_fallback=confidence`. Both fix
+`candidate_memory_topk=8` and `candidate_memory_confidence_threshold=0`, so Top-K
+is diagnostic state and no new confidence threshold is tuned.
+
+Ten selector/generator tests pass, including BF16-style argmax/Top-K ties, exact baseline
+TopB tie behavior, O(|M|K) state, optional exact-JSD isolation, and a genuine
+three-candidate frontier case. Every full run also launches a same-source-hash
+one-task preflight before its 164-task evaluation. The preflight and full runs
+validate generation, dedicated sanitize/code_eval, prompt/task alignment,
+exactly 256 NFE, zero residual masks, Top-K memory alignment/deletion, JSD
+bounds and coarsening, and directional attention recomputation. The full queue
+`cross_step_full_queue_20260714_v1` runs sequentially:
+
+`tau 0.004 -> 0.0025 -> 0.001 -> 0.0005 -> stability -> frontier`.
+
+Use `attention_stability/scripts/run_full_experiment_queue.sh`; it uses a lock,
+append-only manifest, per-stage timeout, fail-fast execution, and validates all
+164 traces/diagnostic files before advancing.
