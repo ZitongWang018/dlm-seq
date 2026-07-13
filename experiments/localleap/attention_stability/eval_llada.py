@@ -97,13 +97,13 @@ class LLaDAEvalHarness(LM):
             max_length: the max sequence length.
             batch_size: mini batch size.
             mc_num: Monte Carlo estimation iterations
-            is_check_greedy: For certain metrics like LAMBADA, the evaluation requires the model to verify whether the answer 
+            is_check_greedy: For certain metrics like LAMBADA, the evaluation requires the model to verify whether the answer
                              is generated through greedy sampling conditioned on the prompt (note that this differs from conditional
-                             generation). We implement this verification through the suffix_greedy_prediction() function, which 
-                             returns a True/False judgment used for accuracy calculation. 
-                             When is_check_greedy is set to True, the lm-evaluation-harness library automatically invokes this function. 
-                             However, since none of the metrics in the LLaDA paper (https://arxiv.org/abs/2502.09992) require this functionality, 
-                             we recommend setting is_check_greedy to False. This configuration causes suffix_greedy_prediction() to return False 
+                             generation). We implement this verification through the suffix_greedy_prediction() function, which
+                             returns a True/False judgment used for accuracy calculation.
+                             When is_check_greedy is set to True, the lm-evaluation-harness library automatically invokes this function.
+                             However, since none of the metrics in the LLaDA paper (https://arxiv.org/abs/2502.09992) require this functionality,
+                             we recommend setting is_check_greedy to False. This configuration causes suffix_greedy_prediction() to return False
                              by default, significantly accelerating the evaluation process.
             cfg_scale: Unsupervised classifier-free guidance scale.
         '''
@@ -114,7 +114,7 @@ class LLaDAEvalHarness(LM):
             self.accelerator = accelerator
         else:
             self.accelerator = None
-        
+
         model_kwargs = {}
         if self.accelerator is not None:
             model_kwargs.update({'device_map': {'': f'{self.accelerator.device}'}})
@@ -131,7 +131,7 @@ class LLaDAEvalHarness(LM):
             self.device = torch.device(f'{self.accelerator.device}')
             self._rank = self.accelerator.local_process_index
             self._world_size = self.accelerator.num_processes
-        else: 
+        else:
             self.model = self.model.to(device)
             self._rank = 0
             self._world_size = 1
@@ -167,7 +167,7 @@ class LLaDAEvalHarness(LM):
     @property
     def rank(self):
         return self._rank
-    
+
     @property
     def world_size(self):
         return self._world_size
@@ -306,8 +306,8 @@ class LLaDAEvalHarness(LM):
 
     def loglikelihood_rolling(self, requests):
         raise NotImplementedError
-    
-    
+
+
     def generate_until(self, requests):
         output = []
         num_tokens = 0
@@ -330,7 +330,7 @@ class LLaDAEvalHarness(LM):
         for i, req in enumerate(tqdm(requests, desc="Generating...")):
             if i < processed_count:
                 continue
-                
+
             question = req.args[0]
             if self.is_instruct:
                 m = [{"role": "user", "content": question}]
@@ -343,7 +343,7 @@ class LLaDAEvalHarness(LM):
             stop_tokens = req.args[1]['until']
             input_ids = torch.tensor(input_ids).to(self.device).unsqueeze(0)  # [1, prompt_len]
             num_input_tokens += input_ids.shape[1]
-            
+
             decode_diagnostics = None
             if self.dependency_threshold is not None:
                 generated_answer, nfe, decode_diagnostics = generate_attention_stability(
@@ -359,11 +359,11 @@ class LLaDAEvalHarness(LM):
                     dependency_threshold=self.dependency_threshold,
                 )
             elif self.relaxed_threshold is not None:
-                generated_answer, nfe = generate_localleap(self.model, input_ids, steps=self.steps, gen_length=self.gen_length, block_length=self.block_length, temperature=0, remasking=self.remasking, mask_id=self.mask_id, early_stop=self.early_stop, 
+                generated_answer, nfe = generate_localleap(self.model, input_ids, steps=self.steps, gen_length=self.gen_length, block_length=self.block_length, temperature=0, remasking=self.remasking, mask_id=self.mask_id, early_stop=self.early_stop,
                     threshold=self.threshold, relaxed_threshold=self.relaxed_threshold, radius=self.radius)
 
             else:
-                generated_answer, nfe = generate(self.model, input_ids, steps=self.steps, gen_length=self.gen_length, block_length=self.block_length, 
+                generated_answer, nfe = generate(self.model, input_ids, steps=self.steps, gen_length=self.gen_length, block_length=self.block_length,
                                         temperature=0, remasking=self.remasking, mask_id=self.mask_id, early_stop=self.early_stop, threshold=self.threshold)
 
             if self.is_instruct and 'task_id' in req.doc and str(req.doc['task_id']).lower().startswith('humaneval'):
@@ -429,7 +429,7 @@ class LLaDAEvalHarness(LM):
 
         del self.model
         torch.cuda.empty_cache()
-        
+
         if self.show_speed:
             print(f"Total data items: {num_instances}")
             print(f"Total number of input tokens: {num_input_tokens}")

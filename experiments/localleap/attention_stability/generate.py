@@ -251,7 +251,7 @@ def generate_attention_stability(
 
 
 @ torch.no_grad()
-def generate(model, prompt, steps=128, gen_length=128, block_length=128, temperature=0., remasking='low_confidence', 
+def generate(model, prompt, steps=128, gen_length=128, block_length=128, temperature=0., remasking='low_confidence',
     mask_id=126336, eos_id=126081, early_stop=False, threshold=None, relaxed_threshold=None, radius=4):
     '''
     Args:
@@ -293,15 +293,15 @@ def generate(model, prompt, steps=128, gen_length=128, block_length=128, tempera
             mask_index = (x == mask_id)
             logits = model(x).logits
             mask_index[:, block_end:] = 0
-            x0, transfer_index = get_transfer_index(logits, temperature, remasking, mask_index, x, num_transfer_tokens[:, i] if threshold is None else None, 
+            x0, transfer_index = get_transfer_index(logits, temperature, remasking, mask_index, x, num_transfer_tokens[:, i] if threshold is None else None,
                                                     threshold, relaxed_threshold, radius)
             x[transfer_index] = x0[transfer_index]
             i += 1
 
     return x, nfe
-    
 
-def get_transfer_index(logits, temperature, remasking, mask_index, x, num_transfer_tokens, 
+
+def get_transfer_index(logits, temperature, remasking, mask_index, x, num_transfer_tokens,
     threshold=None, relaxed_threshold=None, radius=4):
     logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
     x0 = torch.argmax(logits_with_noise, dim=-1) # b, l
@@ -314,7 +314,7 @@ def get_transfer_index(logits, temperature, remasking, mask_index, x, num_transf
         x0_p = torch.rand((x0.shape[0], x0.shape[1]), device=x0.device)
     else:
         raise NotImplementedError(remasking)
-    
+
     x0 = torch.where(mask_index, x0, x)
     confidence = torch.where(mask_index, x0_p, -np.inf)
 
@@ -342,17 +342,17 @@ def get_transfer_index(logits, temperature, remasking, mask_index, x, num_transf
                         # Add all positions of the anchor's neighbors.
                         for neignbor_pos in range(max(0, pos_val - radius), min(confidence.shape[1], pos_val + radius + 1)):
                             neighbor_positions.add(neignbor_pos)
-            
+
             for k in range(1, num_transfer_tokens[j]):
                 pos = select_index[k].item()
                 if use_localleap:
                     effective_threshold = relaxed_threshold if pos in neighbor_positions else threshold
                 else:
                     effective_threshold = threshold
-                
+
                 if confidence[j, select_index[k]] < effective_threshold:
                     transfer_index[j, select_index[k]] = False
-    
+
     return x0, transfer_index
 
 
