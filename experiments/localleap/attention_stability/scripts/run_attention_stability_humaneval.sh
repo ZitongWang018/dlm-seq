@@ -24,10 +24,11 @@ block_length=32
 num_fewshot=0
 run_root=results/attention_stability/tau${tau}/${run_tag}
 trace_dir=${run_root}/trace
+diagnostics_dir=${run_root}/step_diagnostics
 output_dir=${run_root}/humaneval_len256_blen32_0shot
-mkdir -p "${trace_dir}" "${output_dir}"
+mkdir -p "${trace_dir}" "${diagnostics_dir}" "${output_dir}"
 
-model_args=model_path=${model_path},gen_length=${gen_length},steps=${steps},block_length=${block_length},early_stop=False,show_speed=True,integrate_speed=False,dependency_threshold=${tau},dependency_trace_dir=${trace_dir}
+model_args=model_path=${model_path},gen_length=${gen_length},steps=${steps},block_length=${block_length},early_stop=False,show_speed=True,integrate_speed=False,dependency_threshold=${tau},dependency_trace_dir=${trace_dir},dependency_diagnostics_dir=${diagnostics_dir}
 limit_args=()
 if [[ "${limit}" != "full" ]]; then
   limit_args=(--limit "${limit}")
@@ -61,5 +62,16 @@ python audit_attention_stability.py \
   "${trace_dir}/rank_0.jsonl" \
   --postprocess "${run_root}/postprocess.txt" \
   --output-dir "${run_root}/audit"
+trace_count=$(wc -l < "${trace_dir}/rank_0.jsonl")
+diagnostics_count=$(find "${diagnostics_dir}" -maxdepth 1 -type f -name '*.pt' | wc -l)
+if [[ "${trace_count}" -ne "${diagnostics_count}" ]]; then
+  echo "ERROR: trace/step-diagnostics count mismatch: ${trace_count} vs ${diagnostics_count}" >&2
+  exit 3
+fi
+python validate_step_diagnostics.py \
+  "${diagnostics_dir}" \
+  --expected-count "${trace_count}" \
+  --output "${run_root}/audit/step_diagnostics_summary.json"
+echo "step_diagnostics_count=${diagnostics_count}"
 echo "finish=$(date --iso-8601=seconds)"
 touch "${run_root}/DONE"

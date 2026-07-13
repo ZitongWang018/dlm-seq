@@ -82,7 +82,7 @@ def _forward_with_block_attention(model, x, block_start, block_end):
         raise RuntimeError(f"dependency probe saw {tracker['count']} layers, expected {len(blocks)}")
     directional = tracker["sum"] / tracker["count"]
     symmetric = 0.5 * (directional + directional.transpose(-2, -1))
-    return output.logits, symmetric
+    return output.logits, directional, symmetric
 
 
 def select_attention_stability_tokens(
@@ -112,13 +112,23 @@ def select_attention_stability_tokens(
     x0 = torch.where(mask_index, x0, x)
     confidence = torch.where(mask_index, x0_p, -np.inf)
     transfer_index = torch.zeros_like(x0, dtype=torch.bool, device=x0.device)
-    diagnostics = {"unstable_candidates": 0, "rejected_pairs": 0, "underfilled": False}
+    diagnostics = {
+        "unstable_candidates": 0,
+        "changed_candidates": 0,
+        "strongly_dependent_candidates": 0,
+        "rejected_pairs": 0,
+        "underfilled": False,
+        "all_immature_fallback": False,
+        "candidate_state": [],
+    }
 
     for batch_idx in range(x.shape[0]):
         masked = torch.where(mask_index[batch_idx])[0]
         if masked.numel() == 0:
             continue
         maturity = torch.ones(masked.numel(), dtype=torch.bool, device=x.device)
+        changed = torch.zeros(masked.numel(), dtype=torch.bool, device=x.device)
+        max_dependency = torch.zeros(masked.numel(), dtype=torch.float32, device=x.device)
         if previous_top1 is not None and previous_selected is not None and previous_selected.numel() > 0:
             masked_local = masked - block_start
             selected_local = previous_selected - block_start
@@ -126,12 +136,15 @@ def select_attention_stability_tokens(
             changed = x0[batch_idx, masked] != previous_top1[batch_idx, masked]
             maturity = ~((max_dependency > dependency_threshold) & changed)
             diagnostics["unstable_candidates"] += int((~maturity).sum().item())
+            diagnostics["changed_candidates"] += int(changed.sum().item())
+            diagnostics["strongly_dependent_candidates"] += int((max_dependency > dependency_threshold).sum().item())
 
         mature_positions = masked[maturity]
         immature_positions = masked[~maturity]
         if mature_positions.numel() == 0:
             # Explicit all-immature fallback from the algorithm definition.
             ordered = masked[torch.topk(confidence[batch_idx, masked], k=masked.numel()).indices]
+            diagnostics["all_immature_fallback"] = True
         else:
             mature_order = mature_positions[torch.topk(confidence[batch_idx, mature_positions], k=mature_positions.numel()).indices]
             if immature_positions.numel() > 0:
@@ -141,6 +154,7 @@ def select_attention_stability_tokens(
                 ordered = mature_order
 
         selected = []
+        rejected = []
         for position in ordered.tolist():
             if len(selected) >= int(budget):
                 break
@@ -149,12 +163,32 @@ def select_attention_stability_tokens(
                 selected_local = torch.tensor([item - block_start for item in selected], device=x.device)
                 if dependency[batch_idx, local_position, selected_local].max() > dependency_threshold:
                     diagnostics["rejected_pairs"] += 1
+                    rejected.append(position)
                     continue
             selected.append(position)
         if len(selected) < min(int(budget), masked.numel()):
             diagnostics["underfilled"] = True
         if selected:
             transfer_index[batch_idx, torch.tensor(selected, device=x.device)] = True
+
+        previous_values = (
+            previous_top1[batch_idx, masked]
+            if previous_top1 is not None
+            else torch.full_like(masked, -1)
+        )
+        diagnostics["candidate_state"].append({
+            "masked_positions_global": masked.to(torch.int32).cpu(),
+            "masked_positions_local": (masked - block_start).to(torch.int16).cpu(),
+            "top1_token_ids": x0[batch_idx, masked].to(torch.int32).cpu(),
+            "top1_confidences": confidence[batch_idx, masked].to(torch.float32).cpu(),
+            "previous_top1_token_ids": previous_values.to(torch.int32).cpu(),
+            "candidate_changed": changed.cpu(),
+            "max_dependency_to_previous": max_dependency.to(torch.float32).cpu(),
+            "maturity": maturity.cpu(),
+            "ordered_positions_global": ordered.to(torch.int32).cpu(),
+            "selected_positions_global": torch.tensor(selected, dtype=torch.int32),
+            "rejected_positions_global": torch.tensor(rejected, dtype=torch.int32),
+        })
 
     return x0, transfer_index, diagnostics
 
@@ -172,6 +206,7 @@ def generate_attention_stability(
     mask_id=126336,
     eos_id=126081,
     early_stop=False,
+    collect_step_diagnostics=False,
 ):
     """Baseline LLaDA decoding with the proposed attention/stability selection layered on top."""
     x = torch.full((1, prompt.shape[1] + gen_length), mask_id, dtype=torch.long, device=model.device)
@@ -188,12 +223,18 @@ def generate_attention_stability(
         "gen_length": int(gen_length),
         "block_length": int(block_length),
         "unstable_candidates": 0,
+        "changed_candidates": 0,
+        "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
         "underfilled_steps": 0,
+        "all_immature_fallback_steps": 0,
         "dependency_max": 0.0,
         "dependency_mean_sum": 0.0,
         "dependency_observations": 0,
+        "attention_asymmetry_max": 0.0,
+        "attention_asymmetry_mean_sum": 0.0,
     }
+    step_records = []
 
     for block_idx in range(num_blocks):
         block_start = prompt.shape[1] + block_idx * block_length
@@ -214,10 +255,15 @@ def generate_attention_stability(
             nfe += 1
             mask_index = x == mask_id
             mask_index[:, block_end:] = False
-            logits, dependency = _forward_with_block_attention(model, x, block_start, block_end)
+            logits, directional_attention, dependency = _forward_with_block_attention(model, x, block_start, block_end)
             summary["dependency_max"] = max(summary["dependency_max"], float(dependency.max().item()))
             summary["dependency_mean_sum"] += float(dependency.mean().item())
             summary["dependency_observations"] += 1
+            asymmetry = (directional_attention - directional_attention.transpose(-2, -1)).abs()
+            summary["attention_asymmetry_max"] = max(
+                summary["attention_asymmetry_max"], float(asymmetry.max().item())
+            )
+            summary["attention_asymmetry_mean_sum"] += float(asymmetry.mean().item())
             x0, transfer_index, step_diagnostics = select_attention_stability_tokens(
                 logits=logits,
                 temperature=temperature,
@@ -234,8 +280,54 @@ def generate_attention_stability(
             if not transfer_index.any():
                 raise RuntimeError("attention-stability selector made no progress")
             summary["unstable_candidates"] += step_diagnostics["unstable_candidates"]
+            summary["changed_candidates"] += step_diagnostics["changed_candidates"]
+            summary["strongly_dependent_candidates"] += step_diagnostics["strongly_dependent_candidates"]
             summary["rejected_pairs"] += step_diagnostics["rejected_pairs"]
             summary["underfilled_steps"] += int(step_diagnostics["underfilled"])
+            summary["all_immature_fallback_steps"] += int(step_diagnostics["all_immature_fallback"])
+            if collect_step_diagnostics:
+                candidate_state = step_diagnostics["candidate_state"][0]
+                selected_positions = torch.where(transfer_index[0])[0]
+                previous_selected_cpu = (
+                    previous_selected.to(torch.int32).cpu()
+                    if previous_selected is not None
+                    else torch.empty(0, dtype=torch.int32)
+                )
+                step_records.append({
+                    "block_index": block_idx,
+                    "step_index_in_block": step_idx,
+                    "global_nfe": nfe,
+                    "block_start": block_start,
+                    "block_end": block_end,
+                    "schedule_index": schedule_idx,
+                    "budget": budget,
+                    "mask_count_before": int(mask_index[0].sum().item()),
+                    "mask_count_after": int(mask_index[0].sum().item() - transfer_index[0].sum().item()),
+                    "input_block_token_ids": x[0, block_start:block_end].to(torch.int32).cpu(),
+                    "previous_selected_positions_global": previous_selected_cpu,
+                    "previous_selected_token_ids": (
+                        x[0, previous_selected].to(torch.int32).cpu()
+                        if previous_selected is not None
+                        else torch.empty(0, dtype=torch.int32)
+                    ),
+                    "selected_positions_global": selected_positions.to(torch.int32).cpu(),
+                    "selected_positions_local": (selected_positions - block_start).to(torch.int16).cpu(),
+                    "selected_token_ids": x0[0, selected_positions].to(torch.int32).cpu(),
+                    "directional_attention": directional_attention[0].to(torch.float16).cpu(),
+                    "symmetric_dependency": dependency[0].to(torch.float16).cpu(),
+                    "dependency_min": float(dependency.min().item()),
+                    "dependency_mean": float(dependency.mean().item()),
+                    "dependency_max": float(dependency.max().item()),
+                    "attention_asymmetry_mean": float(asymmetry.mean().item()),
+                    "attention_asymmetry_max": float(asymmetry.max().item()),
+                    "unstable_candidates": step_diagnostics["unstable_candidates"],
+                    "changed_candidates": step_diagnostics["changed_candidates"],
+                    "strongly_dependent_candidates": step_diagnostics["strongly_dependent_candidates"],
+                    "rejected_pairs": step_diagnostics["rejected_pairs"],
+                    "underfilled": step_diagnostics["underfilled"],
+                    "all_immature_fallback": step_diagnostics["all_immature_fallback"],
+                    **candidate_state,
+                })
             previous_top1 = x0.detach().clone()
             previous_selected = torch.where(transfer_index[0])[0]
             x[transfer_index] = x0[transfer_index]
@@ -247,6 +339,11 @@ def generate_attention_stability(
 
     if summary["dependency_observations"]:
         summary["dependency_mean"] = summary.pop("dependency_mean_sum") / summary["dependency_observations"]
+        summary["attention_asymmetry_mean"] = (
+            summary.pop("attention_asymmetry_mean_sum") / summary["dependency_observations"]
+        )
+    if collect_step_diagnostics:
+        summary["_step_records"] = step_records
     return x, nfe, summary
 
 

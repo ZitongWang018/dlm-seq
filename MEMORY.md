@@ -2,6 +2,14 @@
 
 ## 2026-07-13
 
+- Added a fail-fast sequential tau sweep (`0.005`, `0.02`, `0.05`) for the
+  attention-stability HumanEval experiment. Each example now saves all 256
+  decoding steps in `attention_stability_steps_v1` files: directional and
+  symmetric 32x32 attention, candidate top-1/confidence/history, dependency,
+  maturity, ordering, selected/rejected positions, budgets, masks, and fallback
+  state. A validator checks counts, shapes, finite values, symmetry, contiguous
+  NFE, budgets, stable ids, and residual masks before a run is marked complete.
+
 - Implemented the attention-stability decoder in the protected remote LocalLeap
   worktree and mirrored it under `experiments/localleap/attention_stability/`.
   Exact-baseline HumanEval at tau 0.01 gave 66/164 (40.24%) versus baseline

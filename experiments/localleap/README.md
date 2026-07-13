@@ -83,3 +83,21 @@ The authoritative run remains on the remote server at
 Use `attention_stability/scripts/run_attention_stability_humaneval.sh` to rerun;
 it invokes the same dedicated sanitize/code_eval channel and then produces
 record-level audit and paired-analysis artifacts.
+
+### Sequential tau sweep and step diagnostics
+
+`attention_stability/scripts/run_attention_stability_sweep.sh` runs thresholds
+sequentially and starts the next run only after generation, dedicated
+sanitize/code_eval, record audit, and step-diagnostics validation all finish.
+The default sweep is `0.005 0.02 0.05`; pass explicit values to override it.
+The sweep stops on the first failed run and records transitions in
+`results/attention_stability/sweeps/<sweep_id>/manifest.tsv`.
+
+When `dependency_diagnostics_dir` is set, every HumanEval item gets one atomic
+`.pt` file using schema `attention_stability_steps_v1`. Each of its 256 records
+contains the directional and symmetric 32x32 attention matrices, block input
+tokens, current and previous top-1 candidates, confidences, candidate-change and
+maturity flags, maximum dependency on the preceding transfer set, ordering,
+selected/rejected positions, budget and mask counts, dependency/asymmetry
+statistics, and fallback/underfill flags. The run validates all files and writes
+`audit/step_diagnostics_summary.json`; the one-item smoke file is about 2.46 MB.

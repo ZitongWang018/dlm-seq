@@ -88,6 +88,7 @@ class LLaDAEvalHarness(LM):
         integrate_speed=False,
         dependency_threshold=None,
         dependency_trace_dir=None,
+        dependency_diagnostics_dir=None,
         **kwargs,
     ):
         '''
@@ -163,6 +164,7 @@ class LLaDAEvalHarness(LM):
         self.integrate_speed = integrate_speed
         self.dependency_threshold = dependency_threshold
         self.dependency_trace_dir = dependency_trace_dir
+        self.dependency_diagnostics_dir = dependency_diagnostics_dir
 
     @property
     def rank(self):
@@ -345,6 +347,7 @@ class LLaDAEvalHarness(LM):
             num_input_tokens += input_ids.shape[1]
 
             decode_diagnostics = None
+            step_records = None
             if self.dependency_threshold is not None:
                 generated_answer, nfe, decode_diagnostics = generate_attention_stability(
                     self.model,
@@ -357,7 +360,9 @@ class LLaDAEvalHarness(LM):
                     mask_id=self.mask_id,
                     early_stop=self.early_stop,
                     dependency_threshold=self.dependency_threshold,
+                    collect_step_diagnostics=self.dependency_diagnostics_dir is not None,
                 )
+                step_records = decode_diagnostics.pop("_step_records", None)
             elif self.relaxed_threshold is not None:
                 generated_answer, nfe = generate_localleap(self.model, input_ids, steps=self.steps, gen_length=self.gen_length, block_length=self.block_length, temperature=0, remasking=self.remasking, mask_id=self.mask_id, early_stop=self.early_stop,
                     threshold=self.threshold, relaxed_threshold=self.relaxed_threshold, radius=self.radius)
@@ -366,6 +371,7 @@ class LLaDAEvalHarness(LM):
                 generated_answer, nfe = generate(self.model, input_ids, steps=self.steps, gen_length=self.gen_length, block_length=self.block_length,
                                         temperature=0, remasking=self.remasking, mask_id=self.mask_id, early_stop=self.early_stop, threshold=self.threshold)
 
+            generated_token_ids_for_diagnostics = generated_answer.detach().to(torch.int32).cpu()
             if self.is_instruct and 'task_id' in req.doc and str(req.doc['task_id']).lower().startswith('humaneval'):
                 generated_answer = self.tokenizer.decode(generated_answer[0][input_ids.shape[1]:], skip_special_tokens=True)
                 generated_answer_ids = torch.tensor(self.tokenizer(generated_answer)["input_ids"])
@@ -387,6 +393,46 @@ class LLaDAEvalHarness(LM):
                     num_instances += 1
                 generated_answer = self.tokenizer.decode(generated_answer_ids, skip_special_tokens=True)
             output.append(generated_answer)
+
+            diagnostics_path = None
+            diagnostics_bytes = None
+            if step_records is not None and self.dependency_diagnostics_dir is not None:
+                os.makedirs(self.dependency_diagnostics_dir, exist_ok=True)
+                task_id = str(req.doc.get("task_id", f"index_{i}"))
+                safe_task_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", task_id)
+                diagnostics_path = os.path.join(
+                    self.dependency_diagnostics_dir,
+                    f"{i:03d}_{safe_task_id}.pt",
+                )
+                temporary_path = diagnostics_path + ".tmp"
+                diagnostics_payload = {
+                    "schema_version": "attention_stability_steps_v1",
+                    "absolute_index": i,
+                    "task_id": req.doc.get("task_id"),
+                    "prompt_hash": hashlib.sha256(question.encode("utf-8")).hexdigest(),
+                    "prompt_text": question,
+                    "prompt_token_ids": input_ids[0].to(torch.int32).cpu(),
+                    "prompt_length": int(input_ids.shape[1]),
+                    "raw_gold": req.doc.get("canonical_solution"),
+                    "entry_point": req.doc.get("entry_point"),
+                    "test_code": req.doc.get("test"),
+                    "final_sequence_token_ids": generated_token_ids_for_diagnostics[0],
+                    "decoded_generation": generated_answer,
+                    "generation_settings": {
+                        "model_path": self.model_path,
+                        "steps": self.steps,
+                        "gen_length": self.gen_length,
+                        "block_length": self.block_length,
+                        "temperature": 0,
+                        "remasking": self.remasking,
+                        "dependency_threshold": self.dependency_threshold,
+                    },
+                    "decode_summary": decode_diagnostics,
+                    "steps": step_records,
+                }
+                torch.save(diagnostics_payload, temporary_path)
+                os.replace(temporary_path, diagnostics_path)
+                diagnostics_bytes = os.path.getsize(diagnostics_path)
 
             if decode_diagnostics is not None and self.dependency_trace_dir is not None:
                 os.makedirs(self.dependency_trace_dir, exist_ok=True)
@@ -412,6 +458,11 @@ class LLaDAEvalHarness(LM):
                     "evaluator_version": "attention_stability_trace_v1",
                     "seed": {"lm_eval_random": 0, "numpy": 1234, "torch": 1234, "fewshot": 1234},
                     "decode_diagnostics": decode_diagnostics,
+                    "step_diagnostics_schema": (
+                        "attention_stability_steps_v1" if diagnostics_path is not None else None
+                    ),
+                    "step_diagnostics_path": diagnostics_path,
+                    "step_diagnostics_bytes": diagnostics_bytes,
                 }
                 with open(trace_path, "a", encoding="utf-8") as trace_file:
                     trace_file.write(json.dumps(trace_record, ensure_ascii=False) + "\n")

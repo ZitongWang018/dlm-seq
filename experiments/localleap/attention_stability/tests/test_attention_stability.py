@@ -62,9 +62,28 @@ def test_inactive_constraint_matches_baseline_topk():
     assert torch.equal(actual, expected)
 
 
+def test_candidate_diagnostics_capture_temporal_state():
+    logits = make_logits([1, 2, 3], [0.95, 0.8, 0.7])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, 0, 2] = dependency[0, 2, 0] = 0.8
+    previous_top1 = torch.tensor([[4, 2, 5]])
+    _, _, diagnostics = select(
+        logits, dependency, budget=1, tau=0.5,
+        previous_top1=previous_top1, previous_selected=torch.tensor([2]),
+    )
+    state = diagnostics["candidate_state"][0]
+    assert state["masked_positions_global"].tolist() == [0, 1, 2]
+    assert state["top1_token_ids"].tolist() == [1, 2, 3]
+    assert state["previous_top1_token_ids"].tolist() == [4, 2, 5]
+    assert state["candidate_changed"].tolist() == [True, False, True]
+    assert state["maturity"].tolist() == [False, True, True]
+    assert torch.allclose(state["max_dependency_to_previous"], torch.tensor([0.8, 0.0, 0.0]))
+
+
 if __name__ == "__main__":
     test_high_dependency_positions_are_not_committed_together()
     test_changed_dependent_candidate_is_ranked_after_mature_candidate()
     test_all_immature_candidates_fall_back_to_confidence()
     test_inactive_constraint_matches_baseline_topk()
-    print("4 selector tests passed")
+    test_candidate_diagnostics_capture_temporal_state()
+    print("5 selector tests passed")

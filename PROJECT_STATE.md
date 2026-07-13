@@ -19,6 +19,11 @@ versus baseline 67/164 (40.85%), with identical total NFE (41984). Treat this as
 negative evidence, not a completed improvement. Implementation and audit scripts
 are mirrored under `experiments/localleap/attention_stability/`.
 
+The next sensitivity run is configured as a strict sequential sweep over tau
+`0.005`, `0.02`, and `0.05`. Each run records compressed per-example, per-step
+attention/candidate diagnostics and is validated before the next threshold can
+start. The runner and schema validator are in the mirrored extension directory.
+
 ## Deprecated (cleaned 2026-07-13)
 
 Trajectory / lateral-response / agreement / ceiling-bug evals were removed from `results/` (local + AutoDL `dlm-seq-flow`).  
