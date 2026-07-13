@@ -1,9 +1,0 @@
-{
-  "num_samples": 20,
-  "aggregate_class_counts": {
-    "frozen": 2560
-  },
-  "mean_path_net_ratio": 410.57671525323315,
-  "mean_coupling_sparsity": 0.9998139880952381,
-  "mean_coupling_strength": 1.6033820404382657e-05
-}
