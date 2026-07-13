@@ -1,0 +1,60 @@
+{
+  "date": "2026-07-13",
+  "model": "/root/autodl-tmp/model/LLaDA/instruct",
+  "task": "humaneval",
+  "task_count": 164,
+  "task_hash": "c122632f0bdffdd0162cc8033a879dfe9d3b35e82c52eda6a767069e0a2beb40",
+  "configuration": {
+    "gen_length": 256,
+    "steps": 256,
+    "block_length": 32,
+    "temperature": 0,
+    "remasking": "low_confidence",
+    "num_fewshot": 0,
+    "dependency_threshold": 0.01,
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  },
+  "baseline": {
+    "correct": 67,
+    "accuracy": 0.40853658536585363,
+    "total_nfe": 41984,
+    "tokens_per_second": 9.730
+  },
+  "attention_stability": {
+    "correct": 66,
+    "accuracy": 0.4024390243902439,
+    "total_nfe": 41984,
+    "tokens_per_second": 9.439,
+    "generated_tokens": 39524,
+    "unstable_candidates_total": 18991,
+    "unstable_candidates_mean": 115.79878048780488,
+    "dependency_mean": 0.009485465784863907,
+    "dependency_max": 0.3754662573337555,
+    "underfilled_steps": 0,
+    "same_batch_rejections": 0
+  },
+  "paired": {
+    "both_correct": 62,
+    "both_wrong": 93,
+    "method_only": 4,
+    "baseline_only": 5,
+    "generation_changed": 121,
+    "generation_unchanged": 43,
+    "exact_mcnemar_p": 1.0,
+    "prompt_hash_mismatches": 0,
+    "target_hash_mismatches": 0
+  },
+  "evaluation": {
+    "authoritative": "postprocess_code.py using sanitize.py and evaluate/code_eval",
+    "raw_lm_eval_pass_at_1": 0.09146341463414634,
+    "audit_duplicate_ids": 0,
+    "audit_missing_ids": 0,
+    "audit_nfe_min": 256,
+    "audit_nfe_max": 256,
+    "residual_mask_count": 0
+  },
+  "conclusion": "Negative result at tau 0.01: trajectories changed but HumanEval accuracy did not improve."
+}

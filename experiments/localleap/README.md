@@ -50,3 +50,36 @@
 2. `eval_llada.py` 增加 `use_cache=False` 参数  
 3. 从模型目录拷入 `configuration_llada.py`  
 4. 使用 Fast-dLLM 的 `sanitize.py` 做 HumanEval postprocess
+
+## Attention-stability extension (2026-07-13)
+
+The extension under `attention_stability/` implements the dependency-threshold
+decoder on top of the exact LLaDA baseline configuration. It averages attention
+over all layers and heads for the active 32-token block, uses adjacent-step top-1
+changes for temporal maturity, and greedily excludes strongly dependent tokens
+from the same transfer set. The probe is disabled unless
+`dependency_threshold` is passed, so the original baseline path is unchanged.
+
+Fair HumanEval configuration: local LLaDA-Instruct weights, `gen_length=256`,
+`steps=256`, `block_length=32`, zero-shot, temperature 0, low-confidence
+remasking, and the same lm-eval seeds and `postprocess_code.py`. With this
+configuration, the baseline budget is one token per block step, so same-batch
+dependency exclusion is vacuous; only temporal maturity can change ordering.
+
+Full HumanEval result at `dependency_threshold=0.01`:
+
+| Method | sanitize/code_eval pass@1 | Correct | TPS | NFE |
+|--|--:|--:|--:|--:|
+| Exact baseline | 40.85% | 67/164 | 9.730 | 41984 |
+| Attention-stability | 40.24% | 66/164 | 9.439 | 41984 |
+
+Paired outcome: 62 both correct, 93 both wrong, 4 method-only, 5
+baseline-only, and 121 changed generations. Exact McNemar p-value is 1.0. This
+run is negative evidence: the decoder changed trajectories but did not improve
+HumanEval accuracy at tau 0.01.
+
+The authoritative run remains on the remote server at
+`LocalLeap/llada/results/attention_stability/tau0.01/full_tau001_20260713/`.
+Use `attention_stability/scripts/run_attention_stability_humaneval.sh` to rerun;
+it invokes the same dedicated sanitize/code_eval channel and then produces
+record-level audit and paired-analysis artifacts.

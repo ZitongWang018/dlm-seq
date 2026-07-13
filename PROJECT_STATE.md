@@ -13,6 +13,12 @@ Reproduce and extend **LocalLeap** on LLaDA-Instruct (local weights), with corre
 
 See `experiments/localleap/README.md` for configs, scripts, and HE numbers.
 
+The attention-stability decoder has now been implemented and evaluated with the
+exact HumanEval baseline configuration. At tau 0.01 it scored 66/164 (40.24%)
+versus baseline 67/164 (40.85%), with identical total NFE (41984). Treat this as
+negative evidence, not a completed improvement. Implementation and audit scripts
+are mirrored under `experiments/localleap/attention_stability/`.
+
 ## Deprecated (cleaned 2026-07-13)
 
 Trajectory / lateral-response / agreement / ceiling-bug evals were removed from `results/` (local + AutoDL `dlm-seq-flow`).  
