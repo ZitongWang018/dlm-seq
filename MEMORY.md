@@ -24,11 +24,10 @@
   history elements and never write full distributions to disk.
 
 - Added a no-extra-size-parameter frontier improvement: only confidence rank
-  `<= b_t+1` may replace the baseline choice based on stability. Five selector
-  selector/generator tests pass (10 total), including argmax/Top-K ties and a
-  true three-candidate frontier.
-  Candidate full runs require a same-source-hash one-task end-to-end preflight
-  before the 164-task run. Started locked,
+  `<= b_t+1` may replace the baseline choice based on stability. Ten
+  selector/generator tests pass, including argmax/Top-K ties and a true
+  three-candidate frontier. Candidate full runs require a same-source-hash
+  one-task end-to-end preflight before the 164-task run. Started locked,
   fail-fast full queue `cross_step_full_queue_20260714_v1` for tau 0.004,
   0.0025, 0.001, 0.0005, direct stability, and frontier stability.
 
