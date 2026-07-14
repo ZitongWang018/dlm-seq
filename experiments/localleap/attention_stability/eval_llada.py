@@ -38,6 +38,7 @@ import os
 from transformers import AutoTokenizer, AutoModel, AutoConfig
 from model.modeling_llada import LLaDAModelLM
 from generate import *
+from stcc_generate import generate_stcc
 
 import json
 import hashlib
@@ -95,6 +96,16 @@ class LLaDAEvalHarness(LM):
         candidate_memory_exact_jsd=False,
         candidate_memory_trace_dir=None,
         candidate_memory_diagnostics_dir=None,
+        stcc_mode=None,
+        stcc_topk=8,
+        stcc_jsd_threshold=0.01,
+        stcc_attention_threshold=0.004,
+        stcc_extra_multiplier=1,
+        stcc_extra_jsd_threshold=None,
+        stcc_min_topk_overlap=None,
+        stcc_min_stability_streak=1,
+        stcc_trace_dir=None,
+        stcc_diagnostics_dir=None,
         **kwargs,
     ):
         '''
@@ -181,6 +192,24 @@ class LLaDAEvalHarness(LM):
         )
         self.candidate_memory_trace_dir = candidate_memory_trace_dir
         self.candidate_memory_diagnostics_dir = candidate_memory_diagnostics_dir
+        self.stcc_mode = stcc_mode
+        self.stcc_topk = int(stcc_topk)
+        self.stcc_jsd_threshold = float(stcc_jsd_threshold)
+        self.stcc_attention_threshold = float(stcc_attention_threshold)
+        self.stcc_extra_multiplier = int(stcc_extra_multiplier)
+        self.stcc_extra_jsd_threshold = (
+            None
+            if stcc_extra_jsd_threshold in {None, "None", "none"}
+            else float(stcc_extra_jsd_threshold)
+        )
+        self.stcc_min_topk_overlap = (
+            None
+            if stcc_min_topk_overlap in {None, "None", "none"}
+            else int(stcc_min_topk_overlap)
+        )
+        self.stcc_min_stability_streak = int(stcc_min_stability_streak)
+        self.stcc_trace_dir = stcc_trace_dir
+        self.stcc_diagnostics_dir = stcc_diagnostics_dir
 
     @property
     def rank(self):
@@ -368,7 +397,31 @@ class LLaDAEvalHarness(LM):
             active_diagnostics_dir = None
             step_diagnostics_schema = None
             trace_evaluator_version = None
-            if self.candidate_memory_topk is not None:
+            if self.stcc_mode is not None:
+                generated_answer, nfe, decode_diagnostics = generate_stcc(
+                    self.model,
+                    input_ids,
+                    steps=self.steps,
+                    gen_length=self.gen_length,
+                    block_length=self.block_length,
+                    mask_id=self.mask_id,
+                    early_stop=self.early_stop,
+                    candidate_topk=self.stcc_topk,
+                    jsd_threshold=self.stcc_jsd_threshold,
+                    horizontal_mode=self.stcc_mode,
+                    attention_threshold=self.stcc_attention_threshold,
+                    extra_multiplier=self.stcc_extra_multiplier,
+                    extra_jsd_threshold=self.stcc_extra_jsd_threshold,
+                    min_topk_overlap=self.stcc_min_topk_overlap,
+                    min_stability_streak=self.stcc_min_stability_streak,
+                    collect_step_diagnostics=self.stcc_diagnostics_dir is not None,
+                )
+                step_records = decode_diagnostics.pop("_step_records", None)
+                active_trace_dir = self.stcc_trace_dir
+                active_diagnostics_dir = self.stcc_diagnostics_dir
+                step_diagnostics_schema = "stcc_distribution_response_steps_v1"
+                trace_evaluator_version = "stcc_distribution_response_trace_v1"
+            elif self.candidate_memory_topk is not None:
                 generated_answer, nfe, decode_diagnostics = generate_candidate_memory(
                     self.model,
                     input_ids,
@@ -442,9 +495,21 @@ class LLaDAEvalHarness(LM):
 
             diagnostics_path = None
             diagnostics_bytes = None
+            stable_task_id = (
+                req.doc.get("task_id")
+                or req.doc.get("id")
+                or req.doc.get("problem_id")
+                or f"index_{i}"
+            )
+            raw_gold_for_trace = (
+                req.doc.get("canonical_solution")
+                or req.doc.get("code")
+                or req.doc.get("answer")
+                or req.doc.get("target")
+            )
             if step_records is not None and active_diagnostics_dir is not None:
                 os.makedirs(active_diagnostics_dir, exist_ok=True)
-                task_id = str(req.doc.get("task_id", f"index_{i}"))
+                task_id = str(stable_task_id)
                 safe_task_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", task_id)
                 diagnostics_path = os.path.join(
                     active_diagnostics_dir,
@@ -454,12 +519,12 @@ class LLaDAEvalHarness(LM):
                 diagnostics_payload = {
                     "schema_version": step_diagnostics_schema,
                     "absolute_index": i,
-                    "task_id": req.doc.get("task_id"),
+                    "task_id": stable_task_id,
                     "prompt_hash": hashlib.sha256(question.encode("utf-8")).hexdigest(),
                     "prompt_text": question,
                     "prompt_token_ids": input_ids[0].to(torch.int32).cpu(),
                     "prompt_length": int(input_ids.shape[1]),
-                    "raw_gold": req.doc.get("canonical_solution"),
+                    "raw_gold": raw_gold_for_trace,
                     "entry_point": req.doc.get("entry_point"),
                     "test_code": req.doc.get("test"),
                     "final_sequence_token_ids": generated_token_ids_for_diagnostics[0],
@@ -477,6 +542,14 @@ class LLaDAEvalHarness(LM):
                         "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
                         "candidate_memory_fallback": self.candidate_memory_fallback,
                         "candidate_memory_exact_jsd": self.candidate_memory_exact_jsd,
+                        "stcc_mode": self.stcc_mode,
+                        "stcc_topk": self.stcc_topk,
+                        "stcc_jsd_threshold": self.stcc_jsd_threshold,
+                        "stcc_attention_threshold": self.stcc_attention_threshold,
+                        "stcc_extra_multiplier": self.stcc_extra_multiplier,
+                        "stcc_extra_jsd_threshold": self.stcc_extra_jsd_threshold,
+                        "stcc_min_topk_overlap": self.stcc_min_topk_overlap,
+                        "stcc_min_stability_streak": self.stcc_min_stability_streak,
                     },
                     "decode_summary": decode_diagnostics,
                     "steps": step_records,
@@ -490,10 +563,10 @@ class LLaDAEvalHarness(LM):
                 trace_path = os.path.join(active_trace_dir, f"rank_{self.rank}.jsonl")
                 trace_record = {
                     "absolute_index": i,
-                    "task_id": req.doc.get("task_id"),
+                    "task_id": stable_task_id,
                     "prompt_hash": hashlib.sha256(question.encode("utf-8")).hexdigest(),
-                    "raw_gold": req.doc.get("canonical_solution"),
-                    "normalized_gold": req.doc.get("canonical_solution"),
+                    "raw_gold": raw_gold_for_trace,
+                    "normalized_gold": raw_gold_for_trace,
                     "decoded_generation": generated_answer,
                     "correct": None,
                     "nfe": nfe,
@@ -510,6 +583,14 @@ class LLaDAEvalHarness(LM):
                         "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
                         "candidate_memory_fallback": self.candidate_memory_fallback,
                         "candidate_memory_exact_jsd": self.candidate_memory_exact_jsd,
+                        "stcc_mode": self.stcc_mode,
+                        "stcc_topk": self.stcc_topk,
+                        "stcc_jsd_threshold": self.stcc_jsd_threshold,
+                        "stcc_attention_threshold": self.stcc_attention_threshold,
+                        "stcc_extra_multiplier": self.stcc_extra_multiplier,
+                        "stcc_extra_jsd_threshold": self.stcc_extra_jsd_threshold,
+                        "stcc_min_topk_overlap": self.stcc_min_topk_overlap,
+                        "stcc_min_stability_streak": self.stcc_min_stability_streak,
                     },
                     "evaluator_version": trace_evaluator_version,
                     "seed": {"lm_eval_random": 0, "numpy": 1234, "torch": 1234, "fewshot": 1234},

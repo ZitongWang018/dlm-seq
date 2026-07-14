@@ -1,6 +1,6 @@
 # Project State
 
-Date: 2026-07-14
+Date: 2026-07-15
 
 Remote worktrees:
 
@@ -37,6 +37,28 @@ full HumanEval. Ten selector/generator tests pass, and each candidate full run i
 by an exact-source-hash one-task end-to-end preflight. Implementation, tests,
 runners and validators are mirrored
 under `experiments/localleap/attention_stability/`.
+
+The completed low-threshold and candidate-memory family established that the
+best HumanEval result is 71/164 (43.29%) for tau 0.004 through 0.0005 and for
+direct candidate stability, versus 67/164 baseline. Because this HumanEval
+configuration has b=1, rejected horizontal pairs are identically zero; the gain
+is longitudinal and not evidence for same-batch horizontal control. At tau
+0.0005 every historical position is strong and the rule reduces to adjacent
+top-1 stability. The gain is exploratory and not significant (7 method-only,
+3 baseline-only, exact McNemar p=0.34375).
+
+The active round is `stcc_overnight_20260715_v1`. It replaces top-1-only
+maturity with Top-8+OTHER partition JSD, Top-K overlap, top-1 change, and a short
+stability streak. Symmetric and directed horizontal b=2 arms, plus safe 2x/4x
+extra-commit acceleration arms, are implemented. Five new STCC tests and all
+eleven candidate-memory regression tests pass. A full MBPP b=2 baseline is
+running first; a 72-hour fail-fast controller then audits it, runs real-model
+smoke and the HumanEval exploratory family, freezes a winner, and sequentially
+runs MBPP and Minerva counting/probability baseline, vertical, symmetric,
+directed, and acceleration arms. Queue root:
+`/root/autodl-tmp/LocalLeap/llada/results/experiment_queues/stcc_overnight_20260715_v1`.
+The method and evaluation contract is documented in
+`docs/stcc_distribution_response_experiment_20260715.md`.
 
 ## Deprecated (cleaned 2026-07-13)
 

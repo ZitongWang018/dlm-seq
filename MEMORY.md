@@ -31,6 +31,35 @@
   fail-fast full queue `cross_step_full_queue_20260714_v1` for tau 0.004,
   0.0025, 0.001, 0.0005, direct stability, and frontier stability.
 
+## 2026-07-15
+
+- Finalized the formal HumanEval cross-step family. Baseline is 67/164;
+  attention stability tau 0.004, 0.0025, 0.001, and 0.0005 plus direct
+  candidate stability all score 71/164. Candidate frontier and the hard
+  confidence threshold 0.8 both score 67/164. The best paired comparison is
+  7 method-only versus 3 baseline-only, exact McNemar p=0.34375. HumanEval has
+  b=1, so these runs validate longitudinal scheduling only; horizontal rejected
+  pairs are zero.
+
+- Implemented `stcc_distribution_response_v1`. It stores Top-8+OTHER and a
+  short streak for remaining masks, orders candidates using partition JSD,
+  Top-K overlap and top-1 change, and removes the failed hard-confidence and
+  b+1-frontier mechanisms. Added symmetric and per-direction horizontal b=2
+  constraints. Directed reads into low-JSD targets are pruned as dense
+  low-information edges.
+
+- Added acceleration multipliers 2 and 4. Baseline commits are never removed;
+  extra commits require stable top-1, low JSD, Top-8 overlap at least 7, the
+  frozen streak, and no active conflict. Quality arms assert fixed baseline NFE;
+  acceleration arms report actual NFE and synchronized step wall time.
+
+- Five STCC unit/generator tests and all eleven candidate-memory regression
+  tests pass. Started full MBPP b=2 baseline and a 72-hour fail-fast controller
+  `stcc_overnight_20260715_v1` covering HumanEval exploration, MBPP b=2
+  symmetric/directed comparisons, Minerva counting/probability confirmation,
+  and speed/performance arms. Added record, trace and full-step validators plus
+  an 8 GiB disk stop gate and frozen-source hash checks.
+
 ## 2026-07-13
 
 - Added a fail-fast sequential tau sweep (`0.005`, `0.02`, `0.05`) for the

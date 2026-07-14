@@ -25,6 +25,27 @@ def _jsd(first, second):
     return 0.5 * (first_term.sum(-1) + second_term.sum(-1))
 
 
+def _is_valid_topk_membership(scores, membership, k):
+    """Validate a Top-K set while allowing arbitrary choices at boundary ties.
+
+    PyTorch's CPU and CUDA ``topk`` kernels may select different indices when
+    several values are exactly equal at the K-th boundary.  The recorded set is
+    valid if it has the requested size and no excluded candidate has a score
+    strictly greater than an included candidate.
+    """
+    scores = scores.to(torch.float64)
+    membership = membership.bool()
+    if scores.ndim != 1 or membership.shape != scores.shape:
+        return False
+    if k < 0 or k > scores.numel() or int(membership.sum().item()) != k:
+        return False
+    if not torch.isfinite(scores).all():
+        return False
+    if k == 0 or k == scores.numel():
+        return True
+    return bool(scores[membership].min() >= scores[~membership].max())
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("diagnostics_dir")
@@ -66,6 +87,7 @@ def main():
     peak_cuda_reserved = 0
     wall_time_sum = 0.0
     nfe_values = []
+    tie_boundary_frontiers_accepted = 0
 
     for path in paths:
         payload = torch.load(path, map_location="cpu", weights_only=False)
@@ -233,22 +255,18 @@ def main():
                 "top1_confidences"
             ].to(torch.float64)
             frontier_size = min(count, budget + 1)
-            expected_frontier_positions = torch.topk(
-                full_confidence, k=frontier_size
-            ).indices
-            expected_frontier = torch.zeros(count, dtype=torch.bool)
-            position_to_index = {
-                int(position): idx
-                for idx, position in enumerate(step["masked_positions_global"].tolist())
-            }
-            expected_frontier[
-                torch.tensor(
-                    [position_to_index[int(position)] for position in expected_frontier_positions],
-                    dtype=torch.long,
-                )
-            ] = True
-            if not torch.equal(step["in_confidence_frontier"].bool(), expected_frontier):
+            frontier_scores = step["top1_confidences"].to(torch.float64)
+            recorded_frontier = step["in_confidence_frontier"].bool()
+            if not _is_valid_topk_membership(
+                frontier_scores, recorded_frontier, frontier_size
+            ):
                 raise SystemExit(f"confidence frontier mismatch in {path}")
+            strict_cpu_frontier = torch.zeros(count, dtype=torch.bool)
+            strict_cpu_frontier[
+                torch.topk(frontier_scores, k=frontier_size).indices
+            ] = True
+            if not torch.equal(recorded_frontier, strict_cpu_frontier):
+                tie_boundary_frontiers_accepted += 1
             expected_effective = expected_eligible
             if settings["candidate_memory_fallback"] == "frontier" and history.any():
                 expected_effective = expected_eligible & step["in_confidence_frontier"].bool()
@@ -506,6 +524,7 @@ def main():
         raise SystemExit("duplicate task ids in diagnostics")
     summary = {
         "schema_version": "candidate_memory_steps_v2",
+        "validator_version": "candidate_memory_validator_v2_tie_aware",
         "files": len(paths),
         "unique_task_ids": len(set(task_ids)),
         "total_steps": total_steps,
@@ -518,6 +537,7 @@ def main():
         "eligible_candidates_total": total_eligible,
         "forced_commits_total": total_forced,
         "fallback_steps_total": total_fallback_steps,
+        "tie_boundary_frontiers_accepted": tie_boundary_frontiers_accepted,
         "full_jsd_observations": full_jsd_observations,
         "full_jsd_mean": (
             full_jsd_sum / full_jsd_observations if full_jsd_observations else None

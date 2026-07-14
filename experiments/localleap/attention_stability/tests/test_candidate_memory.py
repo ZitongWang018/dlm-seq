@@ -4,6 +4,7 @@ import torch
 
 import generate as generate_module
 from generate import _jsd_from_probabilities, select_candidate_memory_tokens
+from validate_candidate_memory_diagnostics import _is_valid_topk_membership
 
 
 MASK = 99
@@ -54,6 +55,22 @@ def test_jsd_boundaries_and_symmetry():
     divergence = _jsd_from_probabilities(left, right)
     assert abs(float(divergence.item()) - math.log(2)) < 1e-6
     assert torch.allclose(divergence, _jsd_from_probabilities(right, left), atol=1e-7)
+
+
+def test_validator_accepts_only_valid_topk_boundary_ties():
+    scores = torch.tensor([1.0, 0.9, 0.9, 0.5], dtype=torch.float64)
+    assert _is_valid_topk_membership(
+        scores, torch.tensor([True, True, False, False]), k=2
+    )
+    assert _is_valid_topk_membership(
+        scores, torch.tensor([True, False, True, False]), k=2
+    )
+    assert not _is_valid_topk_membership(
+        scores, torch.tensor([True, False, False, True]), k=2
+    )
+    assert not _is_valid_topk_membership(
+        scores, torch.tensor([True, True, True, False]), k=2
+    )
 
 
 def test_bootstrap_matches_baseline_and_memory_deletes_selected():
