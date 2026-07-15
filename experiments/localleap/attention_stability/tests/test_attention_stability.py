@@ -11,12 +11,21 @@ def make_logits(top_ids, confidences, vocab_size=8):
     return logits
 
 
-def select(logits, dependency, budget, tau, previous_top1=None, previous_selected=None):
+def select(
+    logits,
+    dependency,
+    budget,
+    tau,
+    previous_top1=None,
+    previous_selected=None,
+    prune_stable_conflicts=False,
+    fill_budget=False,
+):
     x = torch.full(logits.shape[:2], 7, dtype=torch.long)
     mask = torch.ones_like(x, dtype=torch.bool)
     return select_attention_stability_tokens(
         logits, 0.0, "low_confidence", mask, x, budget, dependency, tau, 0,
-        previous_top1, previous_selected,
+        previous_top1, previous_selected, prune_stable_conflicts, fill_budget,
     )
 
 
@@ -80,10 +89,59 @@ def test_candidate_diagnostics_capture_temporal_state():
     assert torch.allclose(state["max_dependency_to_previous"], torch.tensor([0.8, 0.0, 0.0]))
 
 
+def test_directed_read_dependency_is_not_implicitly_symmetrized():
+    logits = make_logits([1, 2, 3], [0.9, 0.8, 0.7])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, 0, 1] = 0.9
+    _, transfer, diagnostics = select(logits, dependency, budget=2, tau=0.5)
+    assert transfer.nonzero(as_tuple=True)[1].tolist() == [0, 1]
+    assert diagnostics["rejected_pairs"] == 0
+
+
+def test_stable_dense_conflict_can_be_pruned_without_new_threshold():
+    logits = make_logits([1, 2, 3], [0.9, 0.8, 0.7])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, 1, 0] = 0.9
+    previous_top1 = torch.tensor([[1, 2, 3]])
+    _, transfer, diagnostics = select(
+        logits,
+        dependency,
+        budget=2,
+        tau=0.5,
+        previous_top1=previous_top1,
+        previous_selected=torch.tensor([2]),
+        prune_stable_conflicts=True,
+    )
+    assert transfer.nonzero(as_tuple=True)[1].tolist() == [0, 1]
+    assert diagnostics["stable_conflicts_pruned"] == 1
+
+
+def test_fixed_budget_fill_guarantees_parallel_commit_count():
+    logits = make_logits([1, 2, 3], [0.9, 0.8, 0.7])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, 1, 0] = dependency[0, 2, 0] = 0.9
+    previous_top1 = torch.tensor([[4, 5, 6]])
+    _, transfer, diagnostics = select(
+        logits,
+        dependency,
+        budget=2,
+        tau=0.5,
+        previous_top1=previous_top1,
+        previous_selected=torch.tensor([2]),
+        fill_budget=True,
+    )
+    assert int(transfer.sum().item()) == 2
+    assert diagnostics["forced_budget_fills"] == 1
+    assert diagnostics["underfilled"] is False
+
+
 if __name__ == "__main__":
     test_high_dependency_positions_are_not_committed_together()
     test_changed_dependent_candidate_is_ranked_after_mature_candidate()
     test_all_immature_candidates_fall_back_to_confidence()
     test_inactive_constraint_matches_baseline_topk()
     test_candidate_diagnostics_capture_temporal_state()
-    print("5 selector tests passed")
+    test_directed_read_dependency_is_not_implicitly_symmetrized()
+    test_stable_dense_conflict_can_be_pruned_without_new_threshold()
+    test_fixed_budget_fill_guarantees_parallel_commit_count()
+    print("8 selector tests passed")

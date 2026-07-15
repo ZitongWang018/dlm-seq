@@ -90,6 +90,9 @@ class LLaDAEvalHarness(LM):
         dependency_threshold=None,
         dependency_trace_dir=None,
         dependency_diagnostics_dir=None,
+        dependency_mode="symmetric",
+        dependency_prune_stable_conflicts=False,
+        dependency_fill_budget=False,
         candidate_memory_topk=None,
         candidate_memory_confidence_threshold=0.0,
         candidate_memory_fallback="confidence",
@@ -182,6 +185,17 @@ class LLaDAEvalHarness(LM):
         self.dependency_threshold = dependency_threshold
         self.dependency_trace_dir = dependency_trace_dir
         self.dependency_diagnostics_dir = dependency_diagnostics_dir
+        self.dependency_mode = dependency_mode
+        self.dependency_prune_stable_conflicts = (
+            dependency_prune_stable_conflicts.lower() == "true"
+            if isinstance(dependency_prune_stable_conflicts, str)
+            else bool(dependency_prune_stable_conflicts)
+        )
+        self.dependency_fill_budget = (
+            dependency_fill_budget.lower() == "true"
+            if isinstance(dependency_fill_budget, str)
+            else bool(dependency_fill_budget)
+        )
         self.candidate_memory_topk = candidate_memory_topk
         self.candidate_memory_confidence_threshold = candidate_memory_confidence_threshold
         self.candidate_memory_fallback = candidate_memory_fallback
@@ -456,12 +470,28 @@ class LLaDAEvalHarness(LM):
                     early_stop=self.early_stop,
                     dependency_threshold=self.dependency_threshold,
                     collect_step_diagnostics=self.dependency_diagnostics_dir is not None,
+                    dependency_mode=self.dependency_mode,
+                    prune_stable_conflicts=self.dependency_prune_stable_conflicts,
+                    fill_budget=self.dependency_fill_budget,
                 )
                 step_records = decode_diagnostics.pop("_step_records", None)
                 active_trace_dir = self.dependency_trace_dir
                 active_diagnostics_dir = self.dependency_diagnostics_dir
-                step_diagnostics_schema = "attention_stability_steps_v1"
-                trace_evaluator_version = "attention_stability_trace_v1"
+                extended_dependency_mode = (
+                    self.dependency_mode != "symmetric"
+                    or self.dependency_prune_stable_conflicts
+                    or self.dependency_fill_budget
+                )
+                step_diagnostics_schema = (
+                    "attention_stability_steps_v2"
+                    if extended_dependency_mode
+                    else "attention_stability_steps_v1"
+                )
+                trace_evaluator_version = (
+                    "attention_stability_trace_v2"
+                    if extended_dependency_mode
+                    else "attention_stability_trace_v1"
+                )
             elif self.relaxed_threshold is not None:
                 generated_answer, nfe = generate_localleap(self.model, input_ids, steps=self.steps, gen_length=self.gen_length, block_length=self.block_length, temperature=0, remasking=self.remasking, mask_id=self.mask_id, early_stop=self.early_stop,
                     threshold=self.threshold, relaxed_threshold=self.relaxed_threshold, radius=self.radius)
@@ -538,6 +568,9 @@ class LLaDAEvalHarness(LM):
                         "remasking": self.remasking,
                         "mask_id": self.mask_id,
                         "dependency_threshold": self.dependency_threshold,
+                        "dependency_mode": self.dependency_mode,
+                        "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
+                        "dependency_fill_budget": self.dependency_fill_budget,
                         "candidate_memory_topk": self.candidate_memory_topk,
                         "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
                         "candidate_memory_fallback": self.candidate_memory_fallback,
@@ -579,6 +612,9 @@ class LLaDAEvalHarness(LM):
                         "remasking": self.remasking,
                         "mask_id": self.mask_id,
                         "dependency_threshold": self.dependency_threshold,
+                        "dependency_mode": self.dependency_mode,
+                        "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
+                        "dependency_fill_budget": self.dependency_fill_budget,
                         "candidate_memory_topk": self.candidate_memory_topk,
                         "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
                         "candidate_memory_fallback": self.candidate_memory_fallback,

@@ -26,6 +26,8 @@ def main():
     rejected_total = 0
     underfilled_total = 0
     fallback_total = 0
+    stable_pruned_total = 0
+    forced_fill_total = 0
     dependency_min = float("inf")
     dependency_max = float("-inf")
     dependency_mean_sum = 0.0
@@ -33,13 +35,17 @@ def main():
 
     for path in paths:
         payload = torch.load(path, map_location="cpu", weights_only=False)
-        if payload["schema_version"] != "attention_stability_steps_v1":
+        schema_version = payload["schema_version"]
+        if schema_version not in {"attention_stability_steps_v1", "attention_stability_steps_v2"}:
             raise SystemExit(f"unexpected schema in {path}")
         task_ids.append(payload["task_id"])
         steps = payload["steps"]
         expected_steps = int(payload["generation_settings"]["steps"])
-        if len(steps) != expected_steps:
-            raise SystemExit(f"step count mismatch in {path}: {len(steps)} != {expected_steps}")
+        fill_budget = bool(payload["generation_settings"].get("dependency_fill_budget", False))
+        if fill_budget and len(steps) != expected_steps:
+            raise SystemExit(f"fixed-budget step count mismatch in {path}: {len(steps)} != {expected_steps}")
+        if not fill_budget and len(steps) < expected_steps:
+            raise SystemExit(f"step count below configured budget in {path}: {len(steps)} < {expected_steps}")
         if [step["global_nfe"] for step in steps] != list(range(1, expected_steps + 1)):
             raise SystemExit(f"non-contiguous NFE in {path}")
         if steps[-1]["mask_count_after"] != 0:
@@ -54,6 +60,9 @@ def main():
                 raise SystemExit(f"non-finite attention in {path}")
             if not torch.allclose(symmetric, symmetric.transpose(0, 1), atol=1e-3, rtol=0):
                 raise SystemExit(f"non-symmetric dependency in {path}")
+            selection_dependency = step.get("selection_dependency", symmetric)
+            if selection_dependency.shape != (32, 32) or not torch.isfinite(selection_dependency).all():
+                raise SystemExit(f"invalid selection dependency in {path}")
             candidate_count = step["mask_count_before"]
             candidate_fields = (
                 "masked_positions_global",
@@ -69,14 +78,19 @@ def main():
             if any(len(step[field]) != candidate_count for field in candidate_fields):
                 raise SystemExit(f"candidate-state length mismatch in {path}")
             selected_count = len(step["selected_positions_global"])
+            target_count = min(step["budget"], candidate_count)
             if not step["underfilled"] and selected_count != min(step["budget"], candidate_count):
                 raise SystemExit(f"selected budget mismatch in {path}")
+            if fill_budget and selected_count != target_count:
+                raise SystemExit(f"fixed-budget selector underfilled in {path}")
             unstable_total += int(step["unstable_candidates"])
             changed_total += int(step["changed_candidates"])
             strongly_dependent_total += int(step["strongly_dependent_candidates"])
             rejected_total += int(step["rejected_pairs"])
             underfilled_total += int(step["underfilled"])
             fallback_total += int(step["all_immature_fallback"])
+            stable_pruned_total += int(step.get("stable_conflicts_pruned", 0))
+            forced_fill_total += int(step.get("forced_budget_fills", 0))
             dependency_min = min(dependency_min, float(step["dependency_min"]))
             dependency_max = max(dependency_max, float(step["dependency_max"]))
             dependency_mean_sum += float(step["dependency_mean"])
@@ -89,7 +103,7 @@ def main():
     if len(task_ids) != len(set(task_ids)):
         raise SystemExit("duplicate task ids in step diagnostics")
     summary = {
-        "schema_version": "attention_stability_steps_v1",
+        "schema_version": "attention_stability_steps_v1_or_v2",
         "files": len(paths),
         "unique_task_ids": len(set(task_ids)),
         "total_steps": total_steps,
@@ -102,6 +116,8 @@ def main():
         "rejected_pairs_total": rejected_total,
         "underfilled_steps_total": underfilled_total,
         "all_immature_fallback_steps_total": fallback_total,
+        "stable_conflicts_pruned_total": stable_pruned_total,
+        "forced_budget_fills_total": forced_fill_total,
         "dependency_min": dependency_min,
         "dependency_max": dependency_max,
         "dependency_mean": dependency_mean_sum / total_steps,

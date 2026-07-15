@@ -47,18 +47,18 @@ is longitudinal and not evidence for same-batch horizontal control. At tau
 top-1 stability. The gain is exploratory and not significant (7 method-only,
 3 baseline-only, exact McNemar p=0.34375).
 
-The active round is `stcc_overnight_20260715_v1`. It replaces top-1-only
-maturity with Top-8+OTHER partition JSD, Top-K overlap, top-1 change, and a short
-stability streak. Symmetric and directed horizontal b=2 arms, plus safe 2x/4x
-extra-commit acceleration arms, are implemented. Five new STCC tests and all
-eleven candidate-memory regression tests pass. A full MBPP b=2 baseline is
-running first; a 72-hour fail-fast controller then audits it, runs real-model
-smoke and the HumanEval exploratory family, freezes a winner, and sequentially
-runs MBPP and Minerva counting/probability baseline, vertical, symmetric,
-directed, and acceleration arms. Queue root:
-`/root/autodl-tmp/LocalLeap/llada/results/experiment_queues/stcc_overnight_20260715_v1`.
-The method and evaluation contract is documented in
-`docs/stcc_distribution_response_experiment_20260715.md`.
+The STCC round `stcc_overnight_20260715_v1` was cancelled after its first two
+full HumanEval arms scored 47/164 and 46/164, well below the 67/164 baseline.
+The active round is now `attention_recovery_long_20260715_v1`, anchored to the
+previous best `attention_stability_v1` result at tau 0.004 (71/164). The exact
+old symmetric path remains the default. Optional directed-read dependencies
+test attention asymmetry, while stable-conflict pruning plus fixed-budget fill
+provides parallel 128/64-step speed arms without changing the anchor path.
+Eight selector tests pass. A resumable detached queue runs HumanEval, MBPP,
+Minerva counting/probability and GSM8K baseline, symmetric, directed and speed
+profiles, with per-run evaluator audits, source hashes, an 8 GiB disk gate and
+continue-on-run-failure behavior. Queue root:
+`/root/autodl-tmp/LocalLeap/llada/results/experiment_queues/attention_recovery_long_20260715_v1`.
 
 ## Deprecated (cleaned 2026-07-13)
 

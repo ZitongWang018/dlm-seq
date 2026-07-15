@@ -98,6 +98,8 @@ def select_attention_stability_tokens(
     block_start,
     previous_top1=None,
     previous_selected=None,
+    prune_stable_conflicts=False,
+    fill_budget=False,
 ):
     """Lexicographic maturity/confidence ordering plus greedy dependency exclusion."""
     logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
@@ -118,6 +120,8 @@ def select_attention_stability_tokens(
         "changed_candidates": 0,
         "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
+        "stable_conflicts_pruned": 0,
+        "forced_budget_fills": 0,
         "underfilled": False,
         "all_immature_fallback": False,
         "candidate_state": [],
@@ -130,7 +134,8 @@ def select_attention_stability_tokens(
         maturity = torch.ones(masked.numel(), dtype=torch.bool, device=x.device)
         changed = torch.zeros(masked.numel(), dtype=torch.bool, device=x.device)
         max_dependency = torch.zeros(masked.numel(), dtype=torch.float32, device=x.device)
-        if previous_top1 is not None and previous_selected is not None and previous_selected.numel() > 0:
+        history_available = previous_top1 is not None and previous_selected is not None and previous_selected.numel() > 0
+        if history_available:
             masked_local = masked - block_start
             selected_local = previous_selected - block_start
             max_dependency = dependency[batch_idx].index_select(0, masked_local).index_select(1, selected_local).max(dim=1).values
@@ -156,18 +161,61 @@ def select_attention_stability_tokens(
 
         selected = []
         rejected = []
+        forced = []
+        changed_by_position = {
+            int(position): bool(changed[index].item())
+            for index, position in enumerate(masked.tolist())
+        }
         for position in ordered.tolist():
             if len(selected) >= int(budget):
                 break
             if selected:
                 local_position = position - block_start
                 selected_local = torch.tensor([item - block_start for item in selected], device=x.device)
-                if dependency[batch_idx, local_position, selected_local].max() > dependency_threshold:
-                    diagnostics["rejected_pairs"] += 1
-                    rejected.append(position)
-                    continue
+                pair_dependency = dependency[batch_idx, local_position, selected_local]
+                strong_pair_count = int((pair_dependency > dependency_threshold).sum().item())
+                if strong_pair_count:
+                    stable_conflict = (
+                        history_available
+                        and not changed_by_position[position]
+                        and all(not changed_by_position[item] for item in selected)
+                    )
+                    if prune_stable_conflicts and stable_conflict:
+                        diagnostics["stable_conflicts_pruned"] += strong_pair_count
+                    else:
+                        diagnostics["rejected_pairs"] += 1
+                        rejected.append(position)
+                        continue
             selected.append(position)
-        if len(selected) < min(int(budget), masked.numel()):
+        target_count = min(int(budget), masked.numel())
+        if fill_budget and len(selected) < target_count:
+            def fill_priority(position):
+                local_position = position - block_start
+                if selected:
+                    selected_local = torch.tensor(
+                        [item - block_start for item in selected], device=x.device
+                    )
+                    dependency_score = float(
+                        dependency[batch_idx, local_position, selected_local].max().item()
+                    )
+                else:
+                    dependency_score = 0.0
+                changed_priority = int(
+                    not history_available or changed_by_position[position]
+                )
+                return (
+                    changed_priority,
+                    dependency_score,
+                    -float(confidence[batch_idx, position].item()),
+                )
+
+            for position in sorted(rejected, key=fill_priority):
+                if len(selected) >= target_count:
+                    break
+                selected.append(position)
+                forced.append(position)
+            diagnostics["forced_budget_fills"] += len(forced)
+        if len(selected) < target_count:
             diagnostics["underfilled"] = True
         if selected:
             transfer_index[batch_idx, torch.tensor(selected, device=x.device)] = True
@@ -189,6 +237,7 @@ def select_attention_stability_tokens(
             "ordered_positions_global": ordered.to(torch.int32).cpu(),
             "selected_positions_global": torch.tensor(selected, dtype=torch.int32),
             "rejected_positions_global": torch.tensor(rejected, dtype=torch.int32),
+            "forced_fill_positions_global": torch.tensor(forced, dtype=torch.int32),
         })
 
     return x0, transfer_index, diagnostics
@@ -208,6 +257,9 @@ def generate_attention_stability(
     eos_id=126081,
     early_stop=False,
     collect_step_diagnostics=False,
+    dependency_mode="symmetric",
+    prune_stable_conflicts=False,
+    fill_budget=False,
 ):
     """Baseline LLaDA decoding with the proposed attention/stability selection layered on top."""
     x = torch.full((1, prompt.shape[1] + gen_length), mask_id, dtype=torch.long, device=model.device)
@@ -217,9 +269,18 @@ def generate_attention_stability(
     assert steps % num_blocks == 0
     block_steps = steps // num_blocks
     nfe = 0
+    if dependency_mode not in {"symmetric", "directed_read"}:
+        raise ValueError(f"unsupported dependency mode: {dependency_mode}")
     summary = {
-        "decoder": "attention_stability_v1",
+        "decoder": (
+            "attention_stability_v1"
+            if dependency_mode == "symmetric" and not prune_stable_conflicts and not fill_budget
+            else "attention_stability_v2"
+        ),
         "dependency_threshold": float(dependency_threshold),
+        "dependency_mode": dependency_mode,
+        "prune_stable_conflicts": bool(prune_stable_conflicts),
+        "fill_budget": bool(fill_budget),
         "configured_steps": int(steps),
         "gen_length": int(gen_length),
         "block_length": int(block_length),
@@ -227,6 +288,8 @@ def generate_attention_stability(
         "changed_candidates": 0,
         "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
+        "stable_conflicts_pruned": 0,
+        "forced_budget_fills": 0,
         "underfilled_steps": 0,
         "all_immature_fallback_steps": 0,
         "dependency_max": 0.0,
@@ -256,7 +319,14 @@ def generate_attention_stability(
             nfe += 1
             mask_index = x == mask_id
             mask_index[:, block_end:] = False
-            logits, directional_attention, dependency = _forward_with_block_attention(model, x, block_start, block_end)
+            logits, directional_attention, symmetric_dependency = _forward_with_block_attention(
+                model, x, block_start, block_end
+            )
+            dependency = (
+                symmetric_dependency
+                if dependency_mode == "symmetric"
+                else directional_attention
+            )
             summary["dependency_max"] = max(summary["dependency_max"], float(dependency.max().item()))
             summary["dependency_mean_sum"] += float(dependency.mean().item())
             summary["dependency_observations"] += 1
@@ -277,6 +347,8 @@ def generate_attention_stability(
                 block_start=block_start,
                 previous_top1=previous_top1,
                 previous_selected=previous_selected,
+                prune_stable_conflicts=prune_stable_conflicts,
+                fill_budget=fill_budget,
             )
             if not transfer_index.any():
                 raise RuntimeError("attention-stability selector made no progress")
@@ -284,6 +356,8 @@ def generate_attention_stability(
             summary["changed_candidates"] += step_diagnostics["changed_candidates"]
             summary["strongly_dependent_candidates"] += step_diagnostics["strongly_dependent_candidates"]
             summary["rejected_pairs"] += step_diagnostics["rejected_pairs"]
+            summary["stable_conflicts_pruned"] += step_diagnostics["stable_conflicts_pruned"]
+            summary["forced_budget_fills"] += step_diagnostics["forced_budget_fills"]
             summary["underfilled_steps"] += int(step_diagnostics["underfilled"])
             summary["all_immature_fallback_steps"] += int(step_diagnostics["all_immature_fallback"])
             if collect_step_diagnostics:
@@ -315,7 +389,9 @@ def generate_attention_stability(
                     "selected_positions_local": (selected_positions - block_start).to(torch.int16).cpu(),
                     "selected_token_ids": x0[0, selected_positions].to(torch.int32).cpu(),
                     "directional_attention": directional_attention[0].to(torch.float16).cpu(),
-                    "symmetric_dependency": dependency[0].to(torch.float16).cpu(),
+                    "symmetric_dependency": symmetric_dependency[0].to(torch.float16).cpu(),
+                    "selection_dependency": dependency[0].to(torch.float16).cpu(),
+                    "dependency_mode": dependency_mode,
                     "dependency_min": float(dependency.min().item()),
                     "dependency_mean": float(dependency.mean().item()),
                     "dependency_max": float(dependency.max().item()),
@@ -325,6 +401,8 @@ def generate_attention_stability(
                     "changed_candidates": step_diagnostics["changed_candidates"],
                     "strongly_dependent_candidates": step_diagnostics["strongly_dependent_candidates"],
                     "rejected_pairs": step_diagnostics["rejected_pairs"],
+                    "stable_conflicts_pruned": step_diagnostics["stable_conflicts_pruned"],
+                    "forced_budget_fills": step_diagnostics["forced_budget_fills"],
                     "underfilled": step_diagnostics["underfilled"],
                     "all_immature_fallback": step_diagnostics["all_immature_fallback"],
                     **candidate_state,

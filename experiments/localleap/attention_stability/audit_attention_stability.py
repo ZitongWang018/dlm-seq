@@ -18,30 +18,46 @@ def sha256_text(value):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("samples")
-    parser.add_argument("trace")
+    parser.add_argument("trace", nargs="?")
+    parser.add_argument("--constant-nfe", type=int)
     parser.add_argument("--postprocess", required=True)
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
 
     samples = read_jsonl(args.samples)
     cleaned = read_jsonl(args.samples + ".cleaned")
-    traces = read_jsonl(args.trace)
-    if not (len(samples) == len(cleaned) == len(traces)):
-        raise SystemExit(f"record count mismatch: samples={len(samples)} cleaned={len(cleaned)} traces={len(traces)}")
+    traces = read_jsonl(args.trace) if args.trace else None
+    if len(samples) != len(cleaned) or (traces is not None and len(samples) != len(traces)):
+        raise SystemExit(
+            f"record count mismatch: samples={len(samples)} cleaned={len(cleaned)} "
+            f"traces={None if traces is None else len(traces)}"
+        )
+    if traces is None and args.constant_nfe is None:
+        raise SystemExit("baseline audit requires --constant-nfe when trace is omitted")
 
     sample_by_id = {item["doc"]["task_id"]: item for item in samples}
     clean_by_id = {item["task_id"]: item for item in cleaned}
-    trace_by_id = {item["task_id"]: item for item in traces}
-    if any(len(mapping) != len(samples) for mapping in (sample_by_id, clean_by_id, trace_by_id)):
+    trace_by_id = {item["task_id"]: item for item in traces} if traces is not None else None
+    mappings = (sample_by_id, clean_by_id) + ((trace_by_id,) if trace_by_id is not None else ())
+    if any(len(mapping) != len(samples) for mapping in mappings):
         raise SystemExit("duplicate or missing stable task ids")
-    if not (set(sample_by_id) == set(clean_by_id) == set(trace_by_id)):
+    if set(sample_by_id) != set(clean_by_id) or (
+        trace_by_id is not None and set(sample_by_id) != set(trace_by_id)
+    ):
         raise SystemExit("task-id sets do not align")
 
     records = []
     for task_id in sorted(sample_by_id, key=lambda value: int(value.split("/")[-1])):
         sample = sample_by_id[task_id]
         clean = clean_by_id[task_id]
-        trace = trace_by_id[task_id]
+        trace = trace_by_id[task_id] if trace_by_id is not None else {
+            "absolute_index": int(task_id.split("/")[-1]),
+            "task_id": task_id,
+            "prompt_hash": sha256_text(sample["doc"]["prompt"]),
+            "decoded_generation": sample["resps"][0][0],
+            "nfe": args.constant_nfe,
+            "generation_settings": {"steps": args.constant_nfe, "decoder": "baseline"},
+        }
         prompt = sample["doc"]["prompt"]
         generation = sample["resps"][0][0]
         if trace["prompt_hash"] != sha256_text(prompt):

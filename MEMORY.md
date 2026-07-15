@@ -60,6 +60,20 @@
   and speed/performance arms. Added record, trace and full-step validators plus
   an 8 GiB disk stop gate and frozen-source hash checks.
 
+## 2026-07-15
+
+- Cancelled the distribution-response STCC queue after full HumanEval scores
+  of 47/164 and 46/164. Restored the previous best attention-stability decoder
+  at tau 0.004 (historical 71/164 versus 67/164 baseline) as the fixed anchor.
+- Added optional directed-read dependency selection and a speed profile that
+  prunes conflicts between cross-step-stable candidates and fills the original
+  per-step budget. The default symmetric path is backward compatible; eight
+  selector tests pass.
+- Started detached queue `attention_recovery_long_20260715_v1`: HumanEval,
+  MBPP, Minerva counting/probability, and GSM8K baseline/symmetric/directed and
+  128/64-step speed arms, with source freezing, evaluator audits, disk gating,
+  resumption, and continue-on-independent-run-failure behavior.
+
 ## 2026-07-13
 
 - Added a fail-fast sequential tau sweep (`0.005`, `0.02`, `0.05`) for the
