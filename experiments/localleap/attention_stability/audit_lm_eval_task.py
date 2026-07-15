@@ -4,12 +4,22 @@ import json
 from pathlib import Path
 
 
-VERSION = "stcc_lm_eval_record_audit_v1"
+VERSION = "stcc_lm_eval_record_audit_v2"
 
 
 def read_jsonl(path):
     with Path(path).open(encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
+
+
+def select_filter_records(samples, filter_name):
+    if filter_name is None:
+        return samples
+    selected = [sample for sample in samples if sample.get("filter") == filter_name]
+    if not selected:
+        available = sorted({sample.get("filter") for sample in samples})
+        raise ValueError(f"filter {filter_name!r} not found; available={available}")
+    return selected
 
 
 def prompt_from_sample(sample):
@@ -55,12 +65,13 @@ def main():
     parser.add_argument("results")
     parser.add_argument("--task", required=True)
     parser.add_argument("--primary-metric", required=True)
+    parser.add_argument("--filter")
     parser.add_argument("--trace")
     parser.add_argument("--expected-records", type=int, required=True)
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
 
-    samples = read_jsonl(args.samples)
+    samples = select_filter_records(read_jsonl(args.samples), args.filter)
     if len(samples) != args.expected_records:
         raise SystemExit(f"expected {args.expected_records} samples, found {len(samples)}")
     traces = read_jsonl(args.trace) if args.trace else None
@@ -95,7 +106,8 @@ def main():
         prompt_hashes.add(prompt_hash)
         generation = sample["resps"][0][0]
         target = sample.get("target")
-        correct_value = metric_value(sample, args.primary_metric)
+        sample_metric = args.primary_metric.split(",", 1)[0]
+        correct_value = metric_value(sample, sample_metric)
         if correct_value not in {0.0, 1.0}:
             raise SystemExit(f"non-binary correctness for {stable_id}: {correct_value}")
         trace = trace_by_index.get(index)

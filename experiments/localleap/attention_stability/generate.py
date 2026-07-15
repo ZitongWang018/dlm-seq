@@ -98,14 +98,21 @@ def select_attention_stability_tokens(
     block_start,
     previous_top1=None,
     previous_selected=None,
+    previous_topk_ids=None,
+    temporal_mode="top1",
+    temporal_topk=4,
     prune_stable_conflicts=False,
     fill_budget=False,
 ):
     """Lexicographic maturity/confidence ordering plus greedy dependency exclusion."""
+    if temporal_mode not in {"top1", "topk_overlap"}:
+        raise ValueError(f"unsupported temporal mode: {temporal_mode}")
+    if temporal_topk < 1 or temporal_topk > logits.shape[-1]:
+        raise ValueError("temporal_topk must be between 1 and vocabulary size")
     logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
     x0 = torch.argmax(logits_with_noise, dim=-1)
+    probabilities = F.softmax(logits.to(torch.float64), dim=-1)
     if remasking == 'low_confidence':
-        probabilities = F.softmax(logits.to(torch.float64), dim=-1)
         x0_p = torch.gather(probabilities, dim=-1, index=x0.unsqueeze(-1)).squeeze(-1)
     elif remasking == 'random':
         x0_p = torch.rand(x0.shape, device=x0.device)
@@ -115,9 +122,14 @@ def select_attention_stability_tokens(
     x0 = torch.where(mask_index, x0, x)
     confidence = torch.where(mask_index, x0_p, -np.inf)
     transfer_index = torch.zeros_like(x0, dtype=torch.bool, device=x0.device)
+    current_topk_full = torch.full(
+        (*x.shape, temporal_topk), -1, dtype=torch.long, device=x.device
+    )
     diagnostics = {
         "unstable_candidates": 0,
         "changed_candidates": 0,
+        "candidate_continuity_candidates": 0,
+        "intermediate_candidates": 0,
         "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
         "stable_conflicts_pruned": 0,
@@ -133,6 +145,14 @@ def select_attention_stability_tokens(
             continue
         maturity = torch.ones(masked.numel(), dtype=torch.bool, device=x.device)
         changed = torch.zeros(masked.numel(), dtype=torch.bool, device=x.device)
+        overlap_count = torch.zeros(masked.numel(), dtype=torch.int16, device=x.device)
+        temporal_tier = torch.full(
+            (masked.numel(),), 2, dtype=torch.int8, device=x.device
+        )
+        current_topk_ids = torch.topk(
+            probabilities[batch_idx, masked], k=temporal_topk, dim=-1
+        ).indices
+        current_topk_full[batch_idx, masked] = current_topk_ids
         max_dependency = torch.zeros(masked.numel(), dtype=torch.float32, device=x.device)
         history_available = previous_top1 is not None and previous_selected is not None and previous_selected.numel() > 0
         if history_available:
@@ -140,30 +160,99 @@ def select_attention_stability_tokens(
             selected_local = previous_selected - block_start
             max_dependency = dependency[batch_idx].index_select(0, masked_local).index_select(1, selected_local).max(dim=1).values
             changed = x0[batch_idx, masked] != previous_top1[batch_idx, masked]
-            maturity = ~((max_dependency > dependency_threshold) & changed)
+            strong_dependency = max_dependency > dependency_threshold
+            if temporal_mode == "topk_overlap":
+                if previous_topk_ids is None:
+                    raise ValueError("topk_overlap mode requires previous_topk_ids")
+                previous_ids = previous_topk_ids[batch_idx, masked]
+                valid_previous = previous_ids >= 0
+                overlap_count = (
+                    (current_topk_ids.unsqueeze(-1) == previous_ids.unsqueeze(-2))
+                    & valid_previous.unsqueeze(-2)
+                ).any(dim=-1).sum(dim=-1).to(torch.int16)
+                has_continuity = overlap_count > 0
+                temporal_tier = torch.where(
+                    ~strong_dependency | ~changed,
+                    torch.full_like(temporal_tier, 2),
+                    torch.where(
+                        has_continuity,
+                        torch.full_like(temporal_tier, 1),
+                        torch.zeros_like(temporal_tier),
+                    ),
+                )
+                maturity = temporal_tier == 2
+                diagnostics["candidate_continuity_candidates"] += int(
+                    has_continuity.sum().item()
+                )
+                diagnostics["intermediate_candidates"] += int(
+                    (temporal_tier == 1).sum().item()
+                )
+            else:
+                maturity = ~(strong_dependency & changed)
+                temporal_tier = torch.where(
+                    maturity,
+                    torch.full_like(temporal_tier, 2),
+                    torch.zeros_like(temporal_tier),
+                )
             diagnostics["unstable_candidates"] += int((~maturity).sum().item())
             diagnostics["changed_candidates"] += int(changed.sum().item())
-            diagnostics["strongly_dependent_candidates"] += int((max_dependency > dependency_threshold).sum().item())
+            diagnostics["strongly_dependent_candidates"] += int(strong_dependency.sum().item())
 
-        mature_positions = masked[maturity]
-        immature_positions = masked[~maturity]
-        if mature_positions.numel() == 0:
-            # Explicit all-immature fallback from the algorithm definition.
-            ordered = masked[torch.topk(confidence[batch_idx, masked], k=masked.numel()).indices]
-            diagnostics["all_immature_fallback"] = True
+        if temporal_mode == "topk_overlap" and history_available:
+            ranked = list(range(masked.numel()))
+            ranked.sort(
+                key=lambda idx: (
+                    -int(temporal_tier[idx].item()),
+                    -int(overlap_count[idx].item()),
+                    -float(confidence[batch_idx, masked[idx]].item()),
+                )
+            )
+            ordered = masked[torch.tensor(ranked, dtype=torch.long, device=x.device)]
+            if not bool((temporal_tier > 0).any()):
+                ordered = masked[
+                    torch.topk(confidence[batch_idx, masked], k=masked.numel()).indices
+                ]
+                diagnostics["all_immature_fallback"] = True
         else:
-            mature_order = mature_positions[torch.topk(confidence[batch_idx, mature_positions], k=mature_positions.numel()).indices]
-            if immature_positions.numel() > 0:
-                immature_order = immature_positions[torch.topk(confidence[batch_idx, immature_positions], k=immature_positions.numel()).indices]
-                ordered = torch.cat((mature_order, immature_order))
+            mature_positions = masked[maturity]
+            immature_positions = masked[~maturity]
+            if mature_positions.numel() == 0:
+                # Explicit all-immature fallback from the algorithm definition.
+                ordered = masked[
+                    torch.topk(confidence[batch_idx, masked], k=masked.numel()).indices
+                ]
+                diagnostics["all_immature_fallback"] = True
             else:
-                ordered = mature_order
+                mature_order = mature_positions[
+                    torch.topk(
+                        confidence[batch_idx, mature_positions],
+                        k=mature_positions.numel(),
+                    ).indices
+                ]
+                if immature_positions.numel() > 0:
+                    immature_order = immature_positions[
+                        torch.topk(
+                            confidence[batch_idx, immature_positions],
+                            k=immature_positions.numel(),
+                        ).indices
+                    ]
+                    ordered = torch.cat((mature_order, immature_order))
+                else:
+                    ordered = mature_order
 
         selected = []
         rejected = []
         forced = []
         changed_by_position = {
             int(position): bool(changed[index].item())
+            for index, position in enumerate(masked.tolist())
+        }
+        tier_by_position = {
+            int(position): int(temporal_tier[index].item())
+            for index, position in enumerate(masked.tolist())
+        }
+        overlap_by_position = {
+            int(position): int(overlap_count[index].item())
             for index, position in enumerate(masked.tolist())
         }
         for position in ordered.tolist():
@@ -204,6 +293,8 @@ def select_attention_stability_tokens(
                     not history_available or changed_by_position[position]
                 )
                 return (
+                    -tier_by_position[position],
+                    -overlap_by_position[position],
                     changed_priority,
                     dependency_score,
                     -float(confidence[batch_idx, position].item()),
@@ -232,6 +323,16 @@ def select_attention_stability_tokens(
             "top1_confidences": confidence[batch_idx, masked].to(torch.float32).cpu(),
             "previous_top1_token_ids": previous_values.to(torch.int32).cpu(),
             "candidate_changed": changed.cpu(),
+            "current_topk_token_ids": current_topk_ids.to(torch.int32).cpu(),
+            "previous_topk_token_ids": (
+                previous_topk_ids[batch_idx, masked].to(torch.int32).cpu()
+                if previous_topk_ids is not None
+                else torch.full(
+                    (masked.numel(), temporal_topk), -1, dtype=torch.int32
+                )
+            ),
+            "topk_overlap_count": overlap_count.cpu(),
+            "temporal_tier": temporal_tier.cpu(),
             "max_dependency_to_previous": max_dependency.to(torch.float32).cpu(),
             "maturity": maturity.cpu(),
             "ordered_positions_global": ordered.to(torch.int32).cpu(),
@@ -240,7 +341,7 @@ def select_attention_stability_tokens(
             "forced_fill_positions_global": torch.tensor(forced, dtype=torch.int32),
         })
 
-    return x0, transfer_index, diagnostics
+    return x0, transfer_index, diagnostics, current_topk_full
 
 
 @torch.no_grad()
@@ -258,6 +359,8 @@ def generate_attention_stability(
     early_stop=False,
     collect_step_diagnostics=False,
     dependency_mode="symmetric",
+    temporal_mode="top1",
+    temporal_topk=4,
     prune_stable_conflicts=False,
     fill_budget=False,
 ):
@@ -271,14 +374,21 @@ def generate_attention_stability(
     nfe = 0
     if dependency_mode not in {"symmetric", "directed_read"}:
         raise ValueError(f"unsupported dependency mode: {dependency_mode}")
+    if temporal_mode not in {"top1", "topk_overlap"}:
+        raise ValueError(f"unsupported temporal mode: {temporal_mode}")
     summary = {
         "decoder": (
             "attention_stability_v1"
-            if dependency_mode == "symmetric" and not prune_stable_conflicts and not fill_budget
+            if dependency_mode == "symmetric"
+            and temporal_mode == "top1"
+            and not prune_stable_conflicts
+            and not fill_budget
             else "attention_stability_v2"
         ),
         "dependency_threshold": float(dependency_threshold),
         "dependency_mode": dependency_mode,
+        "temporal_mode": temporal_mode,
+        "temporal_topk": int(temporal_topk),
         "prune_stable_conflicts": bool(prune_stable_conflicts),
         "fill_budget": bool(fill_budget),
         "configured_steps": int(steps),
@@ -286,6 +396,8 @@ def generate_attention_stability(
         "block_length": int(block_length),
         "unstable_candidates": 0,
         "changed_candidates": 0,
+        "candidate_continuity_candidates": 0,
+        "intermediate_candidates": 0,
         "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
         "stable_conflicts_pruned": 0,
@@ -307,6 +419,7 @@ def generate_attention_stability(
         transfer_schedule = get_num_transfer_tokens(initial_mask, block_steps)
         step_idx = 0
         previous_top1 = None
+        previous_topk_ids = None
         previous_selected = None
         while (x[:, block_start:block_end] == mask_id).any():
             if step_idx >= block_steps:
@@ -335,7 +448,7 @@ def generate_attention_stability(
                 summary["attention_asymmetry_max"], float(asymmetry.max().item())
             )
             summary["attention_asymmetry_mean_sum"] += float(asymmetry.mean().item())
-            x0, transfer_index, step_diagnostics = select_attention_stability_tokens(
+            x0, transfer_index, step_diagnostics, current_topk_ids = select_attention_stability_tokens(
                 logits=logits,
                 temperature=temperature,
                 remasking=remasking,
@@ -347,6 +460,9 @@ def generate_attention_stability(
                 block_start=block_start,
                 previous_top1=previous_top1,
                 previous_selected=previous_selected,
+                previous_topk_ids=previous_topk_ids,
+                temporal_mode=temporal_mode,
+                temporal_topk=temporal_topk,
                 prune_stable_conflicts=prune_stable_conflicts,
                 fill_budget=fill_budget,
             )
@@ -354,6 +470,12 @@ def generate_attention_stability(
                 raise RuntimeError("attention-stability selector made no progress")
             summary["unstable_candidates"] += step_diagnostics["unstable_candidates"]
             summary["changed_candidates"] += step_diagnostics["changed_candidates"]
+            summary["candidate_continuity_candidates"] += step_diagnostics[
+                "candidate_continuity_candidates"
+            ]
+            summary["intermediate_candidates"] += step_diagnostics[
+                "intermediate_candidates"
+            ]
             summary["strongly_dependent_candidates"] += step_diagnostics["strongly_dependent_candidates"]
             summary["rejected_pairs"] += step_diagnostics["rejected_pairs"]
             summary["stable_conflicts_pruned"] += step_diagnostics["stable_conflicts_pruned"]
@@ -408,6 +530,7 @@ def generate_attention_stability(
                     **candidate_state,
                 })
             previous_top1 = x0.detach().clone()
+            previous_topk_ids = current_topk_ids.detach().clone()
             previous_selected = torch.where(transfer_index[0])[0]
             x[transfer_index] = x0[transfer_index]
             step_idx += 1

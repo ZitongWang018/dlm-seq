@@ -60,6 +60,23 @@ profiles, with per-run evaluator audits, source hashes, an 8 GiB disk gate and
 continue-on-run-failure behavior. Queue root:
 `/root/autodl-tmp/LocalLeap/llada/results/experiment_queues/attention_recovery_long_20260715_v1`.
 
+On 2026-07-16 the queue produced a formally audited MBPP directed result of
+123/500 (24.6%) versus the original-LLaDA 128-step anchor of 89/500 (17.8%).
+The conservative selector used a mean of about 150 NFE, so this is an
+accuracy-first result rather than a compute-matched conclusion. Correct MBPP
+samples had roughly half as many unstable candidates as incorrect samples,
+showing that binary top-1 instability spends extra NFE mainly on hard cases.
+
+The next registered method is therefore a single-change descendant of the
+best symmetric tau-0.004 decoder: cross-step top-K overlap creates a three-level
+temporal order (top-1 stable, candidate-set continuous, candidate-set broken),
+while the horizontal symmetric exclusion is unchanged. K=4 is fixed a priori,
+not selected on benchmark accuracy. A fixed-budget variant fills only after the
+same selector runs. Ten selector tests and two tests each for the variable-NFE
+validator and GSM8K filter-aware auditor pass. The replacement queue is
+`attention_retention_v2_20260716`; it drops full 64-step method branches and
+tests HumanEval, MBPP, and GSM8K against original LLaDA and the best parent.
+
 ## Deprecated (cleaned 2026-07-13)
 
 Trajectory / lateral-response / agreement / ceiling-bug evals were removed from `results/` (local + AutoDL `dlm-seq-flow`).  

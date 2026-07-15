@@ -91,6 +91,8 @@ class LLaDAEvalHarness(LM):
         dependency_trace_dir=None,
         dependency_diagnostics_dir=None,
         dependency_mode="symmetric",
+        dependency_temporal_mode="top1",
+        dependency_temporal_topk=4,
         dependency_prune_stable_conflicts=False,
         dependency_fill_budget=False,
         candidate_memory_topk=None,
@@ -186,6 +188,8 @@ class LLaDAEvalHarness(LM):
         self.dependency_trace_dir = dependency_trace_dir
         self.dependency_diagnostics_dir = dependency_diagnostics_dir
         self.dependency_mode = dependency_mode
+        self.dependency_temporal_mode = dependency_temporal_mode
+        self.dependency_temporal_topk = int(dependency_temporal_topk)
         self.dependency_prune_stable_conflicts = (
             dependency_prune_stable_conflicts.lower() == "true"
             if isinstance(dependency_prune_stable_conflicts, str)
@@ -471,6 +475,8 @@ class LLaDAEvalHarness(LM):
                     dependency_threshold=self.dependency_threshold,
                     collect_step_diagnostics=self.dependency_diagnostics_dir is not None,
                     dependency_mode=self.dependency_mode,
+                    temporal_mode=self.dependency_temporal_mode,
+                    temporal_topk=self.dependency_temporal_topk,
                     prune_stable_conflicts=self.dependency_prune_stable_conflicts,
                     fill_budget=self.dependency_fill_budget,
                 )
@@ -479,6 +485,7 @@ class LLaDAEvalHarness(LM):
                 active_diagnostics_dir = self.dependency_diagnostics_dir
                 extended_dependency_mode = (
                     self.dependency_mode != "symmetric"
+                    or self.dependency_temporal_mode != "top1"
                     or self.dependency_prune_stable_conflicts
                     or self.dependency_fill_budget
                 )
@@ -569,6 +576,8 @@ class LLaDAEvalHarness(LM):
                         "mask_id": self.mask_id,
                         "dependency_threshold": self.dependency_threshold,
                         "dependency_mode": self.dependency_mode,
+                        "dependency_temporal_mode": self.dependency_temporal_mode,
+                        "dependency_temporal_topk": self.dependency_temporal_topk,
                         "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
                         "dependency_fill_budget": self.dependency_fill_budget,
                         "candidate_memory_topk": self.candidate_memory_topk,
@@ -613,6 +622,8 @@ class LLaDAEvalHarness(LM):
                         "mask_id": self.mask_id,
                         "dependency_threshold": self.dependency_threshold,
                         "dependency_mode": self.dependency_mode,
+                        "dependency_temporal_mode": self.dependency_temporal_mode,
+                        "dependency_temporal_topk": self.dependency_temporal_topk,
                         "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
                         "dependency_fill_budget": self.dependency_fill_budget,
                         "candidate_memory_topk": self.candidate_memory_topk,

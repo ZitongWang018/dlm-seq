@@ -74,6 +74,27 @@
   128/64-step speed arms, with source freezing, evaluator audits, disk gating,
   resumption, and continue-on-independent-run-failure behavior.
 
+## 2026-07-16
+
+- Formally audited MBPP directed attention stability at 123/500 (24.6%) versus
+  original LLaDA 89/500 (17.8%). Mean NFE was about 150 rather than 128, so the
+  gain is accuracy-first. Symmetric was independently audited at 121/500.
+- Joined trace and correctness records. Correct directed MBPP samples averaged
+  113.7 unstable candidates and 147.8 NFE; incorrect samples averaged 219.7
+  unstable candidates and 150.7 NFE. This motivated reducing brittle top-1
+  waiting instead of adding another divergence threshold.
+- Added a top-K-overlap longitudinal mode on the exact symmetric tau-0.004
+  parent. It uses three lexicographic temporal tiers and fixed K=4; horizontal
+  selection is unchanged. Added a fixed-budget child for speed comparisons.
+- Fixed the variable-NFE validator to compare contiguous records against their
+  actual length, not configured steps. Added GSM8K strict-filter auditing so
+  lm-eval's two filter records are not mistaken for duplicate tasks. Regression
+  tests and real one-record audits pass without overwriting old results.
+- Prepared queue `attention_retention_v2_20260716` for HumanEval, MBPP and
+  GSM8K original-LLaDA, best-parent, retention and fixed-budget comparisons.
+  The old controller is superseded after its active original-LLaDA MBPP
+  64-step baseline finishes; weak 64-step method branches are removed.
+
 ## 2026-07-13
 
 - Added a fail-fast sequential tau sweep (`0.005`, `0.02`, `0.05`) for the

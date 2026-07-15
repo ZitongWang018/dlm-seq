@@ -5,6 +5,10 @@ from pathlib import Path
 import torch
 
 
+def has_contiguous_nfe(steps):
+    return [step["global_nfe"] for step in steps] == list(range(1, len(steps) + 1))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("diagnostics_dir")
@@ -46,7 +50,7 @@ def main():
             raise SystemExit(f"fixed-budget step count mismatch in {path}: {len(steps)} != {expected_steps}")
         if not fill_budget and len(steps) < expected_steps:
             raise SystemExit(f"step count below configured budget in {path}: {len(steps)} < {expected_steps}")
-        if [step["global_nfe"] for step in steps] != list(range(1, expected_steps + 1)):
+        if not has_contiguous_nfe(steps):
             raise SystemExit(f"non-contiguous NFE in {path}")
         if steps[-1]["mask_count_after"] != 0:
             raise SystemExit(f"residual masks in {path}")
@@ -77,6 +81,18 @@ def main():
             )
             if any(len(step[field]) != candidate_count for field in candidate_fields):
                 raise SystemExit(f"candidate-state length mismatch in {path}")
+            if "temporal_tier" in step:
+                temporal_fields = (
+                    "current_topk_token_ids",
+                    "previous_topk_token_ids",
+                    "topk_overlap_count",
+                    "temporal_tier",
+                )
+                if any(len(step[field]) != candidate_count for field in temporal_fields):
+                    raise SystemExit(f"temporal candidate-state length mismatch in {path}")
+                tiers = step["temporal_tier"]
+                if not bool(((tiers >= 0) & (tiers <= 2)).all()):
+                    raise SystemExit(f"invalid temporal tier in {path}")
             selected_count = len(step["selected_positions_global"])
             target_count = min(step["budget"], candidate_count)
             if not step["underfilled"] and selected_count != min(step["budget"], candidate_count):
