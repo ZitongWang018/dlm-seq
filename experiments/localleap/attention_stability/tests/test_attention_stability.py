@@ -140,11 +140,34 @@ def test_fixed_budget_fill_guarantees_parallel_commit_count():
 
 
 def test_topk_overlap_creates_intermediate_temporal_tier():
-    logits = make_logits([1, 2, 3], [0.70, 0.65, 0.95])
-    dependency = torch.ones((1, 3, 3))
-    previous_top1 = torch.tensor([[4, 5, 6]])
-    previous_topk = torch.tensor([[[4, 1], [5, 7], [6, 7]]])
+    logits = make_logits([1, 2, 3], [0.70, 0.80, 0.95])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, :, 2] = 1.0
+    previous_top1 = torch.tensor([[4, 2, 6]])
+    previous_topk = torch.tensor([[[4, 1], [2, 7], [6, 7]]])
     _, transfer, diagnostics, _ = select(
+        logits,
+        dependency,
+        budget=2,
+        tau=0.5,
+        previous_top1=previous_top1,
+        previous_selected=torch.tensor([2]),
+        previous_topk_ids=previous_topk,
+        temporal_mode="topk_overlap",
+        temporal_topk=2,
+    )
+    state = diagnostics["candidate_state"][0]
+    assert state["temporal_tier"].tolist() == [1, 2, 0]
+    assert transfer.nonzero(as_tuple=True)[1].tolist() == [0, 1]
+    assert diagnostics["intermediate_candidates"] == 1
+
+
+def test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates():
+    logits = make_logits([1, 2], [0.70, 0.95])
+    dependency = torch.ones((1, 2, 2))
+    previous_top1 = torch.tensor([[1, 2]])
+    previous_topk = torch.tensor([[[1, 2], [2, 7]]])
+    _, transfer, _, _ = select(
         logits,
         dependency,
         budget=1,
@@ -155,10 +178,7 @@ def test_topk_overlap_creates_intermediate_temporal_tier():
         temporal_mode="topk_overlap",
         temporal_topk=2,
     )
-    state = diagnostics["candidate_state"][0]
-    assert state["temporal_tier"].tolist() == [1, 0, 0]
-    assert transfer.nonzero(as_tuple=True)[1].tolist() == [0]
-    assert diagnostics["intermediate_candidates"] == 1
+    assert transfer.nonzero(as_tuple=True)[1].tolist() == [1]
 
 
 def test_topk_overlap_rejects_invalid_k():
@@ -182,5 +202,6 @@ if __name__ == "__main__":
     test_stable_dense_conflict_can_be_pruned_without_new_threshold()
     test_fixed_budget_fill_guarantees_parallel_commit_count()
     test_topk_overlap_creates_intermediate_temporal_tier()
+    test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates()
     test_topk_overlap_rejects_invalid_k()
-    print("10 selector tests passed")
+    print("11 selector tests passed")

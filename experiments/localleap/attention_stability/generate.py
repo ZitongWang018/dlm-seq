@@ -198,47 +198,54 @@ def select_attention_stability_tokens(
             diagnostics["changed_candidates"] += int(changed.sum().item())
             diagnostics["strongly_dependent_candidates"] += int(strong_dependency.sum().item())
 
-        if temporal_mode == "topk_overlap" and history_available:
-            ranked = list(range(masked.numel()))
-            ranked.sort(
-                key=lambda idx: (
-                    -int(temporal_tier[idx].item()),
-                    -int(overlap_count[idx].item()),
-                    -float(confidence[batch_idx, masked[idx]].item()),
-                )
-            )
-            ordered = masked[torch.tensor(ranked, dtype=torch.long, device=x.device)]
-            if not bool((temporal_tier > 0).any()):
-                ordered = masked[
-                    torch.topk(confidence[batch_idx, masked], k=masked.numel()).indices
-                ]
-                diagnostics["all_immature_fallback"] = True
+        mature_positions = masked[maturity]
+        immature_positions = masked[~maturity]
+        if mature_positions.numel() == 0:
+            # Preserve the parent's explicit all-immature confidence fallback.
+            ordered = masked[
+                torch.topk(confidence[batch_idx, masked], k=masked.numel()).indices
+            ]
+            diagnostics["all_immature_fallback"] = True
         else:
-            mature_positions = masked[maturity]
-            immature_positions = masked[~maturity]
-            if mature_positions.numel() == 0:
-                # Explicit all-immature fallback from the algorithm definition.
-                ordered = masked[
-                    torch.topk(confidence[batch_idx, masked], k=masked.numel()).indices
-                ]
-                diagnostics["all_immature_fallback"] = True
-            else:
-                mature_order = mature_positions[
-                    torch.topk(
-                        confidence[batch_idx, mature_positions],
-                        k=mature_positions.numel(),
-                    ).indices
-                ]
-                if immature_positions.numel() > 0:
+            # Mature candidates must remain bit-for-bit ordered by the parent
+            # method's confidence rule. Top-K history is allowed to refine only
+            # the unstable tail that the parent would already rank second.
+            mature_order = mature_positions[
+                torch.topk(
+                    confidence[batch_idx, mature_positions],
+                    k=mature_positions.numel(),
+                ).indices
+            ]
+            if immature_positions.numel() > 0:
+                if temporal_mode == "topk_overlap" and history_available:
+                    position_to_masked_index = {
+                        int(position): index
+                        for index, position in enumerate(masked.tolist())
+                    }
+                    unstable = immature_positions.tolist()
+                    unstable.sort(
+                        key=lambda position: (
+                            -int(
+                                overlap_count[
+                                    position_to_masked_index[int(position)]
+                                ].item()
+                            ),
+                            -float(confidence[batch_idx, position].item()),
+                        )
+                    )
+                    immature_order = torch.tensor(
+                        unstable, dtype=torch.long, device=x.device
+                    )
+                else:
                     immature_order = immature_positions[
                         torch.topk(
                             confidence[batch_idx, immature_positions],
                             k=immature_positions.numel(),
                         ).indices
                     ]
-                    ordered = torch.cat((mature_order, immature_order))
-                else:
-                    ordered = mature_order
+                ordered = torch.cat((mature_order, immature_order))
+            else:
+                ordered = mature_order
 
         selected = []
         rejected = []
