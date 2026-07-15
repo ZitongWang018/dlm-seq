@@ -16,6 +16,11 @@ echo "switch_wait_start=$(date --iso-8601=seconds)"
 echo "old_controller_pid=${old_controller_pid} active_stage_pid=${active_stage_pid}"
 
 while kill -0 "${active_stage_pid}" 2>/dev/null; do
+  stage_state=$(ps -o stat= -p "${active_stage_pid}" 2>/dev/null | xargs || true)
+  if [[ -z "${stage_state}" || "${stage_state}" == Z* ]]; then
+    echo "active_stage_reap_state=${stage_state:-missing}"
+    break
+  fi
   sleep 5
 done
 echo "active_stage_finished=$(date --iso-8601=seconds)"
