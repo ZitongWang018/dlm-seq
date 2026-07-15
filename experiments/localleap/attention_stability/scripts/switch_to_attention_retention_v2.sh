@@ -8,6 +8,7 @@ canonical=/root/autodl-tmp/dlm-seq-flow/experiments/localleap/attention_stabilit
 localleap=/root/autodl-tmp/LocalLeap
 llada=${localleap}/llada
 new_queue_id=${ATTENTION_QUEUE_ID:-attention_retention_v2_20260716}
+queue_script_name=${RETENTION_QUEUE_SCRIPT_NAME:-run_attention_retention_v2_queue.sh}
 new_queue=${llada}/results/experiment_queues/${new_queue_id}
 switch_log=${old_queue}/switch_to_${new_queue_id}.log
 
@@ -44,9 +45,9 @@ cp "${canonical}/tests/test_attention_stability.py" "${llada}/test_attention_sta
 cp "${canonical}/tests/test_validate_step_diagnostics.py" "${llada}/test_validate_step_diagnostics.py"
 cp "${canonical}/tests/test_audit_lm_eval_task.py" "${llada}/test_audit_lm_eval_task.py"
 cp "${canonical}/scripts/run_attention_benchmark_v2.sh" "${localleap}/scripts/llada/run_attention_benchmark_v2.sh"
-cp "${canonical}/scripts/run_attention_retention_v2_queue.sh" "${localleap}/scripts/llada/run_attention_retention_v2_queue.sh"
+cp "${canonical}/scripts/${queue_script_name}" "${localleap}/scripts/llada/${queue_script_name}"
 chmod +x "${localleap}/scripts/llada/run_attention_benchmark_v2.sh" \
-  "${localleap}/scripts/llada/run_attention_retention_v2_queue.sh"
+  "${localleap}/scripts/llada/${queue_script_name}"
 
 cd "${llada}"
 /root/miniconda3/bin/python -m py_compile generate.py eval_llada.py \
@@ -58,7 +59,7 @@ cd "${llada}"
 
 mkdir -p "${new_queue}"
 ATTENTION_QUEUE_ID="${new_queue_id}" nohup \
-  "${localleap}/scripts/llada/run_attention_retention_v2_queue.sh" \
+  "${localleap}/scripts/llada/${queue_script_name}" \
   > "${new_queue}/launcher.log" 2>&1 < /dev/null &
 new_pid=$!
 echo "${new_pid}" > "${new_queue}/controller.pid"
