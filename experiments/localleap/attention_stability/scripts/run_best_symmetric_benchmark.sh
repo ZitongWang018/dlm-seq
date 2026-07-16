@@ -49,10 +49,10 @@ if [[ "${limit}" != "full" ]]; then
   limit_args=(--limit "${limit}")
 fi
 
-queue_id=${ATTENTION_QUEUE_ID:-best_symmetric_long_20260716_v1}
+queue_id=${ATTENTION_QUEUE_ID:-best_symmetric_long_20260716_v2}
 llada_root=/root/autodl-tmp/LocalLeap/llada
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
-run_root=${llada_root}/results/best_symmetric_benchmarks/${task}/${run_tag}
+run_root=${llada_root}/results/best_symmetric_benchmarks/${queue_id}/${task}/${run_tag}
 trace_dir=${run_root}/trace
 diagnostics_dir=${run_root}/step_diagnostics
 audit_dir=${run_root}/audit

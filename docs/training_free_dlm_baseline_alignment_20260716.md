@@ -73,7 +73,7 @@ accuracies are not directly comparable to the local Instruct checkpoint.
 
 ## New queue matrix
 
-The queue `best_symmetric_long_20260716_v1` prioritizes results that fill the
+The queue `best_symmetric_long_20260716_v2` prioritizes results that fill the
 remaining comparison gaps:
 
 1. Full MATH-500 zero-shot at length 256/128 steps: original LLaDA,
@@ -85,7 +85,9 @@ remaining comparison gaps:
 4. A paired 500-example GSM8K four-shot study for prompt-level SOAR alignment.
 5. A 250-example MATH-500 length-512 robustness pair.
 
-The queue stores source hashes, run configs, sample-level audit records, trace
+Its MATH-500 task uses Prism's official system prompt and answer normalization;
+the local decoding temperature remains deterministic and is recorded separately
+from Prism's sampling configuration. The queue stores source hashes, run configs, sample-level audit records, trace
 statistics, paired summaries, wall time, throughput, and NFE. Full step-level
 diagnostics are restricted to smoke samples to keep disk usage bounded.
 
@@ -94,4 +96,3 @@ diagnostics are restricted to smoke samples to keep disk usage bounded.
 - Prism: https://arxiv.org/abs/2602.01842 and https://github.com/viiika/Prism
 - SOAR: https://arxiv.org/abs/2602.10953 and https://github.com/duterscmy/SOAR
 - Order-Token Search: https://arxiv.org/abs/2601.20339
-

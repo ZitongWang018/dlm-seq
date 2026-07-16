@@ -13,6 +13,10 @@
 - Added a versioned paper-alignment table for Prism, SOAR and Order-Token Search.
   Paper values remain external references because checkpoints, prompts and
   inference stacks are not fully identical.
+- Stopped the initial v1 generalization queue during its first full MATH-500
+  stage after a smoke audit exposed a prompt/evaluator mismatch. Version v2 uses
+  Prism's official MATH-500 system prompt and answer normalization and writes to
+  a new result root; no v1 result was repaired or overwritten.
 
 ## 2026-07-14
 

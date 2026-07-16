@@ -20,13 +20,18 @@ class Math500TaskTest(unittest.TestCase):
         result = MODULE.process_results(doc, [r"Thus $\boxed{\frac{1}{2}}$."])
         self.assertEqual(result["exact_match"], 1)
 
+    def test_variable_assignment_before_tuple(self):
+        doc = {"answer": r"\left(3, \frac{\pi}{2}\right)"}
+        response = r"<answer>\boxed{(r,\theta)=(3,\frac{\pi}{2})}</answer>"
+        self.assertEqual(MODULE.process_results(doc, [response])["exact_match"], 1)
+
     def test_negative_decimal_answer(self):
         doc = {"answer": "-2.5"}
         result = MODULE.process_results(doc, ["The final answer is -2.5."])
         self.assertEqual(result["exact_match"], 1)
 
     def test_terminal_punctuation_is_removed(self):
-        self.assertEqual(MODULE.extract_answer("Answer: 7."), "7")
+        self.assertEqual(MODULE.normalize_math("7."), "7")
 
     def test_missing_answer_does_not_match(self):
         doc = {"answer": "4"}
@@ -36,4 +41,3 @@ class Math500TaskTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

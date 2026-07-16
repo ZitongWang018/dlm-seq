@@ -87,7 +87,7 @@ new parent for further development.
 The active benchmark direction returns to the strongest verified architecture:
 original LLaDA is always the baseline, symmetric attention with tau `0.004` is
 the accuracy-first parent, and `symmetric_fast` is its fixed-budget speed child.
-The long queue `best_symmetric_long_20260716_v1` adds an offline-cached MATH-500
+The long queue `best_symmetric_long_20260716_v2` adds an offline-cached MATH-500
 task, full sample-level and paired audits, and speed/NFE summaries. It prioritizes
 MATH-500, MBPP and GSM8K at generation length 256 / 128 steps, then runs
 four-shot and length-512 robustness arms. Recent paper rows from Prism, SOAR and

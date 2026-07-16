@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-queue_id=${ATTENTION_QUEUE_ID:-best_symmetric_long_20260716_v1}
+queue_id=${ATTENTION_QUEUE_ID:-best_symmetric_long_20260716_v2}
 llada_root=/root/autodl-tmp/LocalLeap/llada
 runner=/root/autodl-tmp/LocalLeap/scripts/llada/run_best_symmetric_benchmark.sh
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
-run_base=${llada_root}/results/best_symmetric_benchmarks
+run_base=${llada_root}/results/best_symmetric_benchmarks/${queue_id}
 manifest=${queue_root}/manifest.tsv
 mkdir -p "${queue_root}"
 exec > >(tee -a "${queue_root}/controller.log") 2>&1
