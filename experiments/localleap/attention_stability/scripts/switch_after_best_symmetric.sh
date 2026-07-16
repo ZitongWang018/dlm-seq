@@ -6,7 +6,7 @@ new_queue=/root/autodl-tmp/LocalLeap/llada/results/experiment_queues/response_cr
 repo=/root/autodl-tmp/dlm-seq-flow/experiments/localleap/attention_stability
 live=/root/autodl-tmp/LocalLeap/llada
 live_scripts=/root/autodl-tmp/LocalLeap/scripts/llada
-source_commit=a0c53a7d3e93642cc6aef3a70adddffb21a80e76
+source_commit=c6ea9635367e2aa9dbd0a30ec3ceaa5425ea014f
 switch_log=${old_queue}/response_credit_switcher.log
 
 exec >>"${switch_log}" 2>&1
