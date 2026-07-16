@@ -190,16 +190,23 @@ run_if_gate pair_he_draft_exchange_exec_128_n32 1 he_draft_exchange_exec_128_n64
   "${runner}" humaneval 0 128 draft_exchange_exec 0.004 trace he_draft_exchange_exec_128_n64 64 256
 pair_stage pair_he_draft_exchange_exec_128_n64 humaneval he_baseline_128_n64 he_draft_exchange_exec_128_n64
 
-he_baseline_full=/root/autodl-tmp/LocalLeap/llada/results/attention_recovery/humaneval/recovery_he_baseline_128
+if gate_pair pair_he_response_credit_128_n32 1 \
+  || gate_pair pair_he_response_credit_fast_128_n32 1 \
+  || gate_pair pair_he_draft_exchange_exec_128_n64 0; then
+  run_stage he_baseline_128_full_fresh \
+    "${runner}" humaneval 0 128 baseline 0.004 trace he_baseline_128_full_fresh full 256
+else
+  record_stage_status he_baseline_128_full_fresh SKIPPED no_full_method_gate
+fi
 run_if_gate pair_he_response_credit_128_n32 1 he_response_credit_128_full \
   "${runner}" humaneval 0 128 response_credit 0.004 trace he_response_credit_128_full full 256
-pair_stage pair_he_response_credit_128_full humaneval unused he_response_credit_128_full "${he_baseline_full}"
+pair_stage pair_he_response_credit_128_full humaneval he_baseline_128_full_fresh he_response_credit_128_full
 run_if_gate pair_he_response_credit_fast_128_n32 1 he_response_credit_fast_128_full \
   "${runner}" humaneval 0 128 response_credit_fast 0.004 trace he_response_credit_fast_128_full full 256
-pair_stage pair_he_response_credit_fast_128_full humaneval unused he_response_credit_fast_128_full "${he_baseline_full}"
+pair_stage pair_he_response_credit_fast_128_full humaneval he_baseline_128_full_fresh he_response_credit_fast_128_full
 run_if_gate pair_he_draft_exchange_exec_128_n64 0 he_draft_exchange_exec_128_full \
   "${runner}" humaneval 0 128 draft_exchange_exec 0.004 trace he_draft_exchange_exec_128_full full 256
-pair_stage pair_he_draft_exchange_exec_128_full humaneval unused he_draft_exchange_exec_128_full "${he_baseline_full}"
+pair_stage pair_he_draft_exchange_exec_128_full humaneval he_baseline_128_full_fresh he_draft_exchange_exec_128_full
 
 # MBPP generalization uses a fresh 100-example baseline for timing, then promotes only non-negative arms.
 run_stage mbpp_baseline_128_n100 "${runner}" mbpp 3 128 baseline 0.004 trace mbpp_baseline_128_n100 100 256
@@ -208,13 +215,19 @@ for profile in response_credit_fast draft_exchange_exec; do
   run_stage "${tag}" "${runner}" mbpp 3 128 "${profile}" 0.004 trace "${tag}" 100 256
   pair_stage "pair_${tag}" mbpp mbpp_baseline_128_n100 "${tag}"
 done
-mbpp_baseline_full=/root/autodl-tmp/LocalLeap/llada/results/b2_confirmatory/mbpp/baseline/stcc_b2_confirmatory_20260715_v1_mbpp_baseline
+if gate_pair pair_mbpp_response_credit_fast_128_n100 0 \
+  || gate_pair pair_mbpp_draft_exchange_exec_128_n100 0; then
+  run_stage mbpp_baseline_128_full_fresh \
+    "${runner}" mbpp 3 128 baseline 0.004 trace mbpp_baseline_128_full_fresh full 256
+else
+  record_stage_status mbpp_baseline_128_full_fresh SKIPPED no_full_method_gate
+fi
 run_if_gate pair_mbpp_response_credit_fast_128_n100 0 mbpp_response_credit_fast_128_full \
   "${runner}" mbpp 3 128 response_credit_fast 0.004 trace mbpp_response_credit_fast_128_full full 256
-pair_stage pair_mbpp_response_credit_fast_128_full mbpp unused mbpp_response_credit_fast_128_full "${mbpp_baseline_full}"
+pair_stage pair_mbpp_response_credit_fast_128_full mbpp mbpp_baseline_128_full_fresh mbpp_response_credit_fast_128_full
 run_if_gate pair_mbpp_draft_exchange_exec_128_n100 0 mbpp_draft_exchange_exec_128_full \
   "${runner}" mbpp 3 128 draft_exchange_exec 0.004 trace mbpp_draft_exchange_exec_128_full full 256
-pair_stage pair_mbpp_draft_exchange_exec_128_full mbpp unused mbpp_draft_exchange_exec_128_full "${mbpp_baseline_full}"
+pair_stage pair_mbpp_draft_exchange_exec_128_full mbpp mbpp_baseline_128_full_fresh mbpp_draft_exchange_exec_128_full
 
 # Non-code generalization: no execution selector. These gates directly test the shared-skeleton repair.
 for task_spec in "localleap_math500:0:100" "gsm8k:0:128"; do
