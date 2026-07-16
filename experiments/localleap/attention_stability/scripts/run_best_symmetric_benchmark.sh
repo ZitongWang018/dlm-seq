@@ -39,8 +39,29 @@ case "${profile}" in
   symmetric_fast)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_prune_stable_conflicts=True,dependency_fill_budget=True"
     ;;
+  response_credit)
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
+    ;;
+  response_credit_fast)
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=True,dependency_fill_budget=True"
+    ;;
+  draft_exchange)
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_draft_exchange=True,dependency_differential_selection=False,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
+    ;;
+  draft_exchange_exec)
+    if [[ "${task}" != "humaneval" && "${task}" != "mbpp" ]]; then
+      echo "draft_exchange_exec is code-only; got task=${task}" >&2
+      exit 2
+    fi
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_draft_exchange=True,dependency_differential_selection=True,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
+    ;;
   *) echo "unsupported profile: ${profile}" >&2; exit 2 ;;
 esac
+
+if [[ "${diagnostics_mode}" == "full" && "${profile}" == draft_exchange* ]]; then
+  echo "draft-exchange profiles currently expose complete trace summaries, not per-step tensor dumps" >&2
+  exit 2
+fi
 
 expected_records=${expected_full}
 limit_args=()
@@ -93,7 +114,7 @@ fi
 
 model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_length},steps=${steps},block_length=32,remasking=low_confidence,early_stop=False,show_speed=True,integrate_speed=False${dependency_args}${trace_args}"
 {
-  echo "schema=best_symmetric_benchmark_v1"
+  echo "schema=best_symmetric_benchmark_v2"
   echo "queue_id=${queue_id}"
   echo "task=${task}"
   echo "profile=${profile}"
@@ -107,7 +128,7 @@ model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_le
   echo "model_args=${model_args}"
   echo "start=$(date --iso-8601=seconds)"
   git rev-parse HEAD
-  sha256sum generate.py eval_llada.py model/modeling_llada.py validate_step_diagnostics.py \
+  sha256sum generate.py eval_llada.py differential_selector.py model/modeling_llada.py validate_step_diagnostics.py \
     audit_attention_stability.py audit_lm_eval_task.py compare_paired_task_runs.py \
     postprocess_code.py sanitize.py
 } > "${run_root}/run_config.txt"

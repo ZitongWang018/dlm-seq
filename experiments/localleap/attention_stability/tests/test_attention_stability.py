@@ -23,6 +23,7 @@ def select(
     temporal_topk=4,
     prune_stable_conflicts=False,
     fill_budget=False,
+    previous_response_credit=None,
 ):
     x = torch.full(logits.shape[:2], 7, dtype=torch.long)
     mask = torch.ones_like(x, dtype=torch.bool)
@@ -30,6 +31,7 @@ def select(
         logits, 0.0, "low_confidence", mask, x, budget, dependency, tau, 0,
         previous_top1, previous_selected, previous_topk_ids, temporal_mode,
         temporal_topk, prune_stable_conflicts, fill_budget,
+        previous_response_credit,
     )
 
 
@@ -192,6 +194,65 @@ def test_topk_overlap_rejects_invalid_k():
         raise AssertionError("invalid temporal_topk was accepted")
 
 
+def test_response_credit_counts_only_strong_conditioning_events():
+    logits = make_logits([1, 2, 3], [0.80, 0.95, 0.70])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, 0, 2] = 0.9
+    dependency[0, 1, 2] = 0.9
+    previous_top1 = torch.tensor([[1, 5, 3]])
+    previous_credit = torch.tensor([[2, 4, 7]], dtype=torch.int16)
+    _, _, diagnostics, _ = select(
+        logits,
+        dependency,
+        budget=1,
+        tau=0.5,
+        previous_top1=previous_top1,
+        previous_selected=torch.tensor([2]),
+        temporal_mode="response_credit",
+        previous_response_credit=previous_credit,
+    )
+    state = diagnostics["candidate_state"][0]
+    assert state["response_credit"].tolist() == [3, 0, 7]
+    assert diagnostics["response_validations"] == 1
+    assert diagnostics["response_invalidations"] == 1
+
+
+def test_response_credit_precedes_confidence_within_mature_tier():
+    logits = make_logits([1, 2, 3], [0.80, 0.95, 0.70])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, 0, 2] = dependency[0, 1, 2] = 0.9
+    previous_top1 = torch.tensor([[1, 2, 3]])
+    previous_credit = torch.tensor([[3, 0, 0]], dtype=torch.int16)
+    _, transfer, diagnostics, _ = select(
+        logits,
+        dependency,
+        budget=1,
+        tau=0.5,
+        previous_top1=previous_top1,
+        previous_selected=torch.tensor([2]),
+        temporal_mode="response_credit",
+        previous_response_credit=previous_credit,
+    )
+    assert transfer.nonzero(as_tuple=True)[1].tolist() == [0]
+    assert diagnostics["candidate_state"][0]["ordered_positions_global"].tolist()[0] == 0
+
+
+def test_response_credit_saturates_without_int16_wraparound():
+    logits = make_logits([1], [0.9])
+    dependency = torch.ones((1, 1, 1))
+    _, _, diagnostics, _ = select(
+        logits,
+        dependency,
+        budget=1,
+        tau=0.5,
+        previous_top1=torch.tensor([[1]]),
+        previous_selected=torch.tensor([0]),
+        temporal_mode="response_credit",
+        previous_response_credit=torch.tensor([[32767]], dtype=torch.int16),
+    )
+    assert diagnostics["candidate_state"][0]["response_credit"].tolist() == [32767]
+
+
 if __name__ == "__main__":
     test_high_dependency_positions_are_not_committed_together()
     test_changed_dependent_candidate_is_ranked_after_mature_candidate()
@@ -204,4 +265,7 @@ if __name__ == "__main__":
     test_topk_overlap_creates_intermediate_temporal_tier()
     test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates()
     test_topk_overlap_rejects_invalid_k()
-    print("11 selector tests passed")
+    test_response_credit_counts_only_strong_conditioning_events()
+    test_response_credit_precedes_confidence_within_mature_tier()
+    test_response_credit_saturates_without_int16_wraparound()
+    print("14 selector tests passed")

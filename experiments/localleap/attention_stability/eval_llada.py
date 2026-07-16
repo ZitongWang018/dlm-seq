@@ -39,6 +39,7 @@ from transformers import AutoTokenizer, AutoModel, AutoConfig
 from model.modeling_llada import LLaDAModelLM
 from generate import *
 from stcc_generate import generate_stcc
+from differential_selector import select_differential_candidate
 
 import json
 import hashlib
@@ -95,6 +96,8 @@ class LLaDAEvalHarness(LM):
         dependency_temporal_topk=4,
         dependency_prune_stable_conflicts=False,
         dependency_fill_budget=False,
+        dependency_draft_exchange=False,
+        dependency_differential_selection=False,
         candidate_memory_topk=None,
         candidate_memory_confidence_threshold=0.0,
         candidate_memory_fallback="confidence",
@@ -199,6 +202,16 @@ class LLaDAEvalHarness(LM):
             dependency_fill_budget.lower() == "true"
             if isinstance(dependency_fill_budget, str)
             else bool(dependency_fill_budget)
+        )
+        self.dependency_draft_exchange = (
+            dependency_draft_exchange.lower() == "true"
+            if isinstance(dependency_draft_exchange, str)
+            else bool(dependency_draft_exchange)
+        )
+        self.dependency_differential_selection = (
+            dependency_differential_selection.lower() == "true"
+            if isinstance(dependency_differential_selection, str)
+            else bool(dependency_differential_selection)
         )
         self.candidate_memory_topk = candidate_memory_topk
         self.candidate_memory_confidence_threshold = candidate_memory_confidence_threshold
@@ -410,6 +423,8 @@ class LLaDAEvalHarness(LM):
             num_input_tokens += input_ids.shape[1]
 
             decode_diagnostics = None
+            draft_candidate_token_ids = None
+            candidate_generations = None
             step_records = None
             active_trace_dir = None
             active_diagnostics_dir = None
@@ -462,25 +477,44 @@ class LLaDAEvalHarness(LM):
                 step_diagnostics_schema = "candidate_memory_steps_v2"
                 trace_evaluator_version = "candidate_memory_trace_v2"
             elif self.dependency_threshold is not None:
-                generated_answer, nfe, decode_diagnostics = generate_attention_stability(
-                    self.model,
-                    input_ids,
-                    steps=self.steps,
-                    gen_length=self.gen_length,
-                    block_length=self.block_length,
-                    temperature=0,
-                    remasking=self.remasking,
-                    mask_id=self.mask_id,
-                    early_stop=self.early_stop,
-                    dependency_threshold=self.dependency_threshold,
-                    collect_step_diagnostics=self.dependency_diagnostics_dir is not None,
-                    dependency_mode=self.dependency_mode,
-                    temporal_mode=self.dependency_temporal_mode,
-                    temporal_topk=self.dependency_temporal_topk,
-                    prune_stable_conflicts=self.dependency_prune_stable_conflicts,
-                    fill_budget=self.dependency_fill_budget,
-                )
-                step_records = decode_diagnostics.pop("_step_records", None)
+                if self.dependency_draft_exchange:
+                    generated_answer, nfe, decode_diagnostics = generate_response_credit_exchange(
+                        self.model,
+                        input_ids,
+                        steps=self.steps,
+                        gen_length=self.gen_length,
+                        block_length=self.block_length,
+                        temperature=0,
+                        remasking=self.remasking,
+                        mask_id=self.mask_id,
+                        early_stop=self.early_stop,
+                        dependency_threshold=self.dependency_threshold,
+                        prune_stable_conflicts=self.dependency_prune_stable_conflicts,
+                        fill_budget=self.dependency_fill_budget,
+                    )
+                    draft_candidate_token_ids = decode_diagnostics.pop(
+                        "_draft_candidate_token_ids", None
+                    )
+                else:
+                    generated_answer, nfe, decode_diagnostics = generate_attention_stability(
+                        self.model,
+                        input_ids,
+                        steps=self.steps,
+                        gen_length=self.gen_length,
+                        block_length=self.block_length,
+                        temperature=0,
+                        remasking=self.remasking,
+                        mask_id=self.mask_id,
+                        early_stop=self.early_stop,
+                        dependency_threshold=self.dependency_threshold,
+                        collect_step_diagnostics=self.dependency_diagnostics_dir is not None,
+                        dependency_mode=self.dependency_mode,
+                        temporal_mode=self.dependency_temporal_mode,
+                        temporal_topk=self.dependency_temporal_topk,
+                        prune_stable_conflicts=self.dependency_prune_stable_conflicts,
+                        fill_budget=self.dependency_fill_budget,
+                    )
+                    step_records = decode_diagnostics.pop("_step_records", None)
                 active_trace_dir = self.dependency_trace_dir
                 active_diagnostics_dir = self.dependency_diagnostics_dir
                 extended_dependency_mode = (
@@ -488,6 +522,7 @@ class LLaDAEvalHarness(LM):
                     or self.dependency_temporal_mode != "top1"
                     or self.dependency_prune_stable_conflicts
                     or self.dependency_fill_budget
+                    or self.dependency_draft_exchange
                 )
                 step_diagnostics_schema = (
                     "attention_stability_steps_v2"
@@ -495,7 +530,9 @@ class LLaDAEvalHarness(LM):
                     else "attention_stability_steps_v1"
                 )
                 trace_evaluator_version = (
-                    "attention_stability_trace_v2"
+                    "response_credit_draft_exchange_trace_v1"
+                    if self.dependency_draft_exchange
+                    else "attention_stability_trace_v2"
                     if extended_dependency_mode
                     else "attention_stability_trace_v1"
                 )
@@ -528,6 +565,42 @@ class LLaDAEvalHarness(LM):
                     num_nfe += nfe
                     num_instances += 1
                 generated_answer = self.tokenizer.decode(generated_answer_ids, skip_special_tokens=True)
+
+            if draft_candidate_token_ids is not None:
+                candidate_generations = {}
+                for candidate_name, candidate_ids in draft_candidate_token_ids.items():
+                    candidate_text = self.tokenizer.decode(
+                        candidate_ids[0][input_ids.shape[1] :],
+                        skip_special_tokens=True,
+                    )
+                    for stop_seq in stop_tokens:
+                        if stop_seq in candidate_text:
+                            candidate_text = candidate_text.split(stop_seq)[0]
+                    candidate_generations[candidate_name] = candidate_text
+                if self.dependency_differential_selection:
+                    candidate_names = [
+                        name
+                        for name in ("anchor", "explorer", "repaired")
+                        if name in candidate_generations
+                    ]
+                    selected_index, differential_diagnostics = select_differential_candidate(
+                        [candidate_generations[name] for name in candidate_names],
+                        question,
+                        req.doc.get("entry_point"),
+                    )
+                    selected_name = candidate_names[selected_index]
+                    old_token_count = int((generated_answer_ids != 126081).sum().item())
+                    generated_answer = candidate_generations[selected_name]
+                    generated_token_ids_for_diagnostics = draft_candidate_token_ids[
+                        selected_name
+                    ].detach().to(torch.int32).cpu()
+                    generated_answer_ids = torch.tensor(
+                        self.tokenizer(generated_answer)["input_ids"]
+                    )
+                    if self.show_speed:
+                        num_tokens += int((generated_answer_ids != 126081).sum().item()) - old_token_count
+                    differential_diagnostics["selected_name"] = selected_name
+                    decode_diagnostics["differential_selection"] = differential_diagnostics
             output.append(generated_answer)
 
             diagnostics_path = None
@@ -581,6 +654,8 @@ class LLaDAEvalHarness(LM):
                         "dependency_temporal_topk": self.dependency_temporal_topk,
                         "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
                         "dependency_fill_budget": self.dependency_fill_budget,
+                        "dependency_draft_exchange": self.dependency_draft_exchange,
+                        "dependency_differential_selection": self.dependency_differential_selection,
                         "candidate_memory_topk": self.candidate_memory_topk,
                         "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
                         "candidate_memory_fallback": self.candidate_memory_fallback,
@@ -608,6 +683,8 @@ class LLaDAEvalHarness(LM):
                     "absolute_index": i,
                     "task_id": stable_task_id,
                     "prompt_hash": hashlib.sha256(question.encode("utf-8")).hexdigest(),
+                    "prompt_text": question,
+                    "entry_point": req.doc.get("entry_point"),
                     "raw_gold": raw_gold_for_trace,
                     "normalized_gold": raw_gold_for_trace,
                     "decoded_generation": generated_answer,
@@ -627,6 +704,8 @@ class LLaDAEvalHarness(LM):
                         "dependency_temporal_topk": self.dependency_temporal_topk,
                         "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
                         "dependency_fill_budget": self.dependency_fill_budget,
+                        "dependency_draft_exchange": self.dependency_draft_exchange,
+                        "dependency_differential_selection": self.dependency_differential_selection,
                         "candidate_memory_topk": self.candidate_memory_topk,
                         "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
                         "candidate_memory_fallback": self.candidate_memory_fallback,
@@ -643,6 +722,7 @@ class LLaDAEvalHarness(LM):
                     "evaluator_version": trace_evaluator_version,
                     "seed": {"lm_eval_random": 0, "numpy": 1234, "torch": 1234, "fewshot": 1234},
                     "decode_diagnostics": decode_diagnostics,
+                    "candidate_generations": candidate_generations,
                     "step_diagnostics_schema": (
                         step_diagnostics_schema if diagnostics_path is not None else None
                     ),

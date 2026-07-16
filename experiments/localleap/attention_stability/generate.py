@@ -103,9 +103,10 @@ def select_attention_stability_tokens(
     temporal_topk=4,
     prune_stable_conflicts=False,
     fill_budget=False,
+    previous_response_credit=None,
 ):
     """Lexicographic maturity/confidence ordering plus greedy dependency exclusion."""
-    if temporal_mode not in {"top1", "topk_overlap"}:
+    if temporal_mode not in {"top1", "topk_overlap", "response_credit"}:
         raise ValueError(f"unsupported temporal mode: {temporal_mode}")
     if temporal_topk < 1 or temporal_topk > logits.shape[-1]:
         raise ValueError("temporal_topk must be between 1 and vocabulary size")
@@ -125,11 +126,15 @@ def select_attention_stability_tokens(
     current_topk_full = torch.full(
         (*x.shape, temporal_topk), -1, dtype=torch.long, device=x.device
     )
+    current_response_credit_full = torch.zeros_like(x, dtype=torch.int16)
     diagnostics = {
         "unstable_candidates": 0,
         "changed_candidates": 0,
         "candidate_continuity_candidates": 0,
         "intermediate_candidates": 0,
+        "response_validations": 0,
+        "response_invalidations": 0,
+        "response_credit_max": 0,
         "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
         "stable_conflicts_pruned": 0,
@@ -154,6 +159,7 @@ def select_attention_stability_tokens(
         ).indices
         current_topk_full[batch_idx, masked] = current_topk_ids
         max_dependency = torch.zeros(masked.numel(), dtype=torch.float32, device=x.device)
+        response_credit = torch.zeros(masked.numel(), dtype=torch.int16, device=x.device)
         history_available = previous_top1 is not None and previous_selected is not None and previous_selected.numel() > 0
         if history_available:
             masked_local = masked - block_start
@@ -161,6 +167,26 @@ def select_attention_stability_tokens(
             max_dependency = dependency[batch_idx].index_select(0, masked_local).index_select(1, selected_local).max(dim=1).values
             changed = x0[batch_idx, masked] != previous_top1[batch_idx, masked]
             strong_dependency = max_dependency > dependency_threshold
+            if previous_response_credit is not None:
+                previous_credit = previous_response_credit[batch_idx, masked]
+            else:
+                previous_credit = torch.zeros_like(response_credit)
+            response_validated = strong_dependency & ~changed
+            response_invalidated = strong_dependency & changed
+            incremented_credit = torch.clamp(
+                previous_credit.to(torch.int32) + 1,
+                max=torch.iinfo(torch.int16).max,
+            ).to(torch.int16)
+            response_credit = torch.where(
+                response_validated,
+                incremented_credit,
+                torch.where(response_invalidated, torch.zeros_like(previous_credit), previous_credit),
+            )
+            diagnostics["response_validations"] += int(response_validated.sum().item())
+            diagnostics["response_invalidations"] += int(response_invalidated.sum().item())
+            diagnostics["response_credit_max"] = max(
+                diagnostics["response_credit_max"], int(response_credit.max().item())
+            )
             if temporal_mode == "topk_overlap":
                 if previous_topk_ids is None:
                     raise ValueError("topk_overlap mode requires previous_topk_ids")
@@ -197,6 +223,7 @@ def select_attention_stability_tokens(
             diagnostics["unstable_candidates"] += int((~maturity).sum().item())
             diagnostics["changed_candidates"] += int(changed.sum().item())
             diagnostics["strongly_dependent_candidates"] += int(strong_dependency.sum().item())
+        current_response_credit_full[batch_idx, masked] = response_credit
 
         mature_positions = masked[maturity]
         immature_positions = masked[~maturity]
@@ -210,12 +237,30 @@ def select_attention_stability_tokens(
             # Mature candidates must remain bit-for-bit ordered by the parent
             # method's confidence rule. Top-K history is allowed to refine only
             # the unstable tail that the parent would already rank second.
-            mature_order = mature_positions[
-                torch.topk(
-                    confidence[batch_idx, mature_positions],
-                    k=mature_positions.numel(),
-                ).indices
-            ]
+            if temporal_mode == "response_credit" and history_available:
+                position_to_masked_index = {
+                    int(position): index
+                    for index, position in enumerate(masked.tolist())
+                }
+                mature = mature_positions.tolist()
+                mature.sort(
+                    key=lambda position: (
+                        -int(
+                            response_credit[
+                                position_to_masked_index[int(position)]
+                            ].item()
+                        ),
+                        -float(confidence[batch_idx, position].item()),
+                    )
+                )
+                mature_order = torch.tensor(mature, dtype=torch.long, device=x.device)
+            else:
+                mature_order = mature_positions[
+                    torch.topk(
+                        confidence[batch_idx, mature_positions],
+                        k=mature_positions.numel(),
+                    ).indices
+                ]
             if immature_positions.numel() > 0:
                 if temporal_mode == "topk_overlap" and history_available:
                     position_to_masked_index = {
@@ -340,6 +385,7 @@ def select_attention_stability_tokens(
             ),
             "topk_overlap_count": overlap_count.cpu(),
             "temporal_tier": temporal_tier.cpu(),
+            "response_credit": response_credit.cpu(),
             "max_dependency_to_previous": max_dependency.to(torch.float32).cpu(),
             "maturity": maturity.cpu(),
             "ordered_positions_global": ordered.to(torch.int32).cpu(),
@@ -348,6 +394,7 @@ def select_attention_stability_tokens(
             "forced_fill_positions_global": torch.tensor(forced, dtype=torch.int32),
         })
 
+    diagnostics["_current_response_credit_full"] = current_response_credit_full
     return x0, transfer_index, diagnostics, current_topk_full
 
 
@@ -381,7 +428,7 @@ def generate_attention_stability(
     nfe = 0
     if dependency_mode not in {"symmetric", "directed_read"}:
         raise ValueError(f"unsupported dependency mode: {dependency_mode}")
-    if temporal_mode not in {"top1", "topk_overlap"}:
+    if temporal_mode not in {"top1", "topk_overlap", "response_credit"}:
         raise ValueError(f"unsupported temporal mode: {temporal_mode}")
     summary = {
         "decoder": (
@@ -405,6 +452,9 @@ def generate_attention_stability(
         "changed_candidates": 0,
         "candidate_continuity_candidates": 0,
         "intermediate_candidates": 0,
+        "response_validations": 0,
+        "response_invalidations": 0,
+        "response_credit_max": 0,
         "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
         "stable_conflicts_pruned": 0,
@@ -427,6 +477,7 @@ def generate_attention_stability(
         step_idx = 0
         previous_top1 = None
         previous_topk_ids = None
+        previous_response_credit = None
         previous_selected = None
         while (x[:, block_start:block_end] == mask_id).any():
             if step_idx >= block_steps:
@@ -468,10 +519,14 @@ def generate_attention_stability(
                 previous_top1=previous_top1,
                 previous_selected=previous_selected,
                 previous_topk_ids=previous_topk_ids,
+                previous_response_credit=previous_response_credit,
                 temporal_mode=temporal_mode,
                 temporal_topk=temporal_topk,
                 prune_stable_conflicts=prune_stable_conflicts,
                 fill_budget=fill_budget,
+            )
+            current_response_credit = step_diagnostics.pop(
+                "_current_response_credit_full"
             )
             if not transfer_index.any():
                 raise RuntimeError("attention-stability selector made no progress")
@@ -483,6 +538,13 @@ def generate_attention_stability(
             summary["intermediate_candidates"] += step_diagnostics[
                 "intermediate_candidates"
             ]
+            summary["response_validations"] += step_diagnostics["response_validations"]
+            summary["response_invalidations"] += step_diagnostics[
+                "response_invalidations"
+            ]
+            summary["response_credit_max"] = max(
+                summary["response_credit_max"], step_diagnostics["response_credit_max"]
+            )
             summary["strongly_dependent_candidates"] += step_diagnostics["strongly_dependent_candidates"]
             summary["rejected_pairs"] += step_diagnostics["rejected_pairs"]
             summary["stable_conflicts_pruned"] += step_diagnostics["stable_conflicts_pruned"]
@@ -529,6 +591,9 @@ def generate_attention_stability(
                     "unstable_candidates": step_diagnostics["unstable_candidates"],
                     "changed_candidates": step_diagnostics["changed_candidates"],
                     "strongly_dependent_candidates": step_diagnostics["strongly_dependent_candidates"],
+                    "response_validations": step_diagnostics["response_validations"],
+                    "response_invalidations": step_diagnostics["response_invalidations"],
+                    "response_credit_max": step_diagnostics["response_credit_max"],
                     "rejected_pairs": step_diagnostics["rejected_pairs"],
                     "stable_conflicts_pruned": step_diagnostics["stable_conflicts_pruned"],
                     "forced_budget_fills": step_diagnostics["forced_budget_fills"],
@@ -538,6 +603,7 @@ def generate_attention_stability(
                 })
             previous_top1 = x0.detach().clone()
             previous_topk_ids = current_topk_ids.detach().clone()
+            previous_response_credit = current_response_credit.detach().clone()
             previous_selected = torch.where(transfer_index[0])[0]
             x[transfer_index] = x0[transfer_index]
             step_idx += 1
@@ -554,6 +620,212 @@ def generate_attention_stability(
     if collect_step_diagnostics:
         summary["_step_records"] = step_records
     return x, nfe, summary
+
+
+@torch.no_grad()
+def repair_draft_disagreements(
+    model,
+    draft,
+    disagreement_mask,
+    prompt_length,
+    dependency_threshold,
+    steps,
+    gen_length,
+    block_length,
+    temperature=0.0,
+    remasking="low_confidence",
+    mask_id=126336,
+):
+    """Re-denoise only positions where two complete drafts disagree.
+
+    Agreed tokens form a full-draft skeleton.  Disagreement positions are
+    explicitly masked, so every repaired token is predicted again under the
+    shared skeleton rather than copied from either parent.  The repair budget
+    is derived from the original tokens-per-step schedule and introduces no
+    additional selection threshold.
+    """
+    if draft.shape != disagreement_mask.shape:
+        raise ValueError("draft and disagreement_mask must have identical shapes")
+    if draft.shape[0] != 1:
+        raise ValueError("draft exchange currently supports batch size one")
+    if gen_length % block_length != 0:
+        raise ValueError("gen_length must be divisible by block_length")
+    num_blocks = gen_length // block_length
+    if steps % num_blocks != 0:
+        raise ValueError("steps must be divisible by the number of blocks")
+
+    x = draft.clone()
+    mutable = disagreement_mask.clone().to(dtype=torch.bool, device=x.device)
+    mutable[:, :prompt_length] = False
+    x[mutable] = mask_id
+    block_steps = steps // num_blocks
+    baseline_budget = max(1, int(np.ceil(block_length / block_steps)))
+    nfe = 0
+    summary = {
+        "decoder": "response_credit_disagreement_repair_v1",
+        "disagreement_positions": int(mutable.sum().item()),
+        "agreement_positions": int(gen_length - mutable.sum().item()),
+        "repair_nfe": 0,
+        "response_validations": 0,
+        "response_invalidations": 0,
+        "response_credit_max": 0,
+        "rejected_pairs": 0,
+        "stable_conflicts_pruned": 0,
+        "forced_budget_fills": 0,
+        "underfilled_steps": 0,
+    }
+
+    for block_idx in range(num_blocks):
+        block_start = prompt_length + block_idx * block_length
+        block_end = block_start + block_length
+        previous_top1 = None
+        previous_topk_ids = None
+        previous_response_credit = None
+        previous_selected = None
+        while (x[:, block_start:block_end] == mask_id).any():
+            nfe += 1
+            mask_index = x == mask_id
+            mask_index[:, :block_start] = False
+            mask_index[:, block_end:] = False
+            budget = min(baseline_budget, int(mask_index[0].sum().item()))
+            logits, _, dependency = _forward_with_block_attention(
+                model, x, block_start, block_end
+            )
+            x0, transfer_index, diagnostics, current_topk_ids = select_attention_stability_tokens(
+                logits=logits,
+                temperature=temperature,
+                remasking=remasking,
+                mask_index=mask_index,
+                x=x,
+                budget=budget,
+                dependency=dependency,
+                dependency_threshold=dependency_threshold,
+                block_start=block_start,
+                previous_top1=previous_top1,
+                previous_selected=previous_selected,
+                previous_topk_ids=previous_topk_ids,
+                temporal_mode="response_credit",
+                temporal_topk=4,
+                prune_stable_conflicts=True,
+                fill_budget=True,
+                previous_response_credit=previous_response_credit,
+            )
+            current_response_credit = diagnostics.pop(
+                "_current_response_credit_full"
+            )
+            if not transfer_index.any():
+                raise RuntimeError("draft-disagreement repair made no progress")
+            summary["response_validations"] += diagnostics["response_validations"]
+            summary["response_invalidations"] += diagnostics["response_invalidations"]
+            summary["response_credit_max"] = max(
+                summary["response_credit_max"], diagnostics["response_credit_max"]
+            )
+            summary["rejected_pairs"] += diagnostics["rejected_pairs"]
+            summary["stable_conflicts_pruned"] += diagnostics[
+                "stable_conflicts_pruned"
+            ]
+            summary["forced_budget_fills"] += diagnostics["forced_budget_fills"]
+            summary["underfilled_steps"] += int(diagnostics["underfilled"])
+            previous_top1 = x0.detach().clone()
+            previous_topk_ids = current_topk_ids.detach().clone()
+            previous_response_credit = current_response_credit.detach().clone()
+            previous_selected = torch.where(transfer_index[0])[0]
+            x[transfer_index] = x0[transfer_index]
+
+    summary["repair_nfe"] = nfe
+    summary["residual_mask_count"] = int((x == mask_id).sum().item())
+    return x, nfe, summary
+
+
+@torch.no_grad()
+def generate_response_credit_exchange(
+    model,
+    prompt,
+    dependency_threshold,
+    steps=128,
+    gen_length=128,
+    block_length=128,
+    temperature=0.0,
+    remasking="low_confidence",
+    mask_id=126336,
+    eos_id=126081,
+    early_stop=False,
+    prune_stable_conflicts=False,
+    fill_budget=False,
+):
+    """Generate two policy-diverse drafts and repair their disagreement set.
+
+    The anchor is the established top-1 temporal parent.  The explorer uses
+    response credit: a candidate gains credit only when it survives an actual
+    strong-dependency conditioning event, and loses that credit when the event
+    changes its top-1.  Their agreement is preserved as a full-draft skeleton;
+    disagreements are masked and revalidated by the ordinary dLLM forward.
+    """
+    common = dict(
+        model=model,
+        prompt=prompt,
+        dependency_threshold=dependency_threshold,
+        steps=steps,
+        gen_length=gen_length,
+        block_length=block_length,
+        temperature=temperature,
+        remasking=remasking,
+        mask_id=mask_id,
+        eos_id=eos_id,
+        early_stop=early_stop,
+        collect_step_diagnostics=False,
+        dependency_mode="symmetric",
+        temporal_topk=4,
+        prune_stable_conflicts=prune_stable_conflicts,
+        fill_budget=fill_budget,
+    )
+    anchor, anchor_nfe, anchor_summary = generate_attention_stability(
+        temporal_mode="top1", **common
+    )
+    explorer, explorer_nfe, explorer_summary = generate_attention_stability(
+        temporal_mode="response_credit", **common
+    )
+    prompt_length = prompt.shape[1]
+    disagreement = anchor != explorer
+    disagreement[:, :prompt_length] = False
+    fused = anchor.clone()
+    repaired, repair_nfe, repair_summary = repair_draft_disagreements(
+        model=model,
+        draft=fused,
+        disagreement_mask=disagreement,
+        prompt_length=prompt_length,
+        dependency_threshold=dependency_threshold,
+        steps=steps,
+        gen_length=gen_length,
+        block_length=block_length,
+        temperature=temperature,
+        remasking=remasking,
+        mask_id=mask_id,
+    )
+    summary = {
+        "decoder": "response_credit_draft_exchange_v1",
+        "dependency_threshold": float(dependency_threshold),
+        "configured_steps": int(steps),
+        "gen_length": int(gen_length),
+        "block_length": int(block_length),
+        "draft_count": 2,
+        "anchor_nfe": int(anchor_nfe),
+        "explorer_nfe": int(explorer_nfe),
+        "repair_nfe": int(repair_nfe),
+        "total_nfe": int(anchor_nfe + explorer_nfe + repair_nfe),
+        "draft_disagreement_positions": int(disagreement.sum().item()),
+        "draft_agreement_positions": int(gen_length - disagreement.sum().item()),
+        "anchor": anchor_summary,
+        "explorer": explorer_summary,
+        "repair": repair_summary,
+        "residual_mask_count": int((repaired == mask_id).sum().item()),
+        "_draft_candidate_token_ids": {
+            "anchor": anchor.detach().to(torch.int32).cpu(),
+            "explorer": explorer.detach().to(torch.int32).cpu(),
+            "repaired": repaired.detach().to(torch.int32).cpu(),
+        },
+    }
+    return repaired, summary["total_nfe"], summary
 
 
 def _jsd_from_probabilities(first, second):
