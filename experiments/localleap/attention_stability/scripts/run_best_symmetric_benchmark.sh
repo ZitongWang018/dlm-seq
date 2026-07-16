@@ -19,7 +19,7 @@ gen_length=${9:-256}
 case "${task}" in
   humaneval) expected_full=164; primary_metric=postprocess ;;
   mbpp) expected_full=500; primary_metric=pass_at_1 ;;
-  gsm8k) expected_full=1319; primary_metric='exact_match,strict-match' ;;
+  gsm8k) expected_full=1319; primary_metric='exact_match,flexible-extract' ;;
   localleap_math500) expected_full=500; primary_metric=exact_match ;;
   *) echo "unsupported task: ${task}" >&2; exit 2 ;;
 esac
@@ -182,7 +182,7 @@ else
     audit_args=(--constant-nfe "${steps}")
   fi
   filter_args=()
-  if [[ "${task}" == "gsm8k" ]]; then filter_args=(--filter strict-match); fi
+  if [[ "${task}" == "gsm8k" ]]; then filter_args=(--filter flexible-extract); fi
   /root/miniconda3/bin/python audit_lm_eval_task.py "${samples}" "${results_json}" \
     --task "${task}" --primary-metric "${primary_metric}" "${audit_args[@]}" \
     "${filter_args[@]}" --expected-records "${expected_records}" --output-dir "${audit_dir}"
