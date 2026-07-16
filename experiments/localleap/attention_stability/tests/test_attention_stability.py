@@ -253,6 +253,43 @@ def test_response_credit_saturates_without_int16_wraparound():
     assert diagnostics["candidate_state"][0]["response_credit"].tolist() == [32767]
 
 
+def test_revision_margin_prioritizes_decisive_conditioned_change():
+    logits = torch.full((1, 3, 8), -20.0)
+    # Position 0 is less confident overall because several alternatives remain,
+    # but the new token decisively displaced the previous token (log-ratio 4).
+    logits[0, 0, 1] = 2.0
+    logits[0, 0, 4] = -2.0
+    logits[0, 0, [0, 2, 3, 5, 6, 7]] = 0.0
+    # Position 1 has higher top-1 confidence but only narrowly displaced its
+    # previous candidate (log-ratio 0.2).
+    logits[0, 1, 2] = 3.0
+    logits[0, 1, 5] = 2.8
+    logits[0, 2, 3] = 3.0
+    x = torch.tensor([[7, 7, 3]])
+    mask = torch.tensor([[True, True, False]])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, 0, 2] = dependency[0, 1, 2] = 0.9
+    previous_top1 = torch.tensor([[4, 5, 3]])
+    _, transfer, diagnostics, _ = select_attention_stability_tokens(
+        logits=logits,
+        temperature=0.0,
+        remasking="low_confidence",
+        mask_index=mask,
+        x=x,
+        budget=1,
+        dependency=dependency,
+        dependency_threshold=0.5,
+        block_start=0,
+        previous_top1=previous_top1,
+        previous_selected=torch.tensor([2]),
+        temporal_mode="revision_margin",
+    )
+    state = diagnostics["candidate_state"][0]
+    assert state["top1_confidences"][1] > state["top1_confidences"][0]
+    assert state["revision_margin"].tolist()[0] > state["revision_margin"].tolist()[1]
+    assert transfer.nonzero(as_tuple=True)[1].tolist() == [0]
+
+
 if __name__ == "__main__":
     test_high_dependency_positions_are_not_committed_together()
     test_changed_dependent_candidate_is_ranked_after_mature_candidate()
@@ -268,4 +305,5 @@ if __name__ == "__main__":
     test_response_credit_counts_only_strong_conditioning_events()
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
-    print("14 selector tests passed")
+    test_revision_margin_prioritizes_decisive_conditioned_change()
+    print("15 selector tests passed")

@@ -45,6 +45,12 @@ case "${profile}" in
   response_credit_fast)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=True,dependency_fill_budget=True"
     ;;
+  revision_margin)
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=revision_margin,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
+    ;;
+  revision_margin_fast)
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=revision_margin,dependency_prune_stable_conflicts=True,dependency_fill_budget=True"
+    ;;
   draft_exchange)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_draft_exchange=True,dependency_differential_selection=False,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

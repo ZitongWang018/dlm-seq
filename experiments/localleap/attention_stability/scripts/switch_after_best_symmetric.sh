@@ -37,10 +37,10 @@ echo "old_queue_failed=$(find "${old_queue}" -maxdepth 1 -type f -name 'FAILED*'
 
 cd "${repo}"
 git cat-file -e "${source_commit}^{commit}"
-for path in generate.py eval_llada.py differential_selector.py \
+for path in generate.py eval_llada.py differential_selector.py select_queue_profile.py \
   scripts/run_best_symmetric_benchmark.sh scripts/run_response_credit_exchange_queue.sh \
   tests/test_attention_stability.py tests/test_differential_selector.py \
-  tests/test_response_credit_exchange.py; do
+  tests/test_response_credit_exchange.py tests/test_queue_profile_selection.py; do
   git diff --quiet "${source_commit}" -- "${path}" || {
     echo "source drift relative to pinned commit: ${path}"
     touch "${old_queue}/RESPONSE_CREDIT_SWITCH_FAILED_SOURCE"
@@ -50,12 +50,13 @@ done
 
 export PYTHONPATH=${repo}
 /root/miniconda3/bin/python -m py_compile \
-  generate.py eval_llada.py differential_selector.py \
+  generate.py eval_llada.py differential_selector.py select_queue_profile.py \
   tests/test_attention_stability.py tests/test_differential_selector.py \
   tests/test_response_credit_exchange.py
 /root/miniconda3/bin/python tests/test_attention_stability.py
 /root/miniconda3/bin/python tests/test_differential_selector.py
 /root/miniconda3/bin/python tests/test_response_credit_exchange.py
+/root/miniconda3/bin/python tests/test_queue_profile_selection.py
 bash -n scripts/run_best_symmetric_benchmark.sh
 bash -n scripts/run_response_credit_exchange_queue.sh
 
@@ -63,9 +64,11 @@ mkdir -p "${live_scripts}" "${new_queue}"
 install -m 0644 generate.py "${live}/generate.py"
 install -m 0644 eval_llada.py "${live}/eval_llada.py"
 install -m 0644 differential_selector.py "${live}/differential_selector.py"
+install -m 0644 select_queue_profile.py "${live}/select_queue_profile.py"
 install -m 0644 tests/test_attention_stability.py "${live}/test_attention_stability.py"
 install -m 0644 tests/test_differential_selector.py "${live}/test_differential_selector.py"
 install -m 0644 tests/test_response_credit_exchange.py "${live}/test_response_credit_exchange.py"
+install -m 0644 tests/test_queue_profile_selection.py "${live}/test_queue_profile_selection.py"
 install -m 0755 scripts/run_best_symmetric_benchmark.sh "${live_scripts}/run_best_symmetric_benchmark.sh"
 install -m 0755 scripts/run_response_credit_exchange_queue.sh "${live_scripts}/run_response_credit_exchange_queue.sh"
 
@@ -75,14 +78,15 @@ export HF_HOME=/root/autodl-tmp/.cache/huggingface
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 export HF_ALLOW_CODE_EVAL=1
-/root/miniconda3/bin/python -m py_compile generate.py eval_llada.py differential_selector.py
+/root/miniconda3/bin/python -m py_compile generate.py eval_llada.py differential_selector.py select_queue_profile.py
 /root/miniconda3/bin/python test_attention_stability.py
 /root/miniconda3/bin/python test_differential_selector.py
 /root/miniconda3/bin/python test_response_credit_exchange.py
+/root/miniconda3/bin/python test_queue_profile_selection.py
 timeout 5m /root/miniconda3/bin/python test_humaneval_evaluator.py
 /root/miniconda3/bin/python test_audit_lm_eval_task.py
 
-sha256sum generate.py eval_llada.py differential_selector.py \
+sha256sum generate.py eval_llada.py differential_selector.py select_queue_profile.py \
   "${live_scripts}/run_best_symmetric_benchmark.sh" \
   "${live_scripts}/run_response_credit_exchange_queue.sh" \
   > "${new_queue}/DEPLOYED_SOURCE_SHA256"

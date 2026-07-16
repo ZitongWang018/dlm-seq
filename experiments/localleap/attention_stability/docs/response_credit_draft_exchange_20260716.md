@@ -90,3 +90,29 @@ join by stable task id and require identical prompt and target hashes. Results
 record candidate texts, selected candidate, response validations/invalidations,
 draft disagreement count, per-component NFE, total NFE, residual masks, wall
 time, and source hashes.
+
+## Minimal vertical descendant: conditioned revision margin
+
+Binary top-1 change is evidence that a new condition had an effect, but it is
+not itself evidence that the new answer is bad. A smaller single-trajectory
+descendant therefore preserves the parent's mature/confidence ordering and
+changes only the unstable tail. For a strong-dependency position whose top-1
+changed after the preceding commit, it records
+
+```
+g_j^t = log q_j^t(top1_j^t) - log q_j^t(top1_j^(t-1)).
+```
+
+The unstable tail is ordered by `(g_j^t, confidence)`. A large value means the
+newly available condition decisively displaced the previous candidate; a small
+value means the revision remains ambiguous. This uses the previous top-1 as a
+response probe, not as a presumed correct answer. It adds no threshold and no
+historical distribution storage. `revision_margin_fast` keeps the original
+per-step commit budget and the same tau-0.004 symmetric horizontal exclusion.
+
+Queue promotion now compares `response_credit_fast` and
+`revision_margin_fast` directly with the established `symmetric_fast` parent on
+the same 32/64 HumanEval samples. Correct-count ties stay with the parent. Only
+a new rule with strictly more correct answers is promoted to a fresh full
+baseline/parent comparison. Larger MATH-500, GSM8K and MBPP exploration is
+sample-gated; full MBPP requires at least +3/100 over the parent.

@@ -106,7 +106,12 @@ def select_attention_stability_tokens(
     previous_response_credit=None,
 ):
     """Lexicographic maturity/confidence ordering plus greedy dependency exclusion."""
-    if temporal_mode not in {"top1", "topk_overlap", "response_credit"}:
+    if temporal_mode not in {
+        "top1",
+        "topk_overlap",
+        "response_credit",
+        "revision_margin",
+    }:
         raise ValueError(f"unsupported temporal mode: {temporal_mode}")
     if temporal_topk < 1 or temporal_topk > logits.shape[-1]:
         raise ValueError("temporal_topk must be between 1 and vocabulary size")
@@ -135,6 +140,9 @@ def select_attention_stability_tokens(
         "response_validations": 0,
         "response_invalidations": 0,
         "response_credit_max": 0,
+        "revision_margin_max": 0.0,
+        "revision_margin_sum": 0.0,
+        "revision_margin_candidates": 0,
         "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
         "stable_conflicts_pruned": 0,
@@ -160,6 +168,9 @@ def select_attention_stability_tokens(
         current_topk_full[batch_idx, masked] = current_topk_ids
         max_dependency = torch.zeros(masked.numel(), dtype=torch.float32, device=x.device)
         response_credit = torch.zeros(masked.numel(), dtype=torch.int16, device=x.device)
+        revision_margin = torch.zeros(
+            masked.numel(), dtype=torch.float32, device=x.device
+        )
         history_available = previous_top1 is not None and previous_selected is not None and previous_selected.numel() > 0
         if history_available:
             masked_local = masked - block_start
@@ -173,6 +184,41 @@ def select_attention_stability_tokens(
                 previous_credit = torch.zeros_like(response_credit)
             response_validated = strong_dependency & ~changed
             response_invalidated = strong_dependency & changed
+            previous_ids = previous_top1[batch_idx, masked]
+            valid_previous_ids = (previous_ids >= 0) & (
+                previous_ids < probabilities.shape[-1]
+            )
+            safe_previous_ids = previous_ids.clamp(
+                min=0, max=probabilities.shape[-1] - 1
+            )
+            previous_candidate_probability = torch.gather(
+                probabilities[batch_idx, masked],
+                dim=-1,
+                index=safe_previous_ids.unsqueeze(-1),
+            ).squeeze(-1)
+            current_candidate_probability = confidence[batch_idx, masked]
+            raw_revision_margin = (
+                torch.log(current_candidate_probability.clamp_min(1e-30))
+                - torch.log(previous_candidate_probability.clamp_min(1e-30))
+            ).to(torch.float32)
+            revision_candidates = strong_dependency & changed & valid_previous_ids
+            revision_margin = torch.where(
+                revision_candidates,
+                raw_revision_margin,
+                torch.zeros_like(raw_revision_margin),
+            )
+            diagnostics["revision_margin_candidates"] += int(
+                revision_candidates.sum().item()
+            )
+            if revision_candidates.any():
+                selected_revision_margins = revision_margin[revision_candidates]
+                diagnostics["revision_margin_max"] = max(
+                    diagnostics["revision_margin_max"],
+                    float(selected_revision_margins.max().item()),
+                )
+                diagnostics["revision_margin_sum"] += float(
+                    selected_revision_margins.sum().item()
+                )
             incremented_credit = torch.clamp(
                 previous_credit.to(torch.int32) + 1,
                 max=torch.iinfo(torch.int16).max,
@@ -228,10 +274,33 @@ def select_attention_stability_tokens(
         mature_positions = masked[maturity]
         immature_positions = masked[~maturity]
         if mature_positions.numel() == 0:
-            # Preserve the parent's explicit all-immature confidence fallback.
-            ordered = masked[
-                torch.topk(confidence[batch_idx, masked], k=masked.numel()).indices
-            ]
+            # The parent falls back to confidence when every candidate changed.
+            # Revision-margin mode instead asks which change was most decisive
+            # under the newly committed condition; no additional threshold is
+            # introduced and confidence remains the deterministic tie breaker.
+            if temporal_mode == "revision_margin" and history_available:
+                position_to_masked_index = {
+                    int(position): index
+                    for index, position in enumerate(masked.tolist())
+                }
+                unstable = masked.tolist()
+                unstable.sort(
+                    key=lambda position: (
+                        -float(
+                            revision_margin[
+                                position_to_masked_index[int(position)]
+                            ].item()
+                        ),
+                        -float(confidence[batch_idx, position].item()),
+                    )
+                )
+                ordered = torch.tensor(unstable, dtype=torch.long, device=x.device)
+            else:
+                ordered = masked[
+                    torch.topk(
+                        confidence[batch_idx, masked], k=masked.numel()
+                    ).indices
+                ]
             diagnostics["all_immature_fallback"] = True
         else:
             # Mature candidates must remain bit-for-bit ordered by the parent
@@ -262,22 +331,34 @@ def select_attention_stability_tokens(
                     ).indices
                 ]
             if immature_positions.numel() > 0:
-                if temporal_mode == "topk_overlap" and history_available:
+                if temporal_mode in {"topk_overlap", "revision_margin"} and history_available:
                     position_to_masked_index = {
                         int(position): index
                         for index, position in enumerate(masked.tolist())
                     }
                     unstable = immature_positions.tolist()
-                    unstable.sort(
-                        key=lambda position: (
-                            -int(
-                                overlap_count[
-                                    position_to_masked_index[int(position)]
-                                ].item()
-                            ),
-                            -float(confidence[batch_idx, position].item()),
+                    if temporal_mode == "topk_overlap":
+                        unstable.sort(
+                            key=lambda position: (
+                                -int(
+                                    overlap_count[
+                                        position_to_masked_index[int(position)]
+                                    ].item()
+                                ),
+                                -float(confidence[batch_idx, position].item()),
+                            )
                         )
-                    )
+                    else:
+                        unstable.sort(
+                            key=lambda position: (
+                                -float(
+                                    revision_margin[
+                                        position_to_masked_index[int(position)]
+                                    ].item()
+                                ),
+                                -float(confidence[batch_idx, position].item()),
+                            )
+                        )
                     immature_order = torch.tensor(
                         unstable, dtype=torch.long, device=x.device
                     )
@@ -386,6 +467,7 @@ def select_attention_stability_tokens(
             "topk_overlap_count": overlap_count.cpu(),
             "temporal_tier": temporal_tier.cpu(),
             "response_credit": response_credit.cpu(),
+            "revision_margin": revision_margin.cpu(),
             "max_dependency_to_previous": max_dependency.to(torch.float32).cpu(),
             "maturity": maturity.cpu(),
             "ordered_positions_global": ordered.to(torch.int32).cpu(),
@@ -428,7 +510,12 @@ def generate_attention_stability(
     nfe = 0
     if dependency_mode not in {"symmetric", "directed_read"}:
         raise ValueError(f"unsupported dependency mode: {dependency_mode}")
-    if temporal_mode not in {"top1", "topk_overlap", "response_credit"}:
+    if temporal_mode not in {
+        "top1",
+        "topk_overlap",
+        "response_credit",
+        "revision_margin",
+    }:
         raise ValueError(f"unsupported temporal mode: {temporal_mode}")
     summary = {
         "decoder": (
@@ -455,6 +542,9 @@ def generate_attention_stability(
         "response_validations": 0,
         "response_invalidations": 0,
         "response_credit_max": 0,
+        "revision_margin_max": 0.0,
+        "revision_margin_sum": 0.0,
+        "revision_margin_candidates": 0,
         "strongly_dependent_candidates": 0,
         "rejected_pairs": 0,
         "stable_conflicts_pruned": 0,
@@ -545,6 +635,16 @@ def generate_attention_stability(
             summary["response_credit_max"] = max(
                 summary["response_credit_max"], step_diagnostics["response_credit_max"]
             )
+            summary["revision_margin_max"] = max(
+                summary["revision_margin_max"],
+                step_diagnostics["revision_margin_max"],
+            )
+            summary["revision_margin_sum"] += step_diagnostics[
+                "revision_margin_sum"
+            ]
+            summary["revision_margin_candidates"] += step_diagnostics[
+                "revision_margin_candidates"
+            ]
             summary["strongly_dependent_candidates"] += step_diagnostics["strongly_dependent_candidates"]
             summary["rejected_pairs"] += step_diagnostics["rejected_pairs"]
             summary["stable_conflicts_pruned"] += step_diagnostics["stable_conflicts_pruned"]
@@ -594,6 +694,11 @@ def generate_attention_stability(
                     "response_validations": step_diagnostics["response_validations"],
                     "response_invalidations": step_diagnostics["response_invalidations"],
                     "response_credit_max": step_diagnostics["response_credit_max"],
+                    "revision_margin_max": step_diagnostics["revision_margin_max"],
+                    "revision_margin_sum": step_diagnostics["revision_margin_sum"],
+                    "revision_margin_candidates": step_diagnostics[
+                        "revision_margin_candidates"
+                    ],
                     "rejected_pairs": step_diagnostics["rejected_pairs"],
                     "stable_conflicts_pruned": step_diagnostics["stable_conflicts_pruned"],
                     "forced_budget_fills": step_diagnostics["forced_budget_fills"],
@@ -617,6 +722,13 @@ def generate_attention_stability(
         summary["attention_asymmetry_mean"] = (
             summary.pop("attention_asymmetry_mean_sum") / summary["dependency_observations"]
         )
+    if summary["revision_margin_candidates"]:
+        summary["revision_margin_mean"] = (
+            summary["revision_margin_sum"]
+            / summary["revision_margin_candidates"]
+        )
+    else:
+        summary["revision_margin_mean"] = 0.0
     if collect_step_diagnostics:
         summary["_step_records"] = step_records
     return x, nfe, summary

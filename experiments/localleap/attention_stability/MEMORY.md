@@ -1,5 +1,23 @@
 # Memory
 
+## 2026-07-17
+
+- Added `revision_margin_fast`, a minimal vertical descendant of the strongest
+  `symmetric_fast` parent. For a strong conditioned top-1 change it records the
+  current log-probability advantage of the new candidate over the previous one,
+  and uses this only inside the unstable tail. It adds no method threshold or
+  historical distribution and preserves the parent mature order, horizontal
+  tau-0.004 exclusion and fixed commit budget.
+- Reworked the pending queue into sampled development gates: HumanEval 32 then
+  64; MBPP 100; MATH-500 100; GSM8K 128. New single-trajectory rules must
+  strictly beat `symmetric_fast`; ties remain with the parent. A tested,
+  auditable profile selector prevents unhealthy or tied arms from receiving
+  full runs.
+- Corrected future GSM8K auditing to lm-eval `flexible-extract`. The completed
+  original-LLaDA zero-shot baseline was independently re-audited at 905/1319
+  (68.61%), while the earlier 1/1319 strict-match figure was an extraction
+  configuration failure and is not a model result.
+
 ## 2026-07-16 — Return to best symmetric parent and broaden benchmarks
 
 - Formally rejected global top-K retention (HumanEval-256 64/164). The

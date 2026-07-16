@@ -117,6 +117,17 @@ execution selector and directly test shared-skeleton repair. Every promotion is
 paired by stable id and prompt/target hash, with source freezing, disk gates,
 NFE/wall-time reporting and versioned outputs.
 
+The queue now also contains a smaller longitudinal descendant,
+`revision_margin_fast`. It does not assume the preceding top-1 is correct. For
+positions that changed after a strong newly committed dependency, it measures
+the current log-probability advantage of the new top-1 over the previous top-1
+and uses that value only to order the parent's unstable tail. Mature candidates,
+tau-0.004 horizontal exclusion and the original fixed commit budget are
+unchanged. HumanEval 32/64 samples compare it and `response_credit_fast` against
+the established `symmetric_fast` parent; ties remain with the parent and only a
+strictly better new rule reaches a full run. MBPP uses 100-example gates, while
+MATH-500 and GSM8K stay sampled in this round.
+
 ## Deprecated (cleaned 2026-07-13)
 
 Trajectory / lateral-response / agreement / ceiling-bug evals were removed from `results/` (local + AutoDL `dlm-seq-flow`).
