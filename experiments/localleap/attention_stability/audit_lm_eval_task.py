@@ -67,9 +67,13 @@ def main():
     parser.add_argument("--primary-metric", required=True)
     parser.add_argument("--filter")
     parser.add_argument("--trace")
+    parser.add_argument("--constant-nfe", type=int)
     parser.add_argument("--expected-records", type=int, required=True)
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
+
+    if args.trace and args.constant_nfe is not None:
+        raise SystemExit("use either --trace or --constant-nfe, not both")
 
     samples = select_filter_records(read_jsonl(args.samples), args.filter)
     if len(samples) != args.expected_records:
@@ -94,6 +98,7 @@ def main():
             doc.get("task_id")
             or doc.get("id")
             or doc.get("problem_id")
+            or doc.get("unique_id")
             or f"index_{sample.get('doc_id', index)}"
         )
         if stable_id in stable_ids:
@@ -127,7 +132,11 @@ def main():
             "decoded_generation": generation,
             "correct": bool(correct_value),
             "primary_metric": args.primary_metric,
-            "nfe": int(trace["nfe"]) if trace is not None else None,
+            "nfe": (
+                int(trace["nfe"])
+                if trace is not None
+                else args.constant_nfe
+            ),
             "evaluator_version": VERSION,
         })
 
@@ -154,6 +163,17 @@ def main():
         "duplicate_prompt_hashes": 0,
         "prompt_hash_mismatches": 0,
         "generation_mismatches": 0,
+        "nfe_min": min(
+            (record["nfe"] for record in records if record["nfe"] is not None),
+            default=None,
+        ),
+        "nfe_max": max(
+            (record["nfe"] for record in records if record["nfe"] is not None),
+            default=None,
+        ),
+        "nfe_total": sum(
+            record["nfe"] for record in records if record["nfe"] is not None
+        ),
     }
     (output_dir / "task_audit_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"

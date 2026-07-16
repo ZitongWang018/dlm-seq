@@ -1,5 +1,19 @@
 # Memory
 
+## 2026-07-16 — Return to best symmetric parent and broaden benchmarks
+
+- Formally rejected global top-K retention (HumanEval-256 64/164). The
+  parent-preserving v2.1 variant recovered 71/164 at 256 steps but reached only
+  47/164 at 128 steps, below the 52/164 symmetric-fast parent.
+- Cancelled `attention_retention_v21_20260716` while preserving its completed
+  HumanEval runs and partial MBPP output.
+- Added a cached, zero-shot MATH-500 lm-eval task, stable `unique_id` tracing,
+  constant-NFE audit records, general paired task audits, and a resumable long
+  queue based only on original LLaDA versus symmetric tau 0.004.
+- Added a versioned paper-alignment table for Prism, SOAR and Order-Token Search.
+  Paper values remain external references because checkpoints, prompts and
+  inference stacks are not fully identical.
+
 ## 2026-07-14
 
 - Completed the first attention-stability sensitivity sweep. Exact-baseline

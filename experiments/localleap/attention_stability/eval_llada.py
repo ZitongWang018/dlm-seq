@@ -536,6 +536,7 @@ class LLaDAEvalHarness(LM):
                 req.doc.get("task_id")
                 or req.doc.get("id")
                 or req.doc.get("problem_id")
+                or req.doc.get("unique_id")
                 or f"index_{i}"
             )
             raw_gold_for_trace = (

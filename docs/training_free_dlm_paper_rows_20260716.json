@@ -1,0 +1,40 @@
+{
+  "schema_version": "paper_reported_dlm_rows_v1",
+  "checked_date": "2026-07-16",
+  "warning": "Paper-reported values only; not local reproductions.",
+  "methods": [
+    {
+      "name": "Order-Token Search",
+      "source": "https://arxiv.org/abs/2601.20339v2",
+      "model": "LLaDA-8B-Instruct",
+      "setting": "sequence_length=256, steps=128, block_length=32",
+      "rows": {
+        "low_confidence": {"gsm8k": 76.7, "math500": 32.4, "countdown": 19.5, "humaneval": 26.2},
+        "order_token_search": {"gsm8k": 79.8, "math500": 36.0, "countdown": 26.2, "humaneval": 34.2}
+      }
+    },
+    {
+      "name": "Prism",
+      "source": "https://arxiv.org/abs/2602.01842v3",
+      "model": "LLaDA-8B-Instruct",
+      "setting": "zero-shot; math length/NFE=256; code length/NFE=512; block_length=32",
+      "rows": {
+        "baseline_n1": {"gsm8k": [67.58, 256], "math500": [26.40, 256], "humaneval": [54.88, 512], "mbpp": [21.80, 512]},
+        "prism_k2": {"gsm8k": [74.24, 283], "math500": [30.16, 334], "humaneval": [71.34, 549], "mbpp": [29.40, 561]},
+        "prism_k4": {"gsm8k": [75.30, 509], "math500": [37.70, 622], "humaneval": [76.19, 1133], "mbpp": [32.40, 1196]},
+        "prism_k8": {"gsm8k": [85.30, 1048], "math500": [42.80, 1304], "humaneval": [79.27, 2480], "mbpp": [38.20, 2576]}
+      }
+    },
+    {
+      "name": "SOAR",
+      "source": "https://arxiv.org/abs/2602.10953v2",
+      "model": "LLaDA-8B-Base",
+      "setting": "tau=0.95, beam=2, HE 0-shot, MBPP 3-shot, GSM8K 4-shot, A100-80GB",
+      "rows": {
+        "greedy": {"humaneval_256_512": [32.3, 32.9], "mbpp_256_512": [40.8, 39.2], "gsm8k_256_512": [70.4, 70.9]},
+        "soar": {"humaneval_256_512": [32.9, 39.0], "mbpp_256_512": [40.8, 39.4], "gsm8k_256_512": [71.3, 71.5], "mean_speedup": 1.62}
+      }
+    }
+  ]
+}
+

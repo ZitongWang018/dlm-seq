@@ -77,6 +77,24 @@ validator and GSM8K filter-aware auditor pass. The replacement queue is
 `attention_retention_v2_20260716`; it drops full 64-step method branches and
 tests HumanEval, MBPP, and GSM8K against original LLaDA and the best parent.
 
+The global top-K retention decoder was formally negative on HumanEval-256
+(64/164). Its parent-preserving v2.1 correction recovered 71/164 at 256 steps,
+but the fixed-budget 128-step result was only 47/164, below the best
+`symmetric_fast` parent result of 52/164. The v2.1 queue was therefore cancelled
+without overwriting its completed or partial outputs. Top-K retention is not a
+new parent for further development.
+
+The active benchmark direction returns to the strongest verified architecture:
+original LLaDA is always the baseline, symmetric attention with tau `0.004` is
+the accuracy-first parent, and `symmetric_fast` is its fixed-budget speed child.
+The long queue `best_symmetric_long_20260716_v1` adds an offline-cached MATH-500
+task, full sample-level and paired audits, and speed/NFE summaries. It prioritizes
+MATH-500, MBPP and GSM8K at generation length 256 / 128 steps, then runs
+four-shot and length-512 robustness arms. Recent paper rows from Prism, SOAR and
+Order-Token Search are stored as paper-reported references in
+`docs/training_free_dlm_baseline_alignment_20260716.md`; they are not labeled as
+local reproductions.
+
 ## Deprecated (cleaned 2026-07-13)
 
 Trajectory / lateral-response / agreement / ceiling-bug evals were removed from `results/` (local + AutoDL `dlm-seq-flow`).  
