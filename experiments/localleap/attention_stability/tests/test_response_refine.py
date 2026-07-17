@@ -1,4 +1,5 @@
 import torch
+from types import SimpleNamespace
 
 import generate
 
@@ -34,6 +35,23 @@ def test_frontier_prefers_forced_conditioned_risk_without_score_weight():
     assert torch.where(remask[0])[0].tolist() == [3]
     assert summary["remask_per_block"] == 1
     assert summary["selected_forced_commits"] == 1
+
+
+def test_risk_gated_frontier_underfills_instead_of_rewriting_stable_tokens():
+    risk = make_position_risk()
+    risk["response_invalidations"][2] = 1
+    remask, summary = generate.build_response_refine_mask(
+        position_risk=risk,
+        prompt_length=1,
+        gen_length=4,
+        block_length=4,
+        dependency_threshold=0.004,
+        repair_steps=2,
+        risk_gated=True,
+    )
+    assert torch.where(remask[0])[0].tolist() == [2]
+    assert summary["risk_gated"] is True
+    assert summary["remasked_positions"] == 1
 
 
 def test_repair_decodes_live_directed_source_before_dependent():
@@ -117,8 +135,39 @@ def test_matched_mode_preserves_total_forward_budget():
     assert summary["repair_nfe"] == 2
 
 
+def test_shared_mask_retention_accepts_or_rejects_whole_blocks():
+    class FakeModel:
+        def __call__(self, x):
+            logits = torch.zeros((*x.shape, 10), dtype=torch.float32)
+            logits[0, 1, 2] = 5.0  # repaired token wins in block 0
+            logits[0, 1, 1] = 1.0
+            logits[0, 3, 3] = 5.0  # original token wins in block 1
+            logits[0, 3, 4] = 1.0
+            return SimpleNamespace(logits=logits)
+
+    draft = torch.tensor([[9, 1, 2, 3, 4]], dtype=torch.long)
+    repaired = torch.tensor([[9, 2, 2, 4, 4]], dtype=torch.long)
+    remask = torch.tensor([[False, True, False, True, False]])
+    retained, nfe, summary = generate.retain_response_refine_blocks(
+        model=FakeModel(),
+        draft=draft,
+        repaired=repaired,
+        remask=remask,
+        prompt_length=1,
+        gen_length=4,
+        block_length=2,
+        mask_id=7,
+    )
+    assert nfe == 1
+    assert retained.tolist() == [[9, 2, 2, 3, 4]]
+    assert summary["accepted_blocks"] == 1
+    assert summary["rejected_blocks"] == 1
+
+
 if __name__ == "__main__":
     test_frontier_prefers_forced_conditioned_risk_without_score_weight()
+    test_risk_gated_frontier_underfills_instead_of_rewriting_stable_tokens()
     test_repair_decodes_live_directed_source_before_dependent()
     test_matched_mode_preserves_total_forward_budget()
-    print("3 response-refine tests passed")
+    test_shared_mask_retention_accepts_or_rejects_whole_blocks()
+    print("5 response-refine tests passed")

@@ -816,6 +816,7 @@ def build_response_refine_mask(
     block_length,
     dependency_threshold,
     repair_steps,
+    risk_gated=False,
 ):
     """Choose a fixed-budget remasking frontier from horizontal/vertical risk.
 
@@ -869,9 +870,29 @@ def build_response_refine_mask(
                 local_position,
             )
 
-        selected_local = sorted(range(block_length), key=risk_key)[
-            :remask_per_block
-        ]
+        candidate_local = list(range(block_length))
+        if risk_gated:
+            candidate_local = [
+                local_position
+                for local_position in candidate_local
+                if bool(
+                    position_risk["commit_forced"][
+                        block_start + local_position
+                    ].item()
+                )
+                or not bool(
+                    position_risk["commit_maturity"][
+                        block_start + local_position
+                    ].item()
+                )
+                or int(
+                    position_risk["response_invalidations"][
+                        block_start + local_position
+                    ].item()
+                )
+                > 0
+            ]
+        selected_local = sorted(candidate_local, key=risk_key)[:remask_per_block]
         selected_global = [block_start + item for item in selected_local]
         remask[0, torch.tensor(selected_global, dtype=torch.long)] = True
         selected_records = []
@@ -925,7 +946,12 @@ def build_response_refine_mask(
 
     selected_count = int(remask.sum().item())
     summary = {
-        "frontier_rule": "forced_invalidation_maturity_incidence_confidence_v1",
+        "frontier_rule": (
+            "observed_risk_then_forced_invalidation_maturity_incidence_v2"
+            if risk_gated
+            else "forced_invalidation_maturity_incidence_confidence_v1"
+        ),
+        "risk_gated": bool(risk_gated),
         "remask_per_block": int(remask_per_block),
         "remasked_positions": selected_count,
         "selected_forced_commits": int(selected_forced),
@@ -1124,6 +1150,83 @@ def repair_response_refine_positions(
 
 
 @torch.no_grad()
+def retain_response_refine_blocks(
+    model,
+    draft,
+    repaired,
+    remask,
+    prompt_length,
+    gen_length,
+    block_length,
+    mask_id=126336,
+):
+    """Keep a repaired block only when it beats the retained draft.
+
+    All positions changed by the repair are masked in one shared context.  The
+    original and repaired token values are therefore compared under exactly the
+    same explicit conditions.  Scores are accumulated per generation block so
+    horizontally coupled changes are accepted or rejected together.  The rule
+    has no learned verifier, score weight, or additional threshold.
+    """
+    if draft.shape != repaired.shape or draft.shape != remask.shape:
+        raise ValueError("draft, repaired, and remask must have identical shapes")
+    changed = (draft != repaired) & remask.to(device=draft.device, dtype=torch.bool)
+    changed[:, :prompt_length] = False
+    output = draft.clone()
+    summary = {
+        "selector": "shared_mask_block_retention_v1",
+        "changed_positions": int(changed.sum().item()),
+        "accepted_blocks": 0,
+        "rejected_blocks": 0,
+        "accepted_positions": 0,
+        "selector_nfe": 0,
+        "blocks": [],
+    }
+    if not changed.any():
+        return output, 0, summary
+
+    score_context = draft.clone()
+    score_context[changed] = mask_id
+    log_probs = torch.log_softmax(model(score_context).logits.float(), dim=-1)
+    summary["selector_nfe"] = 1
+    num_blocks = gen_length // block_length
+    for block_idx in range(num_blocks):
+        block_start = prompt_length + block_idx * block_length
+        block_end = block_start + block_length
+        block_changed = changed[:, block_start:block_end]
+        local_positions = torch.where(block_changed[0])[0]
+        if local_positions.numel() == 0:
+            continue
+        global_positions = local_positions + block_start
+        original_tokens = draft[0, global_positions]
+        repaired_tokens = repaired[0, global_positions]
+        original_score = float(
+            log_probs[0, global_positions, original_tokens].sum().item()
+        )
+        repaired_score = float(
+            log_probs[0, global_positions, repaired_tokens].sum().item()
+        )
+        accept = repaired_score > original_score
+        if accept:
+            output[0, global_positions] = repaired[0, global_positions]
+            summary["accepted_blocks"] += 1
+            summary["accepted_positions"] += int(global_positions.numel())
+        else:
+            summary["rejected_blocks"] += 1
+        summary["blocks"].append(
+            {
+                "block_index": int(block_idx),
+                "changed_positions": [int(item) for item in global_positions.tolist()],
+                "original_log_score": original_score,
+                "repaired_log_score": repaired_score,
+                "score_margin": repaired_score - original_score,
+                "accepted": bool(accept),
+            }
+        )
+    return output, 1, summary
+
+
+@torch.no_grad()
 def generate_response_refine(
     model,
     prompt,
@@ -1144,8 +1247,8 @@ def generate_response_refine(
     ``extra`` keeps the full parent draft budget and adds a half-budget repair.
     These are discrete compute regimes rather than tuned score weights.
     """
-    if budget_mode not in {"matched", "extra"}:
-        raise ValueError("budget_mode must be 'matched' or 'extra'")
+    if budget_mode not in {"matched", "extra", "gated"}:
+        raise ValueError("budget_mode must be matched, extra, or gated")
     num_blocks = gen_length // block_length
     repair_steps = steps // 2
     fill_steps = steps // 2 if budget_mode == "matched" else steps
@@ -1180,6 +1283,7 @@ def generate_response_refine(
         block_length=block_length,
         dependency_threshold=dependency_threshold,
         repair_steps=repair_steps,
+        risk_gated=budget_mode == "gated",
     )
     repaired, repair_nfe, repair_summary = repair_response_refine_positions(
         model=model,
@@ -1194,8 +1298,22 @@ def generate_response_refine(
         remasking=remasking,
         mask_id=mask_id,
     )
+    retained = repaired
+    selector_nfe = 0
+    retention_summary = None
+    if budget_mode == "gated":
+        retained, selector_nfe, retention_summary = retain_response_refine_blocks(
+            model=model,
+            draft=draft,
+            repaired=repaired,
+            remask=remask,
+            prompt_length=prompt.shape[1],
+            gen_length=gen_length,
+            block_length=block_length,
+            mask_id=mask_id,
+        )
     summary = {
-        "decoder": "response_refine_v1",
+        "decoder": "response_refine_v2" if budget_mode == "gated" else "response_refine_v1",
         "budget_mode": budget_mode,
         "dependency_threshold": float(dependency_threshold),
         "configured_steps": int(steps),
@@ -1203,16 +1321,19 @@ def generate_response_refine(
         "repair_steps": int(repair_steps),
         "fill_nfe": int(fill_nfe),
         "repair_nfe": int(repair_nfe),
-        "total_nfe": int(fill_nfe + repair_nfe),
+        "selector_nfe": int(selector_nfe),
+        "total_nfe": int(fill_nfe + repair_nfe + selector_nfe),
         "gen_length": int(gen_length),
         "block_length": int(block_length),
         "frontier": frontier_summary,
         "fill": fill_summary,
         "repair": repair_summary,
+        "retention": retention_summary,
         "draft_to_repaired_changes": int((draft != repaired).sum().item()),
-        "residual_mask_count": int((repaired == mask_id).sum().item()),
+        "draft_to_retained_changes": int((draft != retained).sum().item()),
+        "residual_mask_count": int((retained == mask_id).sum().item()),
     }
-    return repaired, summary["total_nfe"], summary
+    return retained, summary["total_nfe"], summary
 
 
 @torch.no_grad()

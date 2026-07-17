@@ -57,6 +57,9 @@ case "${profile}" in
   response_refine_extra)
     dependency_args=",dependency_threshold=${tau},dependency_response_refine=True,dependency_response_refine_budget_mode=extra"
     ;;
+  response_refine_gated)
+    dependency_args=",dependency_threshold=${tau},dependency_response_refine=True,dependency_response_refine_budget_mode=gated"
+    ;;
   draft_exchange)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_draft_exchange=True,dependency_differential_selection=False,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

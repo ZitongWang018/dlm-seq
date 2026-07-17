@@ -223,9 +223,13 @@ class LLaDAEvalHarness(LM):
         self.dependency_response_refine_budget_mode = str(
             dependency_response_refine_budget_mode
         )
-        if self.dependency_response_refine_budget_mode not in {"matched", "extra"}:
+        if self.dependency_response_refine_budget_mode not in {
+            "matched",
+            "extra",
+            "gated",
+        }:
             raise ValueError(
-                "dependency_response_refine_budget_mode must be matched or extra"
+                "dependency_response_refine_budget_mode must be matched, extra, or gated"
             )
         self.candidate_memory_topk = candidate_memory_topk
         self.candidate_memory_confidence_threshold = candidate_memory_confidence_threshold
@@ -559,7 +563,11 @@ class LLaDAEvalHarness(LM):
                     else "attention_stability_steps_v1"
                 )
                 trace_evaluator_version = (
-                    "response_refine_trace_v1"
+                    (
+                        "response_refine_trace_v2"
+                        if self.dependency_response_refine_budget_mode == "gated"
+                        else "response_refine_trace_v1"
+                    )
                     if self.dependency_response_refine
                     else "response_credit_draft_exchange_trace_v1"
                     if self.dependency_draft_exchange
