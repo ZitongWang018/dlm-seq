@@ -41,7 +41,7 @@ PY
       [[ -f "${file}" ]] || continue
       tail -n 200 "${file}" | grep -E 'Traceback|CUDA out of memory|OutOfMemory|AssertionError|HARD STOP|FAILED_SOURCE' || true
     done
-    sha256sum -c "${queue_root}/FROZEN_SOURCE_SHA256" >/dev/null 2>&1 || echo SOURCE_HASH_DRIFT
+    (cd /root/autodl-tmp/LocalLeap/llada && sha256sum -c "${queue_root}/FROZEN_SOURCE_SHA256" >/dev/null 2>&1) || echo SOURCE_HASH_DRIFT
   } >>"${log}" 2>&1
   sleep 300
 done
