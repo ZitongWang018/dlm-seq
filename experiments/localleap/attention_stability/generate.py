@@ -499,6 +499,7 @@ def generate_attention_stability(
     temporal_topk=4,
     prune_stable_conflicts=False,
     fill_budget=False,
+    collect_position_risk=False,
 ):
     """Baseline LLaDA decoding with the proposed attention/stability selection layered on top."""
     x = torch.full((1, prompt.shape[1] + gen_length), mask_id, dtype=torch.long, device=model.device)
@@ -558,6 +559,22 @@ def generate_attention_stability(
         "attention_asymmetry_mean_sum": 0.0,
     }
     step_records = []
+    position_risk = None
+    if collect_position_risk:
+        sequence_length = x.shape[1]
+        position_risk = {
+            "response_invalidations": torch.zeros(sequence_length, dtype=torch.int32),
+            "response_validations": torch.zeros(sequence_length, dtype=torch.int32),
+            "commit_confidence": torch.full(
+                (sequence_length,), float("nan"), dtype=torch.float32
+            ),
+            "commit_maturity": torch.ones(sequence_length, dtype=torch.bool),
+            "commit_forced": torch.zeros(sequence_length, dtype=torch.bool),
+            "commit_revision_margin": torch.zeros(
+                sequence_length, dtype=torch.float32
+            ),
+            "final_directional_attention": [],
+        }
 
     for block_idx in range(num_blocks):
         block_start = prompt.shape[1] + block_idx * block_length
@@ -569,6 +586,7 @@ def generate_attention_stability(
         previous_topk_ids = None
         previous_response_credit = None
         previous_selected = None
+        last_directional_attention = None
         while (x[:, block_start:block_end] == mask_id).any():
             if step_idx >= block_steps:
                 # Conservative under-filling may require extra forwards.  Continue
@@ -583,6 +601,9 @@ def generate_attention_stability(
             logits, directional_attention, symmetric_dependency = _forward_with_block_attention(
                 model, x, block_start, block_end
             )
+            last_directional_attention = directional_attention[0].detach().to(
+                torch.float32
+            ).cpu()
             dependency = (
                 symmetric_dependency
                 if dependency_mode == "symmetric"
@@ -651,6 +672,47 @@ def generate_attention_stability(
             summary["forced_budget_fills"] += step_diagnostics["forced_budget_fills"]
             summary["underfilled_steps"] += int(step_diagnostics["underfilled"])
             summary["all_immature_fallback_steps"] += int(step_diagnostics["all_immature_fallback"])
+            if collect_position_risk:
+                candidate_state = step_diagnostics["candidate_state"][0]
+                candidate_positions = candidate_state[
+                    "masked_positions_global"
+                ].to(torch.long)
+                strong_response = (
+                    candidate_state["max_dependency_to_previous"]
+                    > dependency_threshold
+                )
+                changed_response = candidate_state["candidate_changed"]
+                position_risk["response_invalidations"][candidate_positions] += (
+                    strong_response & changed_response
+                ).to(torch.int32)
+                position_risk["response_validations"][candidate_positions] += (
+                    strong_response & ~changed_response
+                ).to(torch.int32)
+
+                selected_positions = candidate_state[
+                    "selected_positions_global"
+                ].to(torch.long)
+                forced_positions = set(
+                    candidate_state["forced_fill_positions_global"].tolist()
+                )
+                position_to_candidate = {
+                    int(position): index
+                    for index, position in enumerate(candidate_positions.tolist())
+                }
+                for selected_position in selected_positions.tolist():
+                    candidate_index = position_to_candidate[int(selected_position)]
+                    position_risk["commit_confidence"][selected_position] = (
+                        candidate_state["top1_confidences"][candidate_index]
+                    )
+                    position_risk["commit_maturity"][selected_position] = (
+                        candidate_state["maturity"][candidate_index]
+                    )
+                    position_risk["commit_forced"][selected_position] = (
+                        int(selected_position) in forced_positions
+                    )
+                    position_risk["commit_revision_margin"][selected_position] = (
+                        candidate_state["revision_margin"][candidate_index]
+                    )
             if collect_step_diagnostics:
                 candidate_state = step_diagnostics["candidate_state"][0]
                 selected_positions = torch.where(transfer_index[0])[0]
@@ -713,6 +775,13 @@ def generate_attention_stability(
             x[transfer_index] = x0[transfer_index]
             step_idx += 1
 
+        if collect_position_risk:
+            if last_directional_attention is None:
+                raise RuntimeError("missing final directional attention for block")
+            position_risk["final_directional_attention"].append(
+                last_directional_attention
+            )
+
         if early_stop and (x[:, block_start:block_end] == eos_id).any():
             x[:, block_end:] = eos_id
             break
@@ -731,7 +800,419 @@ def generate_attention_stability(
         summary["revision_margin_mean"] = 0.0
     if collect_step_diagnostics:
         summary["_step_records"] = step_records
+    if collect_position_risk:
+        position_risk["final_directional_attention"] = torch.stack(
+            position_risk["final_directional_attention"], dim=0
+        )
+        summary["_position_risk_state"] = position_risk
     return x, nfe, summary
+
+
+@torch.no_grad()
+def build_response_refine_mask(
+    position_risk,
+    prompt_length,
+    gen_length,
+    block_length,
+    dependency_threshold,
+    repair_steps,
+):
+    """Choose a fixed-budget remasking frontier from horizontal/vertical risk.
+
+    The frontier size is determined by the number of available repair forwards,
+    not by another score threshold.  Within each block, lexicographic risk is:
+    forced commit, repeated conditioned invalidation, immature commit, dense
+    directed-attention incidence, then low commit confidence.
+    """
+    if gen_length % block_length != 0:
+        raise ValueError("gen_length must be divisible by block_length")
+    num_blocks = gen_length // block_length
+    if repair_steps % num_blocks != 0:
+        raise ValueError("repair_steps must be divisible by the number of blocks")
+    remask_per_block = repair_steps // num_blocks
+    if remask_per_block < 1 or remask_per_block > block_length:
+        raise ValueError("repair budget must select between 1 and block_length tokens")
+
+    sequence_length = prompt_length + gen_length
+    remask = torch.zeros((1, sequence_length), dtype=torch.bool)
+    block_records = []
+    selected_invalidation_sum = 0
+    selected_forced = 0
+    selected_immature = 0
+    selected_incident_sum = 0
+
+    for block_idx in range(num_blocks):
+        block_start = prompt_length + block_idx * block_length
+        directional = position_risk["final_directional_attention"][block_idx]
+        strong_edges = directional > dependency_threshold
+        incoming_source_count = strong_edges.sum(dim=1).to(torch.int32)
+        outgoing_reader_count = strong_edges.sum(dim=0).to(torch.int32)
+        incident_count = incoming_source_count + outgoing_reader_count
+
+        def risk_key(local_position):
+            global_position = block_start + local_position
+            confidence = float(
+                position_risk["commit_confidence"][global_position].item()
+            )
+            if not np.isfinite(confidence):
+                confidence = -float("inf")
+            return (
+                -int(position_risk["commit_forced"][global_position].item()),
+                -int(
+                    position_risk["response_invalidations"][global_position].item()
+                ),
+                -int(
+                    not position_risk["commit_maturity"][global_position].item()
+                ),
+                -int(incident_count[local_position].item()),
+                confidence,
+                local_position,
+            )
+
+        selected_local = sorted(range(block_length), key=risk_key)[
+            :remask_per_block
+        ]
+        selected_global = [block_start + item for item in selected_local]
+        remask[0, torch.tensor(selected_global, dtype=torch.long)] = True
+        selected_records = []
+        for local_position, global_position in zip(
+            selected_local, selected_global
+        ):
+            invalidations = int(
+                position_risk["response_invalidations"][global_position].item()
+            )
+            forced = bool(position_risk["commit_forced"][global_position].item())
+            immature = not bool(
+                position_risk["commit_maturity"][global_position].item()
+            )
+            incident = int(incident_count[local_position].item())
+            selected_invalidation_sum += invalidations
+            selected_forced += int(forced)
+            selected_immature += int(immature)
+            selected_incident_sum += incident
+            selected_records.append(
+                {
+                    "global_position": int(global_position),
+                    "local_position": int(local_position),
+                    "response_invalidations": invalidations,
+                    "response_validations": int(
+                        position_risk["response_validations"][global_position].item()
+                    ),
+                    "commit_forced": forced,
+                    "commit_maturity": not immature,
+                    "commit_confidence": float(
+                        position_risk["commit_confidence"][global_position].item()
+                    ),
+                    "commit_revision_margin": float(
+                        position_risk["commit_revision_margin"][global_position].item()
+                    ),
+                    "incoming_source_count": int(
+                        incoming_source_count[local_position].item()
+                    ),
+                    "outgoing_reader_count": int(
+                        outgoing_reader_count[local_position].item()
+                    ),
+                    "incident_count": incident,
+                }
+            )
+        block_records.append(
+            {
+                "block_index": int(block_idx),
+                "selected_positions": selected_records,
+                "strong_directed_edge_count": int(strong_edges.sum().item()),
+            }
+        )
+
+    selected_count = int(remask.sum().item())
+    summary = {
+        "frontier_rule": "forced_invalidation_maturity_incidence_confidence_v1",
+        "remask_per_block": int(remask_per_block),
+        "remasked_positions": selected_count,
+        "selected_forced_commits": int(selected_forced),
+        "selected_immature_commits": int(selected_immature),
+        "selected_response_invalidations": int(selected_invalidation_sum),
+        "selected_incident_count": int(selected_incident_sum),
+        "mean_invalidations_per_remasked_position": (
+            selected_invalidation_sum / selected_count if selected_count else 0.0
+        ),
+        "mean_incident_count_per_remasked_position": (
+            selected_incident_sum / selected_count if selected_count else 0.0
+        ),
+        "blocks": block_records,
+    }
+    return remask, summary
+
+
+@torch.no_grad()
+def repair_response_refine_positions(
+    model,
+    draft,
+    remask,
+    prompt_length,
+    dependency_threshold,
+    repair_steps,
+    gen_length,
+    block_length,
+    temperature=0.0,
+    remasking="low_confidence",
+    mask_id=126336,
+):
+    """Repair the selected frontier under a preserved full-draft skeleton.
+
+    Attention remains directed.  The first token in every block is the
+    high-outgoing, low-incoming source according to the live repair forward;
+    later tokens use conditioned revision margin and therefore treat earlier
+    top-1 candidates as probes rather than as labels.
+    """
+    if draft.shape != remask.shape:
+        raise ValueError("draft and remask must have identical shapes")
+    num_blocks = gen_length // block_length
+    if repair_steps % num_blocks != 0:
+        raise ValueError("repair_steps must be divisible by the number of blocks")
+    allocated_steps = repair_steps // num_blocks
+    x = draft.clone()
+    mutable = remask.clone().to(dtype=torch.bool, device=x.device)
+    mutable[:, :prompt_length] = False
+    x[mutable] = mask_id
+    nfe = 0
+    selection_order = []
+    source_records = []
+    summary = {
+        "decoder": "directed_response_refine_repair_v1",
+        "dependency_mode": "directed_read",
+        "temporal_mode": "revision_margin",
+        "repair_nfe": 0,
+        "remasked_positions": int(mutable.sum().item()),
+        "response_validations": 0,
+        "response_invalidations": 0,
+        "revision_margin_candidates": 0,
+        "revision_margin_sum": 0.0,
+        "revision_margin_max": 0.0,
+        "strongly_dependent_candidates": 0,
+        "source_first_overrides": 0,
+        "underfilled_steps": 0,
+    }
+
+    for block_idx in range(num_blocks):
+        block_start = prompt_length + block_idx * block_length
+        block_end = block_start + block_length
+        planned_count = int(mutable[:, block_start:block_end].sum().item())
+        if planned_count == 0:
+            continue
+        budget = max(1, int(np.ceil(planned_count / allocated_steps)))
+        previous_top1 = None
+        previous_topk_ids = None
+        previous_response_credit = None
+        previous_selected = None
+        first_step = True
+        while (x[:, block_start:block_end] == mask_id).any():
+            nfe += 1
+            mask_index = x == mask_id
+            mask_index[:, :block_start] = False
+            mask_index[:, block_end:] = False
+            current_budget = min(budget, int(mask_index[0].sum().item()))
+            logits, directional_attention, _ = _forward_with_block_attention(
+                model, x, block_start, block_end
+            )
+            x0, transfer_index, diagnostics, current_topk_ids = (
+                select_attention_stability_tokens(
+                    logits=logits,
+                    temperature=temperature,
+                    remasking=remasking,
+                    mask_index=mask_index,
+                    x=x,
+                    budget=current_budget,
+                    dependency=directional_attention,
+                    dependency_threshold=dependency_threshold,
+                    block_start=block_start,
+                    previous_top1=previous_top1,
+                    previous_selected=previous_selected,
+                    previous_topk_ids=previous_topk_ids,
+                    temporal_mode="revision_margin",
+                    temporal_topk=4,
+                    prune_stable_conflicts=True,
+                    fill_budget=True,
+                    previous_response_credit=previous_response_credit,
+                )
+            )
+            current_response_credit = diagnostics.pop(
+                "_current_response_credit_full"
+            )
+
+            if first_step and current_budget == 1:
+                candidate_state = diagnostics["candidate_state"][0]
+                candidates = candidate_state["masked_positions_global"].tolist()
+                confidence_by_position = {
+                    int(position): float(confidence)
+                    for position, confidence in zip(
+                        candidates,
+                        candidate_state["top1_confidences"].tolist(),
+                    )
+                }
+                strong_edges = directional_attention[0] > dependency_threshold
+                incoming_source_count = strong_edges.sum(dim=1)
+                outgoing_reader_count = strong_edges.sum(dim=0)
+
+                def source_key(global_position):
+                    local_position = int(global_position) - block_start
+                    return (
+                        -int(outgoing_reader_count[local_position].item()),
+                        int(incoming_source_count[local_position].item()),
+                        -confidence_by_position[int(global_position)],
+                        int(global_position),
+                    )
+
+                source_position = min(candidates, key=source_key)
+                transfer_index.zero_()
+                transfer_index[0, source_position] = True
+                local_source = int(source_position) - block_start
+                source_records.append(
+                    {
+                        "block_index": int(block_idx),
+                        "global_position": int(source_position),
+                        "local_position": int(local_source),
+                        "outgoing_reader_count": int(
+                            outgoing_reader_count[local_source].item()
+                        ),
+                        "incoming_source_count": int(
+                            incoming_source_count[local_source].item()
+                        ),
+                        "confidence": confidence_by_position[int(source_position)],
+                    }
+                )
+                summary["source_first_overrides"] += 1
+            if not transfer_index.any():
+                raise RuntimeError("response-refine repair made no progress")
+
+            selected_positions = torch.where(transfer_index[0])[0]
+            selection_order.extend(int(item) for item in selected_positions.tolist())
+            summary["response_validations"] += diagnostics["response_validations"]
+            summary["response_invalidations"] += diagnostics[
+                "response_invalidations"
+            ]
+            summary["revision_margin_candidates"] += diagnostics[
+                "revision_margin_candidates"
+            ]
+            summary["revision_margin_sum"] += diagnostics["revision_margin_sum"]
+            summary["revision_margin_max"] = max(
+                summary["revision_margin_max"], diagnostics["revision_margin_max"]
+            )
+            summary["strongly_dependent_candidates"] += diagnostics[
+                "strongly_dependent_candidates"
+            ]
+            summary["underfilled_steps"] += int(diagnostics["underfilled"])
+            previous_top1 = x0.detach().clone()
+            previous_topk_ids = current_topk_ids.detach().clone()
+            previous_response_credit = current_response_credit.detach().clone()
+            previous_selected = selected_positions
+            x[transfer_index] = x0[transfer_index]
+            first_step = False
+
+    summary["repair_nfe"] = int(nfe)
+    summary["selection_order_global"] = selection_order
+    summary["source_first"] = source_records
+    summary["revised_token_count"] = int(((x != draft) & mutable).sum().item())
+    summary["residual_mask_count"] = int((x == mask_id).sum().item())
+    if summary["revision_margin_candidates"]:
+        summary["revision_margin_mean"] = (
+            summary["revision_margin_sum"]
+            / summary["revision_margin_candidates"]
+        )
+    else:
+        summary["revision_margin_mean"] = 0.0
+    return x, nfe, summary
+
+
+@torch.no_grad()
+def generate_response_refine(
+    model,
+    prompt,
+    dependency_threshold,
+    steps=128,
+    gen_length=128,
+    block_length=128,
+    temperature=0.0,
+    remasking="low_confidence",
+    mask_id=126336,
+    eos_id=126081,
+    early_stop=False,
+    budget_mode="matched",
+):
+    """Full-draft response refinement with fixed horizontal/vertical rules.
+
+    ``matched`` splits the original NFE evenly between draft and repair.
+    ``extra`` keeps the full parent draft budget and adds a half-budget repair.
+    These are discrete compute regimes rather than tuned score weights.
+    """
+    if budget_mode not in {"matched", "extra"}:
+        raise ValueError("budget_mode must be 'matched' or 'extra'")
+    num_blocks = gen_length // block_length
+    repair_steps = steps // 2
+    fill_steps = steps // 2 if budget_mode == "matched" else steps
+    if steps % 2 or fill_steps % num_blocks or repair_steps % num_blocks:
+        raise ValueError("fill and repair steps must divide evenly across blocks")
+
+    draft, fill_nfe, fill_summary = generate_attention_stability(
+        model=model,
+        prompt=prompt,
+        dependency_threshold=dependency_threshold,
+        steps=fill_steps,
+        gen_length=gen_length,
+        block_length=block_length,
+        temperature=temperature,
+        remasking=remasking,
+        mask_id=mask_id,
+        eos_id=eos_id,
+        early_stop=early_stop,
+        collect_step_diagnostics=False,
+        dependency_mode="symmetric",
+        temporal_mode="top1",
+        temporal_topk=4,
+        prune_stable_conflicts=True,
+        fill_budget=True,
+        collect_position_risk=True,
+    )
+    position_risk = fill_summary.pop("_position_risk_state")
+    remask, frontier_summary = build_response_refine_mask(
+        position_risk=position_risk,
+        prompt_length=prompt.shape[1],
+        gen_length=gen_length,
+        block_length=block_length,
+        dependency_threshold=dependency_threshold,
+        repair_steps=repair_steps,
+    )
+    repaired, repair_nfe, repair_summary = repair_response_refine_positions(
+        model=model,
+        draft=draft,
+        remask=remask,
+        prompt_length=prompt.shape[1],
+        dependency_threshold=dependency_threshold,
+        repair_steps=repair_steps,
+        gen_length=gen_length,
+        block_length=block_length,
+        temperature=temperature,
+        remasking=remasking,
+        mask_id=mask_id,
+    )
+    summary = {
+        "decoder": "response_refine_v1",
+        "budget_mode": budget_mode,
+        "dependency_threshold": float(dependency_threshold),
+        "configured_steps": int(steps),
+        "fill_steps": int(fill_steps),
+        "repair_steps": int(repair_steps),
+        "fill_nfe": int(fill_nfe),
+        "repair_nfe": int(repair_nfe),
+        "total_nfe": int(fill_nfe + repair_nfe),
+        "gen_length": int(gen_length),
+        "block_length": int(block_length),
+        "frontier": frontier_summary,
+        "fill": fill_summary,
+        "repair": repair_summary,
+        "draft_to_repaired_changes": int((draft != repaired).sum().item()),
+        "residual_mask_count": int((repaired == mask_id).sum().item()),
+    }
+    return repaired, summary["total_nfe"], summary
 
 
 @torch.no_grad()

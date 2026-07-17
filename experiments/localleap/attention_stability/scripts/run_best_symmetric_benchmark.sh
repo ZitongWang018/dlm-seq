@@ -51,6 +51,12 @@ case "${profile}" in
   revision_margin_fast)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=revision_margin,dependency_prune_stable_conflicts=True,dependency_fill_budget=True"
     ;;
+  response_refine_fast)
+    dependency_args=",dependency_threshold=${tau},dependency_response_refine=True,dependency_response_refine_budget_mode=matched"
+    ;;
+  response_refine_extra)
+    dependency_args=",dependency_threshold=${tau},dependency_response_refine=True,dependency_response_refine_budget_mode=extra"
+    ;;
   draft_exchange)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_draft_exchange=True,dependency_differential_selection=False,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;
@@ -64,8 +70,8 @@ case "${profile}" in
   *) echo "unsupported profile: ${profile}" >&2; exit 2 ;;
 esac
 
-if [[ "${diagnostics_mode}" == "full" && "${profile}" == draft_exchange* ]]; then
-  echo "draft-exchange profiles currently expose complete trace summaries, not per-step tensor dumps" >&2
+if [[ "${diagnostics_mode}" == "full" && ( "${profile}" == draft_exchange* || "${profile}" == response_refine* ) ]]; then
+  echo "draft/refine profiles expose complete trace summaries, not per-step tensor dumps" >&2
   exit 2
 fi
 

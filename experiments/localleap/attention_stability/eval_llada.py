@@ -98,6 +98,8 @@ class LLaDAEvalHarness(LM):
         dependency_fill_budget=False,
         dependency_draft_exchange=False,
         dependency_differential_selection=False,
+        dependency_response_refine=False,
+        dependency_response_refine_budget_mode="matched",
         candidate_memory_topk=None,
         candidate_memory_confidence_threshold=0.0,
         candidate_memory_fallback="confidence",
@@ -213,6 +215,18 @@ class LLaDAEvalHarness(LM):
             if isinstance(dependency_differential_selection, str)
             else bool(dependency_differential_selection)
         )
+        self.dependency_response_refine = (
+            dependency_response_refine.lower() == "true"
+            if isinstance(dependency_response_refine, str)
+            else bool(dependency_response_refine)
+        )
+        self.dependency_response_refine_budget_mode = str(
+            dependency_response_refine_budget_mode
+        )
+        if self.dependency_response_refine_budget_mode not in {"matched", "extra"}:
+            raise ValueError(
+                "dependency_response_refine_budget_mode must be matched or extra"
+            )
         self.candidate_memory_topk = candidate_memory_topk
         self.candidate_memory_confidence_threshold = candidate_memory_confidence_threshold
         self.candidate_memory_fallback = candidate_memory_fallback
@@ -477,7 +491,21 @@ class LLaDAEvalHarness(LM):
                 step_diagnostics_schema = "candidate_memory_steps_v2"
                 trace_evaluator_version = "candidate_memory_trace_v2"
             elif self.dependency_threshold is not None:
-                if self.dependency_draft_exchange:
+                if self.dependency_response_refine:
+                    generated_answer, nfe, decode_diagnostics = generate_response_refine(
+                        self.model,
+                        input_ids,
+                        steps=self.steps,
+                        gen_length=self.gen_length,
+                        block_length=self.block_length,
+                        temperature=0,
+                        remasking=self.remasking,
+                        mask_id=self.mask_id,
+                        early_stop=self.early_stop,
+                        dependency_threshold=self.dependency_threshold,
+                        budget_mode=self.dependency_response_refine_budget_mode,
+                    )
+                elif self.dependency_draft_exchange:
                     generated_answer, nfe, decode_diagnostics = generate_response_credit_exchange(
                         self.model,
                         input_ids,
@@ -523,6 +551,7 @@ class LLaDAEvalHarness(LM):
                     or self.dependency_prune_stable_conflicts
                     or self.dependency_fill_budget
                     or self.dependency_draft_exchange
+                    or self.dependency_response_refine
                 )
                 step_diagnostics_schema = (
                     "attention_stability_steps_v2"
@@ -530,7 +559,9 @@ class LLaDAEvalHarness(LM):
                     else "attention_stability_steps_v1"
                 )
                 trace_evaluator_version = (
-                    "response_credit_draft_exchange_trace_v1"
+                    "response_refine_trace_v1"
+                    if self.dependency_response_refine
+                    else "response_credit_draft_exchange_trace_v1"
                     if self.dependency_draft_exchange
                     else "attention_stability_trace_v2"
                     if extended_dependency_mode
@@ -656,6 +687,8 @@ class LLaDAEvalHarness(LM):
                         "dependency_fill_budget": self.dependency_fill_budget,
                         "dependency_draft_exchange": self.dependency_draft_exchange,
                         "dependency_differential_selection": self.dependency_differential_selection,
+                        "dependency_response_refine": self.dependency_response_refine,
+                        "dependency_response_refine_budget_mode": self.dependency_response_refine_budget_mode,
                         "candidate_memory_topk": self.candidate_memory_topk,
                         "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
                         "candidate_memory_fallback": self.candidate_memory_fallback,
@@ -706,6 +739,8 @@ class LLaDAEvalHarness(LM):
                         "dependency_fill_budget": self.dependency_fill_budget,
                         "dependency_draft_exchange": self.dependency_draft_exchange,
                         "dependency_differential_selection": self.dependency_differential_selection,
+                        "dependency_response_refine": self.dependency_response_refine,
+                        "dependency_response_refine_budget_mode": self.dependency_response_refine_budget_mode,
                         "candidate_memory_topk": self.candidate_memory_topk,
                         "candidate_memory_confidence_threshold": self.candidate_memory_confidence_threshold,
                         "candidate_memory_fallback": self.candidate_memory_fallback,
