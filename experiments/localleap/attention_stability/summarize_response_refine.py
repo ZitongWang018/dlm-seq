@@ -22,7 +22,10 @@ def main():
     if not records:
         raise SystemExit("empty trace")
     diagnostics = [record["decode_diagnostics"] for record in records]
-    if any(item.get("decoder") != "response_refine_v1" for item in diagnostics):
+    if any(
+        item.get("decoder") not in {"response_refine_v1", "response_refine_v2"}
+        for item in diagnostics
+    ):
         raise SystemExit("trace contains a non-response-refine decoder")
 
     sample_records = []
@@ -30,6 +33,7 @@ def main():
         frontier = item["frontier"]
         repair = item["repair"]
         fill = item["fill"]
+        retention = item.get("retention") or {}
         sample_records.append(
             {
                 "task_id": record["task_id"],
@@ -37,6 +41,7 @@ def main():
                 "nfe": record["nfe"],
                 "fill_nfe": item["fill_nfe"],
                 "repair_nfe": item["repair_nfe"],
+                "selector_nfe": item.get("selector_nfe", 0),
                 "residual_mask_count": item["residual_mask_count"],
                 "remasked_positions": frontier["remasked_positions"],
                 "selected_forced_commits": frontier["selected_forced_commits"],
@@ -59,6 +64,12 @@ def main():
                 ],
                 "revised_token_count": repair["revised_token_count"],
                 "source_first_overrides": repair["source_first_overrides"],
+                "accepted_blocks": retention.get("accepted_blocks", 0),
+                "rejected_blocks": retention.get("rejected_blocks", 0),
+                "accepted_positions": retention.get("accepted_positions", 0),
+                "draft_to_retained_changes": item.get(
+                    "draft_to_retained_changes", item["draft_to_repaired_changes"]
+                ),
             }
         )
 
@@ -66,7 +77,7 @@ def main():
         return [item[key] for item in sample_records]
 
     summary = {
-        "schema_version": "response_refine_trace_summary_v1",
+        "schema_version": "response_refine_trace_summary_v2",
         "records": len(records),
         "unique_task_ids": len({item["task_id"] for item in sample_records}),
         "unique_prompt_hashes": len(
@@ -100,6 +111,13 @@ def main():
         ),
         "mean_revised_token_count": mean(values("revised_token_count")),
         "mean_source_first_overrides": mean(values("source_first_overrides")),
+        "mean_selector_nfe": mean(values("selector_nfe")),
+        "mean_accepted_blocks": mean(values("accepted_blocks")),
+        "mean_rejected_blocks": mean(values("rejected_blocks")),
+        "mean_accepted_positions": mean(values("accepted_positions")),
+        "mean_draft_to_retained_changes": mean(
+            values("draft_to_retained_changes")
+        ),
         "samples": sample_records,
     }
     rendered = json.dumps(summary, ensure_ascii=False, indent=2)
