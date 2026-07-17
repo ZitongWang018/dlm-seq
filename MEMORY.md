@@ -136,6 +136,35 @@
 - HumanEval (postprocess): baseline 40.85%, LocalLeap 40.24%; TPS ~9.7 → ~41 on one GPU.
 - Official HE score requires `postprocess_code.py`; raw lm_eval underestimates.
 
+## 2026-07-17
+
+- Deleted the old recurring queue monitor at the user's request. The old host
+  was already shut down, so no remote process termination was attempted.
+- Moved the `seetacloud-codex` alias to the new endpoint using the existing
+  dedicated SSH public key. Verified two idle RTX 4080 SUPER GPUs with 32,760
+  MiB each and preserved `/root/autodl-tmp` experiment data. No password was
+  stored in repository files.
+- Completed the versioned GSM8K flexible-extract audit: original LLaDA
+  905/1319, symmetric-fast 901/1319 at matched 128-step NFE, and symmetric
+  865/1319 at 1.179x NFE. The earlier strict-match 1/1319 baseline is an
+  evaluator configuration failure.
+- Repaired fast HumanEval pairing without overwriting old files. New
+  `paired_vs_matched_baseline_v3` outputs pair 128-step methods to the 42/164
+  baseline: symmetric-fast 52/164 (p=0.12145), directed-fast 51/164
+  (p=0.18774). At 64 steps the baseline is 28/164, symmetric-fast 14/164, and
+  directed-fast 18/164. Prompt and target hashes match in every pair.
+- Added versioned MBPP paired audits against original LLaDA 89/500: symmetric
+  121/500 (p=0.00244, mean NFE 147.89) and directed 123/500 (p=0.00169, mean
+  NFE 149.99). These remain accuracy-first results.
+- Added `docs/localleap_full_experiment_report_20260717.md`, separating all
+  formal local audits, older pilots, implemented-but-unrun methods, evaluator
+  failures, and paper-reported Prism/SOAR/OTS/FiRe/DiffCodeGen values.
+- Updated the response-credit queue for the two-GPU machine. Paired arms run as
+  independent single-GPU evaluators under `CUDA_VISIBLE_DEVICES=0/1`; manifest
+  writes use `flock`. Bash syntax, source diff checks, GPU isolation, selector,
+  auditor, profile, response-credit, and synthetic HumanEval evaluator tests
+  pass. No generation queue was launched after the requested cancellation.
+
 ## Earlier (summary)
 
 - Old “recover gold from past logits / direct response timing” directions failed on math.

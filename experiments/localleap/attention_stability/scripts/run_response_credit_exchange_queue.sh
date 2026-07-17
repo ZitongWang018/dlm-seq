@@ -7,8 +7,18 @@ runner=/root/autodl-tmp/LocalLeap/scripts/llada/run_best_symmetric_benchmark.sh
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
 run_base=${llada_root}/results/best_symmetric_benchmarks/${queue_id}
 manifest=${queue_root}/manifest.tsv
+gpu0=${ATTENTION_GPU0:-0}
+gpu1=${ATTENTION_GPU1:-1}
 mkdir -p "${queue_root}"
 exec > >(tee -a "${queue_root}/controller.log") 2>&1
+
+append_manifest() {
+  local line=$1
+  {
+    flock 9
+    printf '%s\n' "${line}" >&9
+  } 9>>"${manifest}"
+}
 
 check_disk() {
   local free_kb
@@ -36,7 +46,7 @@ stage_already_done() {
 
 record_stage_status() {
   local label=$1 status=$2 note=${3:-}
-  printf '%s\t%s\t%s\t%s\t%s\n' "${label}" "${status}" "$(date --iso-8601=seconds)" "$(date --iso-8601=seconds)" "${note}" >> "${manifest}"
+  append_manifest "$(printf '%s\t%s\t%s\t%s\t%s' "${label}" "${status}" "$(date --iso-8601=seconds)" "$(date --iso-8601=seconds)" "${note}")"
 }
 
 run_stage() {
@@ -50,7 +60,7 @@ run_stage() {
   verify_source
   local started finished rc
   started=$(date --iso-8601=seconds)
-  printf '%s\tSTARTED\t%s\t\t\n' "${label}" "${started}" >> "${manifest}"
+  append_manifest "$(printf '%s\tSTARTED\t%s\t\t' "${label}" "${started}")"
   echo "[START] ${label} ${started}"
   set +e
   timeout --kill-after=5m 24h "$@"
@@ -58,12 +68,46 @@ run_stage() {
   set -e
   finished=$(date --iso-8601=seconds)
   if [[ ${rc} -eq 0 ]]; then
-    printf '%s\tDONE\t%s\t%s\t0\n' "${label}" "${started}" "${finished}" >> "${manifest}"
+    append_manifest "$(printf '%s\tDONE\t%s\t%s\t0' "${label}" "${started}" "${finished}")"
     echo "[DONE] ${label} ${finished}"
   else
-    printf '%s\tFAILED\t%s\t%s\t%s\n' "${label}" "${started}" "${finished}" "${rc}" >> "${manifest}"
+    append_manifest "$(printf '%s\tFAILED\t%s\t%s\t%s' "${label}" "${started}" "${finished}" "${rc}")"
     echo "[FAILED-CONTINUE] ${label} rc=${rc} ${finished}"
   fi
+}
+
+run_stage_gpu() {
+  local label=$1 gpu=$2
+  shift 2
+  run_stage "${label}" env CUDA_VISIBLE_DEVICES="${gpu}" "$@"
+}
+
+# Run two independent benchmark arms concurrently.  Each process sees exactly
+# one physical GPU as cuda:0, which keeps the custom attention hooks unchanged.
+# Manifest writes are serialized by append_manifest.
+run_profile_pair() {
+  local task=$1 shots=$2 steps=$3 count=$4 gen_length=$5
+  local profile0=$6 tag0=$7 profile1=$8 tag1=$9
+  local pid0 pid1 rc0 rc1
+  echo "[DUAL-GPU] gpu=${gpu0} ${tag0} | gpu=${gpu1} ${tag1}"
+  run_stage_gpu "${tag0}" "${gpu0}" "${runner}" \
+    "${task}" "${shots}" "${steps}" "${profile0}" 0.004 trace "${tag0}" "${count}" "${gen_length}" &
+  pid0=$!
+  run_stage_gpu "${tag1}" "${gpu1}" "${runner}" \
+    "${task}" "${shots}" "${steps}" "${profile1}" 0.004 trace "${tag1}" "${count}" "${gen_length}" &
+  pid1=$!
+  set +e
+  wait "${pid0}"; rc0=$?
+  wait "${pid1}"; rc1=$?
+  set -e
+  echo "[DUAL-GPU-DONE] ${tag0} rc=${rc0}; ${tag1} rc=${rc1}"
+  return 0
+}
+
+run_profile_single() {
+  local gpu=$1 task=$2 shots=$3 steps=$4 profile=$5 tag=$6 count=$7 gen_length=$8
+  run_stage_gpu "${tag}" "${gpu}" "${runner}" \
+    "${task}" "${shots}" "${steps}" "${profile}" 0.004 trace "${tag}" "${count}" "${gen_length}"
 }
 
 audit_records() {
@@ -170,6 +214,8 @@ echo "new_vertical=response_credit_on_strong_conditioning_events"
 echo "new_vertical_minimal=conditioned_revision_margin_in_unstable_tail"
 echo "new_horizontal=two_draft_agreement_skeleton_and_disagreement_redenoising"
 echo "code_selection=prompt_visible_examples_plus_behavior_consensus_no_hidden_tests"
+echo "gpu_assignment=${gpu0},${gpu1}"
+echo "parallelism=one_independent_evaluator_per_gpu"
 
 /root/miniconda3/bin/python -m py_compile \
   generate.py eval_llada.py differential_selector.py select_queue_profile.py audit_lm_eval_task.py \
@@ -190,29 +236,38 @@ sha256sum generate.py eval_llada.py differential_selector.py select_queue_profil
 
 # Real-model/evaluator smoke: original LLaDA is the formal baseline and the
 # established symmetric_fast arm is the development parent.
-for profile in baseline symmetric_fast response_credit_fast revision_margin_fast draft_exchange_exec; do
-  tag="smoke_he_${profile}"
-  run_stage "${tag}" "${runner}" humaneval 0 128 "${profile}" 0.004 trace "${tag}" 2 256
-done
+run_profile_pair humaneval 0 128 2 256 \
+  baseline smoke_he_baseline symmetric_fast smoke_he_symmetric_fast
+run_profile_pair humaneval 0 128 2 256 \
+  response_credit_fast smoke_he_response_credit_fast \
+  revision_margin_fast smoke_he_revision_margin_fast
+run_profile_single "${gpu0}" humaneval 0 128 draft_exchange_exec smoke_he_draft_exchange_exec 2 256
 
 # HumanEval is the development set. Explore on 32 examples, confirm on 64, and
 # promote only a new single-trajectory rule that strictly beats symmetric_fast.
-run_stage he_baseline_128_n32 "${runner}" humaneval 0 128 baseline 0.004 trace he_baseline_128_n32 32 256
+run_profile_pair humaneval 0 128 32 256 \
+  baseline he_baseline_128_n32 symmetric_fast he_symmetric_fast_128_n32
+run_profile_pair humaneval 0 128 32 256 \
+  response_credit_fast he_response_credit_fast_128_n32 \
+  revision_margin_fast he_revision_margin_fast_128_n32
+run_profile_single "${gpu0}" humaneval 0 128 draft_exchange_exec he_draft_exchange_exec_128_n32 32 256
 for profile in symmetric_fast response_credit_fast revision_margin_fast draft_exchange_exec; do
   tag="he_${profile}_128_n32"
-  run_stage "${tag}" "${runner}" humaneval 0 128 "${profile}" 0.004 trace "${tag}" 32 256
   pair_stage "pair_${tag}" humaneval he_baseline_128_n32 "${tag}"
 done
 
-run_stage he_baseline_128_n64 "${runner}" humaneval 0 128 baseline 0.004 trace he_baseline_128_n64 64 256
+run_profile_pair humaneval 0 128 64 256 \
+  baseline he_baseline_128_n64 symmetric_fast he_symmetric_fast_128_n64
 for profile in symmetric_fast response_credit_fast revision_margin_fast; do
   tag="he_${profile}_128_n64"
-  run_if_gate "pair_he_${profile}_128_n32" 1 "${tag}" \
-    "${runner}" humaneval 0 128 "${profile}" 0.004 trace "${tag}" 64 256
+  if [[ "${profile}" != symmetric_fast ]]; then
+    run_if_gate "pair_he_${profile}_128_n32" 1 "${tag}" \
+      env CUDA_VISIBLE_DEVICES="${gpu0}" "${runner}" humaneval 0 128 "${profile}" 0.004 trace "${tag}" 64 256
+  fi
   pair_stage "pair_${tag}" humaneval he_baseline_128_n64 "${tag}"
 done
 run_if_gate pair_he_draft_exchange_exec_128_n32 1 he_draft_exchange_exec_128_n64 \
-  "${runner}" humaneval 0 128 draft_exchange_exec 0.004 trace he_draft_exchange_exec_128_n64 64 256
+  env CUDA_VISIBLE_DEVICES="${gpu1}" "${runner}" humaneval 0 128 draft_exchange_exec 0.004 trace he_draft_exchange_exec_128_n64 64 256
 pair_stage pair_he_draft_exchange_exec_128_n64 humaneval he_baseline_128_n64 he_draft_exchange_exec_128_n64
 
 selection_json=${queue_root}/selection/humaneval_single_n64.json
@@ -236,10 +291,9 @@ echo "promoted_single=${promoted_single}" | tee "${queue_root}/selection/promoti
 echo "promote_draft=${promote_draft}" | tee -a "${queue_root}/selection/promotion.txt"
 
 if [[ "${promoted_single}" != none || "${promote_draft}" == true ]]; then
-  run_stage he_baseline_128_full_fresh \
-    "${runner}" humaneval 0 128 baseline 0.004 trace he_baseline_128_full_fresh full 256
-  run_stage he_symmetric_fast_128_full_fresh \
-    "${runner}" humaneval 0 128 symmetric_fast 0.004 trace he_symmetric_fast_128_full_fresh full 256
+  run_profile_pair humaneval 0 128 full 256 \
+    baseline he_baseline_128_full_fresh \
+    symmetric_fast he_symmetric_fast_128_full_fresh
   pair_stage pair_he_symmetric_fast_128_full_fresh humaneval he_baseline_128_full_fresh he_symmetric_fast_128_full_fresh
 else
   record_stage_status he_full_promotions SKIPPED no_new_arm_beat_parent
@@ -268,10 +322,17 @@ echo "${generalization_profile}" > "${queue_root}/selection/generalization_profi
 
 # MBPP uses 100-example gates. Full promotion requires at least +3/100 over
 # symmetric_fast, which avoids spending hours on a marginal exploratory tie.
-run_stage mbpp_baseline_128_n100 "${runner}" mbpp 3 128 baseline 0.004 trace mbpp_baseline_128_n100 100 256
+run_profile_pair mbpp 3 128 100 256 \
+  baseline mbpp_baseline_128_n100 symmetric_fast mbpp_symmetric_fast_128_n100
+if [[ "${generalization_profile}" != symmetric_fast ]]; then
+  run_profile_pair mbpp 3 128 100 256 \
+    "${generalization_profile}" "mbpp_${generalization_profile}_128_n100" \
+    draft_exchange_exec mbpp_draft_exchange_exec_128_n100
+else
+  run_profile_single "${gpu1}" mbpp 3 128 draft_exchange_exec mbpp_draft_exchange_exec_128_n100 100 256
+fi
 for profile in symmetric_fast "${generalization_profile}" draft_exchange_exec; do
   tag="mbpp_${profile}_128_n100"
-  run_stage "${tag}" "${runner}" mbpp 3 128 "${profile}" 0.004 trace "${tag}" 100 256
   pair_stage "pair_${tag}" mbpp mbpp_baseline_128_n100 "${tag}"
 done
 
@@ -284,10 +345,9 @@ if pair_beats_pair pair_mbpp_draft_exchange_exec_128_n100 pair_mbpp_symmetric_fa
   promote_mbpp_draft=true
 fi
 if [[ "${promote_mbpp_single}" == true || "${promote_mbpp_draft}" == true ]]; then
-  run_stage mbpp_baseline_128_full_fresh \
-    "${runner}" mbpp 3 128 baseline 0.004 trace mbpp_baseline_128_full_fresh full 256
-  run_stage mbpp_symmetric_fast_128_full_fresh \
-    "${runner}" mbpp 3 128 symmetric_fast 0.004 trace mbpp_symmetric_fast_128_full_fresh full 256
+  run_profile_pair mbpp 3 128 full 256 \
+    baseline mbpp_baseline_128_full_fresh \
+    symmetric_fast mbpp_symmetric_fast_128_full_fresh
   pair_stage pair_mbpp_symmetric_fast_128_full_fresh mbpp mbpp_baseline_128_full_fresh mbpp_symmetric_fast_128_full_fresh
 fi
 if [[ "${promote_mbpp_single}" == true ]]; then
@@ -310,10 +370,19 @@ fi
 for task_spec in "localleap_math500:0:100" "gsm8k:0:128"; do
   IFS=: read -r task shots count <<<"${task_spec}"
   baseline_tag="${task}_baseline_128_n${count}"
-  run_stage "${baseline_tag}" "${runner}" "${task}" "${shots}" 128 baseline 0.004 trace "${baseline_tag}" "${count}" 256
+  parent_tag="${task}_symmetric_fast_128_n${count}"
+  run_profile_pair "${task}" "${shots}" 128 "${count}" 256 \
+    baseline "${baseline_tag}" symmetric_fast "${parent_tag}"
+  if [[ "${generalization_profile}" != symmetric_fast ]]; then
+    run_profile_pair "${task}" "${shots}" 128 "${count}" 256 \
+      "${generalization_profile}" "${task}_${generalization_profile}_128_n${count}" \
+      draft_exchange "${task}_draft_exchange_128_n${count}"
+  else
+    run_profile_single "${gpu1}" "${task}" "${shots}" 128 \
+      draft_exchange "${task}_draft_exchange_128_n${count}" "${count}" 256
+  fi
   for profile in symmetric_fast "${generalization_profile}" draft_exchange; do
     tag="${task}_${profile}_128_n${count}"
-    run_stage "${tag}" "${runner}" "${task}" "${shots}" 128 "${profile}" 0.004 trace "${tag}" "${count}" 256
     pair_stage "pair_${tag}" "${task}" "${baseline_tag}" "${tag}"
   done
 done

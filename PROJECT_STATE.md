@@ -1,6 +1,6 @@
 # Project State
 
-Date: 2026-07-15
+Date: 2026-07-17
 
 Remote worktrees:
 
@@ -94,6 +94,34 @@ four-shot and length-512 robustness arms. Recent paper rows from Prism, SOAR and
 Order-Token Search are stored as paper-reported references in
 `docs/training_free_dlm_baseline_alignment_20260716.md`; they are not labeled as
 local reproductions.
+
+On 2026-07-17 the old heartbeat monitor was deleted at the user's request and
+the new SSH endpoint was converted from one-time password authentication to the
+existing dedicated public key. The mounted experiment data survived the host
+change. The new machine has two RTX 4080 SUPER GPUs with 32,760 MiB each; no
+generation job is currently active.
+
+The completed flexible-extract GSM8K audits are negative for the attention
+method: original LLaDA is 905/1319, symmetric-fast is 901/1319 at matched
+128-step NFE, and accuracy-first symmetric is 865/1319 at 1.179x NFE. MATH-500
+is likewise 152/500 baseline, 150/500 symmetric-fast, and 152/500 symmetric at
+1.203x NFE. These results prevent promoting the HumanEval/MBPP improvement as
+a universal new baseline.
+
+Several old HumanEval fast paired files had incorrectly joined 128/64-step
+methods to the 256-step 67/164 baseline. New immutable
+`paired_vs_matched_baseline_v3` outputs correct this: at 128 steps baseline is
+42/164, symmetric-fast is 52/164 (p=0.12145), and directed-fast is 51/164
+(p=0.18774); at 64 steps baseline is 28/164, symmetric-fast is 14/164, and
+directed-fast is 18/164. The old pair summaries are retained but invalid for
+matched-budget claims.
+
+The response-credit queue script now supports two independent evaluators in
+parallel, one per physical GPU, with locked manifest writes. It deliberately
+does not use DDP or unverified tensor parallelism because the 8B model fits on
+one card and the custom attention hooks expect a single logical CUDA device.
+No queue was launched after this code change. The full audited report is
+`docs/localleap_full_experiment_report_20260717.md`.
 
 ## Deprecated (cleaned 2026-07-13)
 
