@@ -6,12 +6,36 @@ import re
 from pathlib import Path
 
 
-VERSION = "localleap_paired_task_audit_v1"
+VERSION = "localleap_paired_task_audit_v2"
 
 
 def read_jsonl(path):
     with Path(path).open(encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
+
+
+def record_stable_id(row):
+    """Return the evaluator's stable identity across code and non-code tasks."""
+    identities = [
+        str(row[key])
+        for key in ("stable_task_id", "task_id")
+        if row.get(key) is not None
+    ]
+    if not identities:
+        raise ValueError("record has neither stable_task_id nor task_id")
+    if len(set(identities)) != 1:
+        raise ValueError(f"conflicting stable identities: {identities}")
+    return identities[0]
+
+
+def index_records(rows):
+    indexed = {}
+    for row in rows:
+        stable_id = record_stable_id(row)
+        if stable_id in indexed:
+            raise ValueError(f"duplicate stable identity: {stable_id}")
+        indexed[stable_id] = row
+    return indexed
 
 
 def exact_mcnemar_p(baseline_only, method_only):
@@ -66,8 +90,8 @@ def main():
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
 
-    baseline = {row["stable_task_id"]: row for row in read_jsonl(args.baseline_records)}
-    method = {row["stable_task_id"]: row for row in read_jsonl(args.method_records)}
+    baseline = index_records(read_jsonl(args.baseline_records))
+    method = index_records(read_jsonl(args.method_records))
     if set(baseline) != set(method):
         missing_method = sorted(set(baseline) - set(method))
         missing_baseline = sorted(set(method) - set(baseline))
@@ -151,4 +175,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
