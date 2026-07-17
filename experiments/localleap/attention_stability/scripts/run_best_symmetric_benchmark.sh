@@ -139,7 +139,7 @@ model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_le
   echo "seeds=0,1234,1234,1234"
   echo "model_args=${model_args}"
   echo "start=$(date --iso-8601=seconds)"
-  git rev-parse HEAD
+  git -C /root/autodl-tmp/dlm-seq-flow rev-parse HEAD
   sha256sum generate.py eval_llada.py differential_selector.py model/modeling_llada.py validate_step_diagnostics.py \
     audit_attention_stability.py audit_lm_eval_task.py compare_paired_task_runs.py \
     postprocess_code.py sanitize.py
