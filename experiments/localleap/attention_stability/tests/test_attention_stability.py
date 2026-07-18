@@ -226,6 +226,23 @@ def test_likelihood_trajectory_selection_tie_preserves_fast_parent():
     assert select_likelihood_trajectory(summaries) == "fast"
 
 
+def test_block_evidence_requires_one_nat_per_existing_block():
+    weak = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.18},
+    }
+    strong = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.16},
+    }
+    assert select_likelihood_trajectory(
+        weak, block_length=32, selection_mode="block_evidence"
+    ) == "fast"
+    assert select_likelihood_trajectory(
+        strong, block_length=32, selection_mode="block_evidence"
+    ) == "accuracy"
+
+
 def test_topk_overlap_creates_intermediate_temporal_tier():
     logits = make_logits([1, 2, 3], [0.70, 0.80, 0.95])
     dependency = torch.zeros((1, 3, 3))
@@ -388,6 +405,7 @@ if __name__ == "__main__":
     test_likelihood_trajectory_selection_uses_vertical_path_score()
     test_committed_token_score_uses_selected_positions_only()
     test_likelihood_trajectory_selection_tie_preserves_fast_parent()
+    test_block_evidence_requires_one_nat_per_existing_block()
     test_topk_overlap_creates_intermediate_temporal_tier()
     test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates()
     test_topk_overlap_rejects_invalid_k()
@@ -395,4 +413,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("19 selector tests passed")
+    print("20 selector tests passed")

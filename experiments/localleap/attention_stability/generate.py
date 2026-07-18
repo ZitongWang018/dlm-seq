@@ -841,7 +841,11 @@ def generate_attention_stability(
     return x, nfe, summary
 
 
-def select_likelihood_trajectory(candidate_summaries):
+def select_likelihood_trajectory(
+    candidate_summaries,
+    block_length=None,
+    selection_mode="mean",
+):
     """Select the path with the best mean committed-token log confidence.
 
     Ties preserve the fixed-budget fast parent, making the selection deterministic
@@ -851,10 +855,26 @@ def select_likelihood_trajectory(candidate_summaries):
     missing = [name for name in ordered_names if name not in candidate_summaries]
     if missing:
         raise ValueError(f"missing trajectory summaries: {missing}")
-    return max(
-        ordered_names,
-        key=lambda name: float(candidate_summaries[name]["commit_logprob_mean"]),
-    )
+    if selection_mode == "mean":
+        return max(
+            ordered_names,
+            key=lambda name: float(
+                candidate_summaries[name]["commit_logprob_mean"]
+            ),
+        )
+    if selection_mode == "block_evidence":
+        if block_length is None or int(block_length) <= 0:
+            raise ValueError("block_evidence requires a positive block_length")
+        fast_score = float(candidate_summaries["fast"]["commit_logprob_mean"])
+        accuracy_score = float(
+            candidate_summaries["accuracy"]["commit_logprob_mean"]
+        )
+        # Require at least one nat of cumulative evidence per generation block
+        # before abandoning the parallel parent.  This uses the existing block
+        # structure rather than a fitted margin hyperparameter.
+        evidence_per_block = (accuracy_score - fast_score) * int(block_length)
+        return "accuracy" if evidence_per_block > 1.0 else "fast"
+    raise ValueError(f"unsupported trajectory selection mode: {selection_mode}")
 
 
 @torch.no_grad()
@@ -874,6 +894,7 @@ def generate_trajectory_likelihood_selection(
     dependency_mode="symmetric",
     temporal_mode="top1",
     temporal_topk=4,
+    selection_mode="mean",
 ):
     """Generate fast and accuracy-first parents, then select by path evidence.
 
@@ -912,7 +933,11 @@ def generate_trajectory_likelihood_selection(
         "fast": fast_summary,
         "accuracy": accuracy_summary,
     }
-    selected_name = select_likelihood_trajectory(candidate_summaries)
+    selected_name = select_likelihood_trajectory(
+        candidate_summaries,
+        block_length=block_length,
+        selection_mode=selection_mode,
+    )
     candidate_ids = {"fast": fast_x, "accuracy": accuracy_x}
     selected_summary = candidate_summaries[selected_name]
     selected_steps = selected_summary.pop("_step_records", None)
@@ -920,7 +945,19 @@ def generate_trajectory_likelihood_selection(
     accuracy_summary.pop("_step_records", None)
     summary = {
         "decoder": "trajectory_likelihood_selection_v1",
-        "selection_rule": "max_mean_committed_token_log_confidence",
+        "selection_rule": (
+            "one_nat_per_block_evidence"
+            if selection_mode == "block_evidence"
+            else "max_mean_committed_token_log_confidence"
+        ),
+        "selection_mode": selection_mode,
+        "block_evidence_margin": (
+            float(
+                candidate_summaries["accuracy"]["commit_logprob_mean"]
+                - candidate_summaries["fast"]["commit_logprob_mean"]
+            )
+            * int(block_length)
+        ),
         "selected_name": selected_name,
         "selected_score": float(
             candidate_summaries[selected_name]["commit_logprob_mean"]

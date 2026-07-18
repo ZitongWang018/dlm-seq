@@ -40,6 +40,14 @@ The HumanEval evaluator is versioned as
 sandbox, reliability guard, and timeout, but uses spawn plus shared status in
 place of Manager/fork, which deadlocked on the Python 3.12 dual-GPU host.
 
+The first matched rerun scored HumanEval 14/32 versus fast 13/32 and original
+LLaDA 14/32; MATH-500 was 15/50 versus fast 15/50 and original 13/50.  Margin
+diagnostics motivated the current **block-evidence** descendant: use accuracy
+only if it gains one cumulative nat per existing generation block.  On the
+completed records this gives exploratory HumanEval 16/32 and cross-domain
+MATH-500 16/50.  Queue `trajectory_block_evidence_20260719_v1` uses
+HumanEval/32..63 as a strict unseen gate before any new MATH run.
+
 Reproduce and extend **LocalLeap** on LLaDA-Instruct (local weights), with correct HumanEval scoring via `postprocess_code.py`.
 
 See `experiments/localleap/README.md` for configs, scripts, and HE numbers.

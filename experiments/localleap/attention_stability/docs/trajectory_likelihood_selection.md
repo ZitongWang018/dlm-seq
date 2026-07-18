@@ -26,6 +26,21 @@ Select the candidate with the larger mean.  A score tie deterministically
 selects `fast`.  There is no score weight, margin, task-specific execution,
 reference access, candidate splice, or new threshold.
 
+### Block-evidence descendant
+
+The initial mean selector improved HumanEval-32 from 13/32 to 14/32 versus the
+fast parent, but its two losses had only 0.007--0.011 nats/token advantage for
+the accuracy path, while all three recoveries had 0.057--0.085.  The descendant
+therefore keeps `fast` unless the accuracy path accumulates at least one extra
+nat per existing generation block:
+
+`(mean_logp_accuracy - mean_logp_fast) * block_length > 1`.
+
+This is an evidence requirement derived from the existing block structure, not
+a fitted continuous margin.  A cross-domain counterfactual using completed
+MATH-50 trajectories improved 15/50 to an exploratory 16/50.  Formal promotion
+uses the unseen HumanEval/32..63 suffix, not the discovery prefix.
+
 Horizontal thought is represented by the two distinct within-step dependency
 schedules.  Vertical thought is represented by evidence accumulated along the
 actual sequence of commits, after new token conditions have entered subsequent

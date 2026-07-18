@@ -1,5 +1,21 @@
 # Memory
 
+## 2026-07-19 — Block-evidence trajectory gate
+
+- The first trajectory-likelihood rerun formally reached HumanEval 14/32
+  versus fast 13/32 and original LLaDA 14/32 (3 recoveries, 2 losses).  MATH-50
+  reached 15/50 versus fast 15/50 and original 13/50 (1 recovery, 1 loss versus
+  fast).  Source hashes, IDs, prompt hashes, residual masks, and evaluator
+  records passed audit.
+- HumanEval recovery margins were 0.057--0.085 nats/token, while both loss
+  margins were only 0.007--0.011.  Added a parameter-free structural evidence
+  gate: keep fast unless `(accuracy_mean-fast_mean)*block_length > 1`, i.e. at
+  least one extra nat per existing generation block.
+- Counterfactual selection on already-generated records yields exploratory
+  HumanEval 16/32 and, after fixing the rule on HumanEval, MATH-50 16/50.  These
+  are not promoted formal results.  Added stable-ID audit slicing and a dual-
+  GPU HE64 queue whose HumanEval/32..63 suffix is the unseen promotion gate.
+
 ## 2026-07-19 — Trajectory-likelihood selection
 
 - Formally rejected confidence-switched stability after matched discovery:

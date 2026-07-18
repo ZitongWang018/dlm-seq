@@ -51,6 +51,11 @@ case "${profile}" in
     # Select with vertical evidence accumulated exactly when tokens commit.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True"
     ;;
+  trajectory_block_evidence)
+    # Keep the parallel parent unless the slower path accumulates at least one
+    # nat of extra commit evidence per existing generation block.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=block_evidence"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

@@ -97,6 +97,7 @@ class LLaDAEvalHarness(LM):
         dependency_prune_stable_conflicts=False,
         dependency_fill_budget=False,
         dependency_likelihood_selection=False,
+        dependency_likelihood_selection_mode="mean",
         dependency_draft_exchange=False,
         dependency_differential_selection=False,
         dependency_response_refine=False,
@@ -211,6 +212,17 @@ class LLaDAEvalHarness(LM):
             if isinstance(dependency_likelihood_selection, str)
             else bool(dependency_likelihood_selection)
         )
+        self.dependency_likelihood_selection_mode = str(
+            dependency_likelihood_selection_mode
+        )
+        if self.dependency_likelihood_selection_mode not in {
+            "mean",
+            "block_evidence",
+        }:
+            raise ValueError(
+                "dependency_likelihood_selection_mode must be mean or "
+                "block_evidence"
+            )
         self.dependency_draft_exchange = (
             dependency_draft_exchange.lower() == "true"
             if isinstance(dependency_draft_exchange, str)
@@ -523,6 +535,9 @@ class LLaDAEvalHarness(LM):
                             dependency_mode=self.dependency_mode,
                             temporal_mode=self.dependency_temporal_mode,
                             temporal_topk=self.dependency_temporal_topk,
+                            selection_mode=(
+                                self.dependency_likelihood_selection_mode
+                            ),
                         )
                     )
                     draft_candidate_token_ids = decode_diagnostics.pop(
@@ -738,6 +753,7 @@ class LLaDAEvalHarness(LM):
                         "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
                         "dependency_fill_budget": self.dependency_fill_budget,
                         "dependency_likelihood_selection": self.dependency_likelihood_selection,
+                        "dependency_likelihood_selection_mode": self.dependency_likelihood_selection_mode,
                         "dependency_draft_exchange": self.dependency_draft_exchange,
                         "dependency_differential_selection": self.dependency_differential_selection,
                         "dependency_response_refine": self.dependency_response_refine,
@@ -791,6 +807,7 @@ class LLaDAEvalHarness(LM):
                         "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
                         "dependency_fill_budget": self.dependency_fill_budget,
                         "dependency_likelihood_selection": self.dependency_likelihood_selection,
+                        "dependency_likelihood_selection_mode": self.dependency_likelihood_selection_mode,
                         "dependency_draft_exchange": self.dependency_draft_exchange,
                         "dependency_differential_selection": self.dependency_differential_selection,
                         "dependency_response_refine": self.dependency_response_refine,
