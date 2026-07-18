@@ -53,6 +53,34 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
+def decode_candidate_generations(
+    tokenizer,
+    candidate_token_ids,
+    prompt_length,
+    stop_tokens,
+    preserve_full_humaneval_response=False,
+):
+    """Decode stored trajectory candidates using the selected-output policy.
+
+    HumanEval selected responses deliberately keep the full decoded response so
+    the official sanitizer can recover the function.  Applying the generic stop
+    sequences only to diagnostic candidates made their trace text shorter than
+    the actual selectable response and invalidated candidate-oracle analysis.
+    """
+    decoded = {}
+    for candidate_name, candidate_ids in candidate_token_ids.items():
+        candidate_text = tokenizer.decode(
+            candidate_ids[0][prompt_length:],
+            skip_special_tokens=True,
+        )
+        if not preserve_full_humaneval_response:
+            for stop_seq in stop_tokens:
+                if stop_seq in candidate_text:
+                    candidate_text = candidate_text.split(stop_seq)[0]
+        decoded[candidate_name] = candidate_text
+    return decoded
+
+
 def all_gather_cpu(val, group=None):
     """
     Gather scalar values from all ranks to rank0.
@@ -650,7 +678,12 @@ class LLaDAEvalHarness(LM):
                                         temperature=0, remasking=self.remasking, mask_id=self.mask_id, early_stop=self.early_stop, threshold=self.threshold)
 
             generated_token_ids_for_diagnostics = generated_answer.detach().to(torch.int32).cpu()
-            if self.is_instruct and 'task_id' in req.doc and str(req.doc['task_id']).lower().startswith('humaneval'):
+            is_humaneval_request = (
+                self.is_instruct
+                and 'task_id' in req.doc
+                and str(req.doc['task_id']).lower().startswith('humaneval')
+            )
+            if is_humaneval_request:
                 generated_answer = self.tokenizer.decode(generated_answer[0][input_ids.shape[1]:], skip_special_tokens=True)
                 generated_answer_ids = torch.tensor(self.tokenizer(generated_answer)["input_ids"])
                 if self.show_speed:
@@ -672,16 +705,13 @@ class LLaDAEvalHarness(LM):
                 generated_answer = self.tokenizer.decode(generated_answer_ids, skip_special_tokens=True)
 
             if draft_candidate_token_ids is not None:
-                candidate_generations = {}
-                for candidate_name, candidate_ids in draft_candidate_token_ids.items():
-                    candidate_text = self.tokenizer.decode(
-                        candidate_ids[0][input_ids.shape[1] :],
-                        skip_special_tokens=True,
-                    )
-                    for stop_seq in stop_tokens:
-                        if stop_seq in candidate_text:
-                            candidate_text = candidate_text.split(stop_seq)[0]
-                    candidate_generations[candidate_name] = candidate_text
+                candidate_generations = decode_candidate_generations(
+                    self.tokenizer,
+                    draft_candidate_token_ids,
+                    input_ids.shape[1],
+                    stop_tokens,
+                    preserve_full_humaneval_response=is_humaneval_request,
+                )
                 if self.dependency_differential_selection:
                     candidate_names = [
                         name
