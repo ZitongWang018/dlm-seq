@@ -1,0 +1,34 @@
+{
+  "method": "trajectory_coverage_consensus_block_v5",
+  "source_commit": "ff6fe5060f0f35676a713b05f557ec19ce9754b8",
+  "registered_at": "2026-07-19T04:58:14+08:00",
+  "active_formal_trace_records_at_registration": 51,
+  "unseen_slice": {
+    "dataset": "HumanEval",
+    "start_absolute_index": 64,
+    "end_absolute_index_exclusive": 96,
+    "observed_before_registration": false
+  },
+  "selection_rule": {
+    "default_parent": "symmetric_fast_tau_0.004",
+    "candidate_parent": "symmetric_accuracy_tau_0.004",
+    "horizontal_requirement": "original_llada_matches_accuracy_more_than_fast_at_parent_disagreement_positions",
+    "vertical_requirement": "accuracy_has_more_than_one_nat_per_existing_block_or_extra_conditioned_invalidations_cover_every_final_parent_disagreement",
+    "fitted_weights_or_thresholds": "none"
+  },
+  "motivation_scope": {
+    "diagnostic_examples_used": [
+      "HumanEval/8",
+      "HumanEval/41"
+    ],
+    "observation": "HumanEval/41 had 227 extra accuracy-parent conditioned invalidations for 227 final disagreements, while HumanEval/8 had 39 for 231. One-to-one revision coverage supplies a structural vertical sufficiency test without a fitted coefficient."
+  },
+  "promotion_gate": "On fresh same-source HumanEval/64..95, method_correct must be strictly greater than both symmetric_fast and original LLaDA, with at least one method-only recovery and complete evaluator audit.",
+  "required_audits": [
+    "stable task ids and matching prompt/gold hashes",
+    "no duplicate or missing ids",
+    "no residual masks",
+    "valid NFE range and source hashes",
+    "separate model, evaluator, timeout, and infrastructure failures"
+  ]
+}
