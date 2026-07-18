@@ -66,6 +66,8 @@ def apply_guard(parent_records, baseline_records):
         )
         selected = baseline if guard_name == "baseline" else parent
         record = copy.deepcopy(selected)
+        record["prompt_text"] = parent["prompt_text"]
+        record["entry_point"] = parent["entry_point"]
         record["nfe"] = int(parent["nfe"]) + int(baseline["nfe"])
         record["evaluator_version"] = EVALUATOR_VERSION
         record["generation_settings"] = copy.deepcopy(

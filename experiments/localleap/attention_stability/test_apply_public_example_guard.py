@@ -38,6 +38,8 @@ def test_replay_selects_strict_public_example_winner_and_sums_nfe():
     output = apply_guard(parent, baseline)
     assert output[0]["correct"] is True
     assert output[0]["nfe"] == 398
+    assert output[0]["prompt_text"] == parent["HumanEval/0"]["prompt_text"]
+    assert output[0]["entry_point"] == "square"
     assert output[0]["decode_diagnostics"]["selected_name"] == "baseline"
     summary = summarize(output, parent, baseline)
     assert summary["method_correct"] == 1
