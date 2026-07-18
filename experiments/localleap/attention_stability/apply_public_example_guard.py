@@ -15,6 +15,7 @@ REQUIRED = {
     "absolute_index",
     "task_id",
     "prompt_hash",
+    "target_hash",
     "raw_gold",
     "normalized_gold",
     "decoded_generation",
@@ -55,7 +56,13 @@ def apply_guard(parent_records, baseline_records):
     ):
         parent = parent_records[task_id]
         baseline = baseline_records[task_id]
-        for field in ("absolute_index", "prompt_hash", "raw_gold", "normalized_gold"):
+        for field in (
+            "absolute_index",
+            "prompt_hash",
+            "target_hash",
+            "raw_gold",
+            "normalized_gold",
+        ):
             if parent[field] != baseline[field]:
                 raise ValueError(f"{field} mismatch for {task_id}")
         guard_name, diagnostics = select_public_example_guard(

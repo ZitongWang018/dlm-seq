@@ -9,6 +9,7 @@ def record(task_id, generation, correct, nfe):
         "absolute_index": index,
         "task_id": task_id,
         "prompt_hash": "same-prompt",
+        "target_hash": "same-target",
         "prompt_text": "def square(x):\n    >>> square(2)\n    4\n",
         "entry_point": "square",
         "raw_gold": "gold",
