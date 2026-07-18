@@ -83,13 +83,15 @@ cd "${llada_root}"
 if [[ ! -s "${frozen}" ]]; then
   sha256sum generate.py eval_llada.py compare_paired_task_runs.py audit_attention_stability.py \
     audit_lm_eval_task.py postprocess_code.py sanitize.py "${runner}" "${controller}" \
-    "${source_root}/tests/test_attention_stability.py" >"${frozen}"
+    "${source_root}/tests/test_attention_stability.py" \
+    "${source_root}/tests/test_risk_switch_queue.py" >"${frozen}"
 fi
 verify
 /root/miniconda3/bin/python -m py_compile generate.py eval_llada.py compare_paired_task_runs.py
 PYTHONPATH=. /root/miniconda3/bin/python "${source_root}/tests/test_attention_stability.py"
 PYTHONPATH=. /root/miniconda3/bin/python "${source_root}/tests/test_compare_paired_task_runs.py"
 PYTHONPATH=. /root/miniconda3/bin/python "${source_root}/tests/test_humaneval_evaluator.py"
+/root/miniconda3/bin/python "${source_root}/tests/test_risk_switch_queue.py"
 bash -n "${runner}" "${controller}"
 
 echo "formal_baseline=original_llada_low_confidence"
@@ -103,15 +105,6 @@ echo "new_hyperparameters=none"
 run_gpu smoke_he_switch 0 "${runner}" humaneval 0 128 symmetric_risk_switch 0.004 trace smoke_he_switch 2 256 & p0=$!
 run_gpu smoke_math_switch 1 "${runner}" localleap_math500 0 128 symmetric_risk_switch 0.004 trace smoke_math_switch 2 256 & p1=$!
 wait "${p0}" || true; wait "${p1}" || true
-require_done \
-  "${run_base}/humaneval/he_base_n32" \
-  "${run_base}/humaneval/he_fast_n32" \
-  "${run_base}/humaneval/he_accuracy_n32" \
-  "${run_base}/humaneval/he_switch_n32" \
-  "${run_base}/localleap_math500/math_base_n50" \
-  "${run_base}/localleap_math500/math_fast_n50" \
-  "${run_base}/localleap_math500/math_accuracy_n50" \
-  "${run_base}/localleap_math500/math_switch_n50"
 [[ -e "${run_base}/humaneval/smoke_he_switch/DONE" && -e "${run_base}/localleap_math500/smoke_math_switch/DONE" ]] || { touch "${queue_root}/FAILED_SMOKE"; exit 22; }
 
 # Discovery: regenerate every comparator from the same frozen source.
@@ -129,12 +122,14 @@ require_done \
 ) & p1=$!
 wait "${p0}" || true; wait "${p1}" || true
 require_done \
-  "${run_base}/humaneval/he_base_n64" \
-  "${run_base}/humaneval/he_fast_n64" \
-  "${run_base}/humaneval/he_switch_n64" \
-  "${run_base}/localleap_math500/math_base_n100" \
-  "${run_base}/localleap_math500/math_fast_n100" \
-  "${run_base}/localleap_math500/math_switch_n100"
+  "${run_base}/humaneval/he_base_n32" \
+  "${run_base}/humaneval/he_fast_n32" \
+  "${run_base}/humaneval/he_accuracy_n32" \
+  "${run_base}/humaneval/he_switch_n32" \
+  "${run_base}/localleap_math500/math_base_n50" \
+  "${run_base}/localleap_math500/math_fast_n50" \
+  "${run_base}/localleap_math500/math_accuracy_n50" \
+  "${run_base}/localleap_math500/math_switch_n50"
 
 pair_runs he_switch_vs_fast_n32 "${run_base}/humaneval/he_fast_n32" "${run_base}/humaneval/he_switch_n32"
 pair_runs he_switch_vs_base_n32 "${run_base}/humaneval/he_base_n32" "${run_base}/humaneval/he_switch_n32"
@@ -162,12 +157,12 @@ fi
 ) & p1=$!
 wait "${p0}" || true; wait "${p1}" || true
 require_done \
-  "${run_base}/humaneval/he_base_full" \
-  "${run_base}/humaneval/he_fast_full" \
-  "${run_base}/humaneval/he_switch_full" \
-  "${run_base}/localleap_math500/math_base_full" \
-  "${run_base}/localleap_math500/math_fast_full" \
-  "${run_base}/localleap_math500/math_switch_full"
+  "${run_base}/humaneval/he_base_n64" \
+  "${run_base}/humaneval/he_fast_n64" \
+  "${run_base}/humaneval/he_switch_n64" \
+  "${run_base}/localleap_math500/math_base_n100" \
+  "${run_base}/localleap_math500/math_fast_n100" \
+  "${run_base}/localleap_math500/math_switch_n100"
 
 pair_runs he_switch_vs_fast_n64 "${run_base}/humaneval/he_fast_n64" "${run_base}/humaneval/he_switch_n64"
 pair_runs he_switch_vs_base_n64 "${run_base}/humaneval/he_base_n64" "${run_base}/humaneval/he_switch_n64"
@@ -192,6 +187,13 @@ fi
   run_gpu math_switch_full 1 "${runner}" localleap_math500 0 128 symmetric_risk_switch 0.004 trace math_switch_full full 256
 ) & p1=$!
 wait "${p0}" || true; wait "${p1}" || true
+require_done \
+  "${run_base}/humaneval/he_base_full" \
+  "${run_base}/humaneval/he_fast_full" \
+  "${run_base}/humaneval/he_switch_full" \
+  "${run_base}/localleap_math500/math_base_full" \
+  "${run_base}/localleap_math500/math_fast_full" \
+  "${run_base}/localleap_math500/math_switch_full"
 
 pair_runs he_switch_vs_fast_full "${run_base}/humaneval/he_fast_full" "${run_base}/humaneval/he_switch_full"
 pair_runs he_switch_vs_base_full "${run_base}/humaneval/he_base_full" "${run_base}/humaneval/he_switch_full"
