@@ -109,6 +109,12 @@ case "${profile}" in
     # decision unless original LLaDA passes strictly more prompt-visible tests.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_public_guard"
     ;;
+  trajectory_lazy_confirmed_public_guard)
+    # Exact-output v11 acceleration.  Skip original LLaDA when the confirmed
+    # parent already exhausts all prompt-visible checks; otherwise run the
+    # identical strict public-check guard.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_lazy_public_guard"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

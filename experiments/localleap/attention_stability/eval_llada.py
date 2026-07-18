@@ -40,6 +40,8 @@ from model.modeling_llada import LLaDAModelLM
 from generate import *
 from stcc_generate import generate_stcc
 from differential_selector import (
+    decide_public_example_guard,
+    evaluate_public_candidate,
     has_public_checks,
     select_differential_candidate,
     select_public_example_guard,
@@ -260,6 +262,7 @@ class LLaDAEvalHarness(LM):
             "confirmed_bidirectional_block",
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
+            "confirmed_bidirectional_lazy_public_guard",
         }:
             raise ValueError(
                 "dependency_likelihood_selection_mode must be mean, "
@@ -268,7 +271,8 @@ class LLaDAEvalHarness(LM):
                 "convergent_coverage_consensus_block, shared_skeleton, or "
                 "bidirectional_block, confirmed_bidirectional_block, or "
                 "early_confirmed_bidirectional_block, or "
-                "confirmed_bidirectional_public_guard"
+                "confirmed_bidirectional_public_guard, or "
+                "confirmed_bidirectional_lazy_public_guard"
             )
         self.dependency_draft_exchange = (
             dependency_draft_exchange.lower() == "true"
@@ -518,6 +522,7 @@ class LLaDAEvalHarness(LM):
             trace_evaluator_version = None
             public_guard_requested = False
             public_guard_active = False
+            lazy_public_guard_requested = False
             if self.stcc_mode is not None:
                 generated_answer, nfe, decode_diagnostics = generate_stcc(
                     self.model,
@@ -569,17 +574,22 @@ class LLaDAEvalHarness(LM):
                     requested_selection_mode = (
                         self.dependency_likelihood_selection_mode
                     )
-                    public_guard_requested = (
+                    public_guard_requested = requested_selection_mode in {
+                        "confirmed_bidirectional_public_guard",
+                        "confirmed_bidirectional_lazy_public_guard",
+                    }
+                    lazy_public_guard_requested = (
                         requested_selection_mode
-                        == "confirmed_bidirectional_public_guard"
+                        == "confirmed_bidirectional_lazy_public_guard"
                     )
                     public_guard_active = public_guard_requested and bool(
                         has_public_checks(question, req.doc.get("entry_point"))
                     )
                     effective_selection_mode = (
-                        requested_selection_mode
-                        if not public_guard_requested or public_guard_active
-                        else "confirmed_bidirectional_block"
+                        "confirmed_bidirectional_block"
+                        if lazy_public_guard_requested
+                        or (public_guard_requested and not public_guard_active)
+                        else requested_selection_mode
                     )
                     generated_answer, nfe, decode_diagnostics = (
                         generate_trajectory_likelihood_selection(
@@ -742,14 +752,70 @@ class LLaDAEvalHarness(LM):
                 if public_guard_requested:
                     if public_guard_active:
                         parent_name = decode_diagnostics["selected_name"]
-                        guard_name, public_guard_diagnostics = (
-                            select_public_example_guard(
-                                candidate_generations["baseline"],
+                        if lazy_public_guard_requested:
+                            parent_evidence = evaluate_public_candidate(
                                 candidate_generations[parent_name],
                                 question,
                                 req.doc.get("entry_point"),
                             )
-                        )
+                            parent_exhausts_checks = (
+                                parent_evidence["visible_check_count"] > 0
+                                and parent_evidence["visible_checks_passed"]
+                                == parent_evidence["visible_check_count"]
+                            )
+                            if parent_exhausts_checks:
+                                guard_name, public_guard_diagnostics = (
+                                    decide_public_example_guard(None, parent_evidence)
+                                )
+                            else:
+                                baseline_token_ids, baseline_nfe = generate(
+                                    self.model,
+                                    input_ids,
+                                    steps=self.steps,
+                                    gen_length=self.gen_length,
+                                    block_length=self.block_length,
+                                    temperature=0,
+                                    remasking=self.remasking,
+                                    mask_id=self.mask_id,
+                                    early_stop=self.early_stop,
+                                    threshold=self.threshold,
+                                )
+                                nfe += baseline_nfe
+                                if self.show_speed:
+                                    num_nfe += baseline_nfe
+                                draft_candidate_token_ids["baseline"] = (
+                                    baseline_token_ids
+                                )
+                                candidate_generations.update(
+                                    decode_candidate_generations(
+                                        self.tokenizer,
+                                        {"baseline": baseline_token_ids},
+                                        input_ids.shape[1],
+                                        stop_tokens,
+                                        preserve_full_humaneval_response=(
+                                            is_humaneval_request
+                                        ),
+                                    )
+                                )
+                                baseline_evidence = evaluate_public_candidate(
+                                    candidate_generations["baseline"],
+                                    question,
+                                    req.doc.get("entry_point"),
+                                )
+                                guard_name, public_guard_diagnostics = (
+                                    decide_public_example_guard(
+                                        baseline_evidence, parent_evidence
+                                    )
+                                )
+                        else:
+                            guard_name, public_guard_diagnostics = (
+                                select_public_example_guard(
+                                    candidate_generations["baseline"],
+                                    candidate_generations[parent_name],
+                                    question,
+                                    req.doc.get("entry_point"),
+                                )
+                            )
                         final_name = (
                             "baseline" if guard_name == "baseline" else parent_name
                         )
@@ -779,8 +845,13 @@ class LLaDAEvalHarness(LM):
                         )
                     else:
                         decode_diagnostics["public_example_guard"] = {
-                            "selector": "strict_public_example_guard_v2",
+                            "selector": (
+                                "strict_public_example_guard_v3_lazy_exact"
+                                if lazy_public_guard_requested
+                                else "strict_public_example_guard_v2"
+                            ),
                             "status": "skipped_no_public_examples",
+                            "baseline_generated": False,
                             "uses_hidden_tests": False,
                             "uses_reference_solution": False,
                         }

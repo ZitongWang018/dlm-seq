@@ -242,6 +242,98 @@ def select_differential_candidate(
     return selected, diagnostics
 
 
+def evaluate_public_candidate(
+    candidate: str,
+    prompt: str,
+    entry_point: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Evaluate one draft using only checks already visible in the prompt."""
+    examples = prompt_examples(prompt, entry_point)
+    assertions = prompt_assertions(prompt, entry_point)
+    expressions = [expression for expression, _ in examples] + assertions
+    code = extract_python_code(candidate)
+    execution = execute_expressions(code, expressions)
+    outputs = execution.get("outputs", [])
+    passed = 0
+    for index, (_, expected) in enumerate(examples):
+        if index < len(outputs) and outputs[index].get("ok"):
+            passed += outputs[index].get("value") == _normalize_expected(expected)
+    for index in range(len(examples), len(expressions)):
+        if index < len(outputs) and outputs[index].get("ok"):
+            passed += outputs[index].get("value") == "True"
+    return {
+        "visible_example_count": len(examples),
+        "visible_assertion_count": len(assertions),
+        "visible_check_count": len(expressions),
+        "visible_checks_passed": int(passed),
+        "compile_valid": bool(execution.get("compile")),
+        "candidate_hash": hashlib.sha256(code.encode("utf-8")).hexdigest(),
+    }
+
+
+def decide_public_example_guard(
+    baseline_evidence: Optional[Dict[str, Any]],
+    parent_evidence: Dict[str, Any],
+) -> Tuple[str, Dict[str, Any]]:
+    """Apply the strict guard, allowing an exact baseline-pruning shortcut."""
+    visible_check_count = int(parent_evidence["visible_check_count"])
+    parent_passed = int(parent_evidence["visible_checks_passed"])
+    baseline_generated = baseline_evidence is not None
+    if baseline_evidence is None:
+        if not visible_check_count or parent_passed != visible_check_count:
+            raise ValueError(
+                "baseline may be pruned only when the parent passes every public check"
+            )
+        selected_name = "parent"
+        baseline_passed = None
+        baseline_compile = None
+        status = "baseline_pruned_parent_exhausted_public_checks"
+    else:
+        if int(baseline_evidence["visible_check_count"]) != visible_check_count:
+            raise ValueError("baseline and parent public-check counts must match")
+        baseline_passed = int(baseline_evidence["visible_checks_passed"])
+        baseline_compile = bool(baseline_evidence["compile_valid"])
+        selected_name = (
+            "baseline"
+            if visible_check_count and baseline_passed > parent_passed
+            else "parent"
+        )
+        status = "baseline_evaluated"
+    return selected_name, {
+        "selector": (
+            "strict_public_example_guard_v3_lazy_exact"
+            if not baseline_generated
+            else "strict_public_example_guard_v2"
+        ),
+        "selected_name": selected_name,
+        "status": status,
+        "baseline_generated": baseline_generated,
+        "exact_eager_selection": True,
+        "visible_example_count": int(parent_evidence["visible_example_count"]),
+        "visible_assertion_count": int(parent_evidence["visible_assertion_count"]),
+        "visible_check_count": visible_check_count,
+        "visible_examples_passed": {
+            "baseline": baseline_passed,
+            "parent": parent_passed,
+        },
+        "compile_valid": {
+            "baseline": baseline_compile,
+            "parent": bool(parent_evidence["compile_valid"]),
+        },
+        "candidate_hashes": {
+            "baseline": (
+                baseline_evidence["candidate_hash"]
+                if baseline_evidence is not None
+                else None
+            ),
+            "parent": parent_evidence["candidate_hash"],
+        },
+        "uses_generated_probes": False,
+        "uses_hidden_tests": False,
+        "uses_reference_solution": False,
+    }
+
+
 def select_public_example_guard(
     baseline_candidate: str,
     parent_candidate: str,
@@ -255,45 +347,8 @@ def select_public_example_guard(
     synthetic probes, and keeps the parent on every tie or missing-example
     case.  Reference solutions and hidden tests are not accepted as inputs.
     """
-    examples = prompt_examples(prompt, entry_point)
-    assertions = prompt_assertions(prompt, entry_point)
-    expressions = [expression for expression, _ in examples] + assertions
-    codes = [
-        extract_python_code(baseline_candidate),
-        extract_python_code(parent_candidate),
-    ]
-    executions = [execute_expressions(code, expressions) for code in codes]
-    visible_passes = []
-    for execution in executions:
-        outputs = execution.get("outputs", [])
-        passed = 0
-        for index, (_, expected) in enumerate(examples):
-            if index < len(outputs) and outputs[index].get("ok"):
-                passed += outputs[index].get("value") == _normalize_expected(expected)
-        for index in range(len(examples), len(expressions)):
-            if index < len(outputs) and outputs[index].get("ok"):
-                passed += outputs[index].get("value") == "True"
-        visible_passes.append(int(passed))
-    selected_name = (
-        "baseline"
-        if expressions and visible_passes[0] > visible_passes[1]
-        else "parent"
+    baseline_evidence = evaluate_public_candidate(
+        baseline_candidate, prompt, entry_point
     )
-    return selected_name, {
-        "selector": "strict_public_example_guard_v2",
-        "selected_name": selected_name,
-        "visible_example_count": len(examples),
-        "visible_assertion_count": len(assertions),
-        "visible_check_count": len(expressions),
-        "visible_examples_passed": {
-            "baseline": visible_passes[0],
-            "parent": visible_passes[1],
-        },
-        "compile_valid": {
-            "baseline": bool(executions[0].get("compile")),
-            "parent": bool(executions[1].get("compile")),
-        },
-        "uses_generated_probes": False,
-        "uses_hidden_tests": False,
-        "uses_reference_solution": False,
-    }
+    parent_evidence = evaluate_public_candidate(parent_candidate, prompt, entry_point)
+    return decide_public_example_guard(baseline_evidence, parent_evidence)
