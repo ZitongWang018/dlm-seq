@@ -1,0 +1,26 @@
+{
+  "version": "early_confirmed_bidirectional_block_v10",
+  "registered_at": "2026-07-19T06:52:00+08:00",
+  "formal_baseline": "original LLaDA low-confidence, 128 steps, generation length 256, block length 32",
+  "accuracy_parent": "trajectory_confirmed_bidirectional_block v9 with symmetric_fast tau=0.004 parent",
+  "objective": "Reduce v9 NFE and wall time while preserving its selected token sequence exactly.",
+  "method": {
+    "horizontal": "Keep the same symmetric_fast trajectory and the same conservative attention trajectory used by v9.",
+    "longitudinal": "Accumulate conservative committed-token log probability during denoising and use a zero-log-loss optimistic upper bound for all still-uncommitted positions.",
+    "safe_abort": "If accumulated_logprob / generation_length is already at most fast_mean + 1/block_length, even perfect remaining tokens cannot satisfy v9's strict path-evidence gate; stop the conservative trajectory and return fast without block verification.",
+    "selection_when_not_aborted": "Run the unchanged v9 bidirectional block verifier and unchanged fast-tie selection.",
+    "new_hyperparameters": "none",
+    "execution_or_gold_selection": false,
+    "token_splicing": false
+  },
+  "invariants": {
+    "output": "Must be byte-for-byte identical to v9 for every evaluated prompt.",
+    "nfe": "Must never exceed v9 NFE for the same prompt.",
+    "fallback": "Any invariant violation rejects v10 and leaves v9 unchanged."
+  },
+  "validation": {
+    "unit": "Optimistic-bound arithmetic and an integration test proving verifier skipping and fast return.",
+    "real_model_gate": "Fresh isolated HumanEval run, first on a small prefix and then full paired output comparison against v9; compare stable task id and prompt hash.",
+    "accuracy_promotion": "No independent accuracy claim; v10 inherits an accuracy result only after exact-output equivalence is demonstrated."
+  }
+}

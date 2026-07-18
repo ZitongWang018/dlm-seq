@@ -9,6 +9,7 @@ from generate import (
     score_shared_skeleton_candidates,
     score_bidirectional_block_candidates,
     select_confirmed_bidirectional_block,
+    commit_mean_cannot_reach_threshold,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
 )
@@ -139,6 +140,64 @@ def test_confirmed_block_requires_path_and_counterfactual_agreement():
     assert select_confirmed_bidirectional_block(
         supports_fast, strong, block_length=32
     ) == "fast"
+
+
+def test_commit_mean_abort_uses_an_optimistic_zero_logprob_bound():
+    assert commit_mean_cannot_reach_threshold(
+        committed_logprob_sum=-20.0,
+        total_token_count=100,
+        required_mean=-0.19,
+    )
+    assert not commit_mean_cannot_reach_threshold(
+        committed_logprob_sum=-18.0,
+        total_token_count=100,
+        required_mean=-0.19,
+    )
+
+
+def test_early_confirmed_mode_returns_fast_without_final_verifier():
+    original_attention = generate_module.generate_attention_stability
+    calls = []
+
+    def fake_attention(**kwargs):
+        calls.append(kwargs.get("abort_if_final_commit_mean_at_most"))
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2]]), 128, {
+                "commit_logprob_mean": -0.20,
+                "early_abort_triggered": False,
+            }
+        return torch.tensor([[1, 7]]), 40, {
+            "commit_logprob_mean": -0.50,
+            "early_abort_triggered": True,
+            "commit_token_count": 1,
+            "early_abort_best_possible_final_mean": -0.30,
+        }
+
+    generate_module.generate_attention_stability = fake_attention
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=2,
+            block_length=32,
+            selection_mode="early_confirmed_bidirectional_block",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+
+    assert calls[0] is None
+    assert calls[1] == -0.20 + 1.0 / 32
+    assert output.tolist() == [[1, 2]]
+    assert nfe == 168
+    assert summary["selected_name"] == "fast"
+    assert summary["accuracy_early_abort"]["triggered"] is True
+    assert summary["candidate_nfe"] == {
+        "fast": 128,
+        "accuracy": 40,
+        "bidirectional_block_selector": 0,
+    }
 
 
 def make_logits(top_ids, confidences, vocab_size=8):
@@ -928,6 +987,8 @@ def test_revision_margin_prioritizes_decisive_conditioned_change():
 
 
 if __name__ == "__main__":
+    test_early_confirmed_mode_returns_fast_without_final_verifier()
+    test_commit_mean_abort_uses_an_optimistic_zero_logprob_bound()
     test_confirmed_block_requires_path_and_counterfactual_agreement()
     test_bidirectional_block_masks_one_block_under_both_external_drafts()
     test_bidirectional_block_identical_paths_need_no_selector_forward()
@@ -966,4 +1027,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("38 selector tests passed")
+    print("40 selector tests passed")

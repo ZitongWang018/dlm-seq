@@ -526,6 +526,7 @@ def generate_attention_stability(
     fill_budget=False,
     collect_position_risk=False,
     collect_commit_logprobs=False,
+    abort_if_final_commit_mean_at_most=None,
 ):
     """Baseline LLaDA decoding with the proposed attention/stability selection layered on top."""
     x = torch.full((1, prompt.shape[1] + gen_length), mask_id, dtype=torch.long, device=model.device)
@@ -585,6 +586,13 @@ def generate_attention_stability(
         "attention_asymmetry_mean_sum": 0.0,
         "commit_logprob_sum": 0.0,
         "commit_token_count": 0,
+        "early_abort_triggered": False,
+        "early_abort_threshold": (
+            float(abort_if_final_commit_mean_at_most)
+            if abort_if_final_commit_mean_at_most is not None
+            else None
+        ),
+        "early_abort_best_possible_final_mean": None,
     }
     step_records = []
     commit_logprob_by_position = None
@@ -609,6 +617,9 @@ def generate_attention_stability(
             "final_directional_attention": [],
         }
 
+    abort_generation = False
+    if abort_if_final_commit_mean_at_most is not None and early_stop:
+        raise ValueError("commit-mean early abort requires early_stop=False")
     for block_idx in range(num_blocks):
         block_start = prompt.shape[1] + block_idx * block_length
         block_end = block_start + block_length
@@ -814,6 +825,24 @@ def generate_attention_stability(
             previous_selected = torch.where(transfer_index[0])[0]
             x[transfer_index] = x0[transfer_index]
             step_idx += 1
+            if abort_if_final_commit_mean_at_most is not None:
+                best_possible_final_mean = (
+                    summary["commit_logprob_sum"] / int(gen_length)
+                )
+                summary["early_abort_best_possible_final_mean"] = float(
+                    best_possible_final_mean
+                )
+                if commit_mean_cannot_reach_threshold(
+                    summary["commit_logprob_sum"],
+                    int(gen_length),
+                    float(abort_if_final_commit_mean_at_most),
+                ):
+                    summary["early_abort_triggered"] = True
+                    abort_generation = True
+                    break
+
+        if abort_generation:
+            break
 
         if collect_position_risk:
             if last_directional_attention is None:
@@ -854,6 +883,23 @@ def generate_attention_stability(
         )
         summary["_position_risk_state"] = position_risk
     return x, nfe, summary
+
+
+def commit_mean_cannot_reach_threshold(
+    committed_logprob_sum,
+    total_token_count,
+    required_mean,
+):
+    """Return whether even zero log-probability future tokens cannot qualify.
+
+    Every token log probability is at most zero.  Dividing the accumulated
+    negative sum by the final token count is therefore an optimistic upper
+    bound on the completed trajectory mean.
+    """
+    if int(total_token_count) <= 0:
+        raise ValueError("total_token_count must be positive")
+    optimistic_final_mean = float(committed_logprob_sum) / int(total_token_count)
+    return optimistic_final_mean <= float(required_mean)
 
 
 def select_likelihood_trajectory(
@@ -1203,16 +1249,27 @@ def generate_trajectory_likelihood_selection(
         prune_stable_conflicts=True,
         fill_budget=True,
     )
+    accuracy_abort_threshold = (
+        float(fast_summary["commit_logprob_mean"]) + 1.0 / int(block_length)
+        if selection_mode == "early_confirmed_bidirectional_block"
+        else None
+    )
     accuracy_x, accuracy_nfe, accuracy_summary = generate_attention_stability(
         **shared,
         prune_stable_conflicts=False,
         fill_budget=False,
+        abort_if_final_commit_mean_at_most=accuracy_abort_threshold,
     )
     candidate_summaries = {
         "fast": fast_summary,
         "accuracy": accuracy_summary,
     }
-    candidate_ids = {"fast": fast_x, "accuracy": accuracy_x}
+    accuracy_early_aborted = bool(
+        accuracy_summary.get("early_abort_triggered", False)
+    )
+    candidate_ids = {"fast": fast_x}
+    if not accuracy_early_aborted:
+        candidate_ids["accuracy"] = accuracy_x
     baseline_nfe = None
     baseline_consensus = None
     shared_skeleton_scores = None
@@ -1293,26 +1350,34 @@ def generate_trajectory_likelihood_selection(
     elif selection_mode in {
         "bidirectional_block",
         "confirmed_bidirectional_block",
+        "early_confirmed_bidirectional_block",
     }:
-        (
-            bidirectional_block_scores,
-            bidirectional_block_disagreements,
-            bidirectional_block_nfe,
-            bidirectional_block_records,
-        ) = score_bidirectional_block_candidates(
-            model,
-            candidate_ids,
-            prompt_length=prompt.shape[1],
-            block_length=block_length,
-            mask_id=mask_id,
-        )
-        if selection_mode == "confirmed_bidirectional_block":
+        if accuracy_early_aborted:
+            selected_name = "fast"
+            bidirectional_block_disagreements = 0
+        else:
+            (
+                bidirectional_block_scores,
+                bidirectional_block_disagreements,
+                bidirectional_block_nfe,
+                bidirectional_block_records,
+            ) = score_bidirectional_block_candidates(
+                model,
+                candidate_ids,
+                prompt_length=prompt.shape[1],
+                block_length=block_length,
+                mask_id=mask_id,
+            )
+        if selection_mode in {
+            "confirmed_bidirectional_block",
+            "early_confirmed_bidirectional_block",
+        } and not accuracy_early_aborted:
             selected_name = select_confirmed_bidirectional_block(
                 bidirectional_block_scores,
                 candidate_summaries,
                 block_length,
             )
-        else:
+        elif not accuracy_early_aborted:
             selected_name = max(
                 ("fast", "accuracy"),
                 key=lambda name: bidirectional_block_scores[name],
@@ -1339,6 +1404,7 @@ def generate_trajectory_likelihood_selection(
     elif selection_mode in {
         "bidirectional_block",
         "confirmed_bidirectional_block",
+        "early_confirmed_bidirectional_block",
     }:
         disagreement_count = bidirectional_block_disagreements
         scored_disagreement_count = bidirectional_block_disagreements
@@ -1363,7 +1429,9 @@ def generate_trajectory_likelihood_selection(
     )
     summary = {
         "decoder": (
-            "trajectory_confirmed_bidirectional_block_verification_v9"
+            "trajectory_early_confirmed_bidirectional_block_v10"
+            if selection_mode == "early_confirmed_bidirectional_block"
+            else "trajectory_confirmed_bidirectional_block_verification_v9"
             if selection_mode == "confirmed_bidirectional_block"
             else "trajectory_bidirectional_block_verification_v8"
             if selection_mode == "bidirectional_block"
@@ -1391,7 +1459,9 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "one_nat_path_evidence_confirmed_by_bidirectional_block_verification"
+            "optimistic_path_bound_then_confirmed_bidirectional_block"
+            if selection_mode == "early_confirmed_bidirectional_block"
+            else "one_nat_path_evidence_confirmed_by_bidirectional_block_verification"
             if selection_mode == "confirmed_bidirectional_block"
             else "bidirectional_block_full_draft_mean_log_evidence"
             if selection_mode == "bidirectional_block"
@@ -1453,7 +1523,18 @@ def generate_trajectory_likelihood_selection(
         if selection_mode in {
             "bidirectional_block",
             "confirmed_bidirectional_block",
+            "early_confirmed_bidirectional_block",
         }
+        else None,
+        "accuracy_early_abort": {
+            "triggered": accuracy_early_aborted,
+            "threshold": accuracy_abort_threshold,
+            "committed_tokens": int(accuracy_summary["commit_token_count"]),
+            "best_possible_final_mean": accuracy_summary[
+                "early_abort_best_possible_final_mean"
+            ],
+        }
+        if selection_mode == "early_confirmed_bidirectional_block"
         else None,
         "baseline_consensus": baseline_consensus,
         "revision_coverage": {
@@ -1479,6 +1560,7 @@ def generate_trajectory_likelihood_selection(
                 if selection_mode in {
                     "bidirectional_block",
                     "confirmed_bidirectional_block",
+                    "early_confirmed_bidirectional_block",
                 }
                 else {}
             ),

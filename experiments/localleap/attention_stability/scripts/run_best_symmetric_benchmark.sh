@@ -99,6 +99,11 @@ case "${profile}" in
     # block verification independently favors the same conservative draft.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_block"
     ;;
+  trajectory_early_confirmed_bidirectional_block)
+    # Exact-output acceleration: abort the conservative path once even
+    # zero-logprob future commits cannot clear the inherited one-nat gate.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=early_confirmed_bidirectional_block"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;
