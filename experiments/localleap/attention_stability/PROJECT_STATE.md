@@ -1,6 +1,6 @@
 # Project State
 
-Date: 2026-07-16
+Date: 2026-07-18
 
 Remote worktrees:
 
@@ -8,6 +8,28 @@ Remote worktrees:
 - **LocalLeap reproduction (protected): `/root/autodl-tmp/LocalLeap`**
 
 ## Current focus
+
+The current development parent has been reset after a full retrospective.  The
+formal baseline remains original LLaDA.  The speed parent is
+`symmetric_fast` at tau 0.004, and accuracy-first symmetric tau 0.004 is an
+upper reference.  Global Top-K ordering, response-credit draft exchange,
+response refinement, cross-conditioned Pareto retention, and differential
+execution selection are not parents: they either tied the parent at extra NFE
+or damaged correct outputs.  In particular, the last cross-conditioned core
+matched its parent exactly on HumanEval-32 and MATH-50 while costing about 3%
+more NFE; its execution selector fell to 1/32 HumanEval.
+
+The active method is **Confidence-Switched Stability Decoding**.  It uses an
+already-tested selector composition rather than adding another generation
+path: prune strong conflicts only when both endpoints retained their top-1
+after the new explicit condition, and do not force-fill a conflict involving a
+conditioned rewrite.  This interpolates between accuracy-first symmetric and
+`symmetric_fast` without a new threshold or score.  Horizontal attention
+decides whether two positions conflict; longitudinal candidate change decides
+whether that edge still carries information.  The two-GPU queue
+`confidence_switched_stability_20260718_v1` uses matched-source HumanEval and
+MATH-500 discovery/expansion/full gates, then sampled MBPP and GSM8K only after
+promotion.  See `docs/confidence_switched_stability.md`.
 
 Reproduce and extend **LocalLeap** on LLaDA-Instruct (local weights), with correct HumanEval scoring via `postprocess_code.py`.
 

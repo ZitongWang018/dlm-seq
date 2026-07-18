@@ -1,5 +1,28 @@
 # Memory
 
+## 2026-07-18 — Confidence-switched stability retrospective
+
+- Re-audited the method lineage before starting another experiment.  The only
+  parents retained are original LLaDA, symmetric tau 0.004, and its fixed-
+  budget `symmetric_fast` child.  Global Top-K retention, response-credit draft
+  exchange, response refinement, cross-conditioned Pareto retention, and
+  differential execution selection remain negative descendants.
+- The last cross-conditioned core was correctness-identical to its matched
+  parent on HumanEval-32 (13/32) and MATH-50 (15/50) at roughly 3% extra NFE.
+  Its execution-selection child scored 1/32 HumanEval and is rejected.
+- Added `symmetric_risk_switch`, a configuration-only descendant with no new
+  generation branch or hyperparameter.  Stable attention conflicts are pruned
+  to retain parallelism; conflicts involving an adjacent-step conditioned
+  top-1 rewrite are not force-filled and receive another ordinary denoising
+  step.  This is the minimal uncertainty switch suggested jointly by the MBPP
+  instability statistics and the search/accelerate principle in recent DLM
+  decoding work.
+- Added a focused selector regression test, method note, and a frozen-source
+  two-GPU queue.  It regenerates original LLaDA, `symmetric_fast`, the accuracy
+  reference, and the new method on HumanEval/MATH matched slices.  Promotion
+  requires a strict combined paired gain with no per-task loss greater than one
+  and at most 1.35x NFE; MBPP/GSM8K sampled generalization is downstream only.
+
 ## 2026-07-17
 
 - Added `revision_margin_fast`, a minimal vertical descendant of the strongest

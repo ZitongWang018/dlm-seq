@@ -141,6 +141,60 @@ def test_fixed_budget_fill_guarantees_parallel_commit_count():
     assert diagnostics["underfilled"] is False
 
 
+def test_risk_switch_fills_stable_pairs_but_waits_after_conditioned_rewrite():
+    logits = make_logits([1, 2, 3], [0.95, 0.90, 0.80])
+    dependency = torch.zeros((1, 3, 3))
+    dependency[0, 1, 0] = dependency[0, 0, 1] = 0.9
+    dependency[0, 1, 2] = 0.9
+    previous_selected = torch.tensor([2])
+    x = torch.tensor([[7, 7, 3]])
+    mask = torch.tensor([[True, True, False]])
+
+    # With no adjacent-step rewrite, the dense pair is low-information and
+    # both candidates retain the native parallel budget.
+    _, stable_transfer, stable_diagnostics, _ = select_attention_stability_tokens(
+        logits=logits,
+        temperature=0.0,
+        remasking="low_confidence",
+        mask_index=mask,
+        x=x,
+        budget=2,
+        dependency=dependency,
+        dependency_threshold=0.5,
+        block_start=0,
+        previous_top1=torch.tensor([[1, 2, 3]]),
+        previous_selected=previous_selected,
+        prune_stable_conflicts=True,
+        fill_budget=False,
+    )
+    assert stable_transfer.nonzero(as_tuple=True)[1].tolist() == [0, 1]
+    assert stable_diagnostics["stable_conflicts_pruned"] == 1
+    assert not stable_diagnostics["underfilled"]
+
+    # Once position 1 changes after the new condition arrives, the same
+    # horizontal edge is informative.  The decoder commits only the parent
+    # anchor and waits for another ordinary forward instead of force-filling.
+    _, risky_transfer, risky_diagnostics, _ = select_attention_stability_tokens(
+        logits=logits,
+        temperature=0.0,
+        remasking="low_confidence",
+        mask_index=mask,
+        x=x,
+        budget=2,
+        dependency=dependency,
+        dependency_threshold=0.5,
+        block_start=0,
+        previous_top1=torch.tensor([[1, 7, 3]]),
+        previous_selected=previous_selected,
+        prune_stable_conflicts=True,
+        fill_budget=False,
+    )
+    assert risky_transfer.nonzero(as_tuple=True)[1].tolist() == [0]
+    assert risky_diagnostics["rejected_pairs"] == 1
+    assert risky_diagnostics["underfilled"]
+    assert risky_diagnostics["forced_budget_fills"] == 0
+
+
 def test_topk_overlap_creates_intermediate_temporal_tier():
     logits = make_logits([1, 2, 3], [0.70, 0.80, 0.95])
     dependency = torch.zeros((1, 3, 3))
@@ -299,6 +353,7 @@ if __name__ == "__main__":
     test_directed_read_dependency_is_not_implicitly_symmetrized()
     test_stable_dense_conflict_can_be_pruned_without_new_threshold()
     test_fixed_budget_fill_guarantees_parallel_commit_count()
+    test_risk_switch_fills_stable_pairs_but_waits_after_conditioned_rewrite()
     test_topk_overlap_creates_intermediate_temporal_tier()
     test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates()
     test_topk_overlap_rejects_invalid_k()
@@ -306,4 +361,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("15 selector tests passed")
+    print("16 selector tests passed")

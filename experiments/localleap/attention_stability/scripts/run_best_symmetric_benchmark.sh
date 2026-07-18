@@ -39,6 +39,13 @@ case "${profile}" in
   symmetric_fast)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_prune_stable_conflicts=True,dependency_fill_budget=True"
     ;;
+  symmetric_risk_switch)
+    # Confidence-switched decoding: stable conflicts are treated as dense,
+    # low-information edges and retain the native parallel budget.  A conflict
+    # involving a candidate rewritten by the newly committed condition is not
+    # force-filled, so only risky steps spend additional denoising iterations.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_prune_stable_conflicts=True,dependency_fill_budget=False"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;
