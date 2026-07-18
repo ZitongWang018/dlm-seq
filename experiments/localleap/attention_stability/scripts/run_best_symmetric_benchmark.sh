@@ -72,6 +72,11 @@ case "${profile}" in
     # vertical evidence is already strong enough to permit a parent switch.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=lazy_consensus_block"
     ;;
+  trajectory_coverage_consensus_block)
+    # A weak mean-likelihood path may request the baseline vote only when its
+    # extra conditioned revisions cover every final parent disagreement.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=coverage_consensus_block"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

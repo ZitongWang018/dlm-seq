@@ -895,7 +895,11 @@ def select_likelihood_trajectory(
             candidate_token_ids, candidate_summaries
         )
         return max(ordered_names, key=lambda name: scores[name])
-    if selection_mode in {"consensus_block", "lazy_consensus_block"}:
+    if selection_mode in {
+        "consensus_block",
+        "lazy_consensus_block",
+        "coverage_consensus_block",
+    }:
         if block_length is None or int(block_length) <= 0:
             raise ValueError(
                 f"{selection_mode} requires a positive block_length"
@@ -910,7 +914,20 @@ def select_likelihood_trajectory(
         # lazy mode, preserve fast immediately and avoid a zero-information
         # third trajectory.
         if evidence_per_block <= 1.0:
-            return "fast"
+            if selection_mode != "coverage_consensus_block":
+                return "fast"
+            fast_ids = candidate_token_ids["fast"]
+            accuracy_ids = candidate_token_ids["accuracy"]
+            disagreement_count = int((fast_ids != accuracy_ids).sum().item())
+            extra_invalidations = int(
+                candidate_summaries["accuracy"]["response_invalidations"]
+                - candidate_summaries["fast"]["response_invalidations"]
+            )
+            # A weak mean likelihood gain can still be vertically meaningful
+            # when the slower schedule performs at least one additional
+            # conditioned revision for every final token disagreement.
+            if disagreement_count == 0 or extra_invalidations < disagreement_count:
+                return "fast"
         consensus = score_baseline_consensus(candidate_token_ids)
         return (
             "accuracy"
@@ -1045,15 +1062,37 @@ def generate_trajectory_likelihood_selection(
     candidate_ids = {"fast": fast_x, "accuracy": accuracy_x}
     baseline_nfe = None
     baseline_consensus = None
-    if selection_mode in {"consensus_block", "lazy_consensus_block"}:
-        needs_baseline = (
-            selection_mode == "consensus_block"
-            or (
-                float(accuracy_summary["commit_logprob_mean"])
-                - float(fast_summary["commit_logprob_mean"])
+    disagreement_count_for_coverage = None
+    extra_invalidations_for_coverage = None
+    revision_coverage = None
+    if selection_mode in {
+        "consensus_block",
+        "lazy_consensus_block",
+        "coverage_consensus_block",
+    }:
+        evidence_per_block = (
+            float(accuracy_summary["commit_logprob_mean"])
+            - float(fast_summary["commit_logprob_mean"])
+        ) * int(block_length)
+        if selection_mode == "coverage_consensus_block":
+            disagreement_count_for_coverage = int(
+                (fast_x != accuracy_x).sum().item()
             )
-            * int(block_length)
-            > 1.0
+            extra_invalidations_for_coverage = int(
+                accuracy_summary["response_invalidations"]
+                - fast_summary["response_invalidations"]
+            )
+            revision_coverage = (
+                disagreement_count_for_coverage > 0
+                and extra_invalidations_for_coverage
+                >= disagreement_count_for_coverage
+            )
+        needs_baseline = selection_mode == "consensus_block" or (
+            evidence_per_block > 1.0
+            or (
+                selection_mode == "coverage_consensus_block"
+                and revision_coverage
+            )
         )
         if needs_baseline:
             baseline_x, baseline_nfe = generate(
@@ -1106,11 +1145,17 @@ def generate_trajectory_likelihood_selection(
             if selection_mode == "disagreement_evidence"
             else (
                 (
-                    "trajectory_lazy_consensus_block_v4"
+                    "trajectory_coverage_consensus_block_v5"
+                    if selection_mode == "coverage_consensus_block"
+                    else "trajectory_lazy_consensus_block_v4"
                     if selection_mode == "lazy_consensus_block"
                     else "trajectory_consensus_block_v3"
                 )
-                if selection_mode in {"consensus_block", "lazy_consensus_block"}
+                if selection_mode in {
+                    "consensus_block",
+                    "lazy_consensus_block",
+                    "coverage_consensus_block",
+                }
                 else "trajectory_likelihood_selection_v1"
             )
         ),
@@ -1122,11 +1167,17 @@ def generate_trajectory_likelihood_selection(
                 if selection_mode == "disagreement_evidence"
                 else (
                     (
-                        "lazy_one_nat_block_evidence_then_baseline_consensus"
+                        "one_revision_per_disagreement_or_one_nat_then_consensus"
+                        if selection_mode == "coverage_consensus_block"
+                        else "lazy_one_nat_block_evidence_then_baseline_consensus"
                         if selection_mode == "lazy_consensus_block"
                         else "one_nat_block_evidence_confirmed_by_baseline_consensus"
                     )
-                    if selection_mode in {"consensus_block", "lazy_consensus_block"}
+                    if selection_mode in {
+                        "consensus_block",
+                        "lazy_consensus_block",
+                        "coverage_consensus_block",
+                    }
                     else "max_mean_committed_token_log_confidence"
                 )
             )
@@ -1147,6 +1198,13 @@ def generate_trajectory_likelihood_selection(
         "scored_disagreement_token_count": scored_disagreement_count,
         "disagreement_candidate_scores": disagreement_scores,
         "baseline_consensus": baseline_consensus,
+        "revision_coverage": {
+            "disagreement_token_count": disagreement_count_for_coverage,
+            "extra_response_invalidations": extra_invalidations_for_coverage,
+            "satisfied": revision_coverage,
+        }
+        if selection_mode == "coverage_consensus_block"
+        else None,
         "candidate_nfe": {
             "fast": int(fast_nfe),
             "accuracy": int(accuracy_nfe),
