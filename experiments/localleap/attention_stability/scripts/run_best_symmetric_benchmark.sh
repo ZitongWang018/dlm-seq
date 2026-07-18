@@ -63,6 +63,16 @@ case "${profile}" in
   response_refine_causal_pareto)
     dependency_args=",dependency_threshold=${tau},dependency_response_refine=True,dependency_response_refine_budget_mode=causal_pareto"
     ;;
+  response_refine_cross_pareto)
+    dependency_args=",dependency_threshold=${tau},dependency_response_refine=True,dependency_response_refine_budget_mode=causal_cross_pareto"
+    ;;
+  response_refine_cross_pareto_exec)
+    if [[ "${task}" != "humaneval" && "${task}" != "mbpp" ]]; then
+      echo "response_refine_cross_pareto_exec is code-only; got task=${task}" >&2
+      exit 2
+    fi
+    dependency_args=",dependency_threshold=${tau},dependency_response_refine=True,dependency_response_refine_budget_mode=causal_cross_pareto,dependency_differential_selection=True"
+    ;;
   draft_exchange)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_draft_exchange=True,dependency_differential_selection=False,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

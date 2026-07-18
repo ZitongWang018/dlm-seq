@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 
 
@@ -30,6 +31,28 @@ class PairedAuditTest(unittest.TestCase):
             MODULE.index_records([{"task_id": "x"}, {"task_id": "x"}])
         with self.assertRaisesRegex(ValueError, "conflicting stable identities"):
             MODULE.record_stable_id({"stable_task_id": "x", "task_id": "y"})
+
+    def test_source_hashes_must_match(self):
+        with tempfile.TemporaryDirectory() as directory:
+            baseline = Path(directory) / "baseline.txt"
+            method = Path(directory) / "method.txt"
+            common_generate = "a" * 64
+            common_eval = "b" * 64
+            baseline.write_text(
+                f"{common_generate}  generate.py\n{common_eval}  eval_llada.py\n"
+            )
+            method.write_text(
+                f"{common_generate}  generate.py\n{common_eval}  eval_llada.py\n"
+            )
+            self.assertEqual(
+                MODULE.verify_matching_source_hashes(baseline, method),
+                ["eval_llada.py", "generate.py"],
+            )
+            method.write_text(
+                f"{'c' * 64}  generate.py\n{common_eval}  eval_llada.py\n"
+            )
+            with self.assertRaisesRegex(ValueError, "source hash mismatch"):
+                MODULE.verify_matching_source_hashes(baseline, method)
 
 
 if __name__ == "__main__":

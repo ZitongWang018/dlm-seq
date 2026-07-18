@@ -228,9 +228,11 @@ class LLaDAEvalHarness(LM):
             "extra",
             "gated",
             "causal_pareto",
+            "causal_cross_pareto",
         }:
             raise ValueError(
-                "dependency_response_refine_budget_mode must be matched, extra, gated, or causal_pareto"
+                "dependency_response_refine_budget_mode must be matched, extra, "
+                "gated, causal_pareto, or causal_cross_pareto"
             )
         self.candidate_memory_topk = candidate_memory_topk
         self.candidate_memory_confidence_threshold = candidate_memory_confidence_threshold
@@ -510,6 +512,9 @@ class LLaDAEvalHarness(LM):
                         dependency_threshold=self.dependency_threshold,
                         budget_mode=self.dependency_response_refine_budget_mode,
                     )
+                    draft_candidate_token_ids = decode_diagnostics.pop(
+                        "_draft_candidate_token_ids", None
+                    )
                 elif self.dependency_draft_exchange:
                     generated_answer, nfe, decode_diagnostics = generate_response_credit_exchange(
                         self.model,
@@ -565,7 +570,10 @@ class LLaDAEvalHarness(LM):
                 )
                 trace_evaluator_version = (
                     (
-                        "response_refine_trace_v3"
+                        "response_refine_trace_v4"
+                        if self.dependency_response_refine_budget_mode
+                        == "causal_cross_pareto"
+                        else "response_refine_trace_v3"
                         if self.dependency_response_refine_budget_mode
                         == "causal_pareto"
                         else "response_refine_trace_v2"

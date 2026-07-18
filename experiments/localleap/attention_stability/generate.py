@@ -1238,6 +1238,174 @@ def retain_response_refine_blocks(
     return output, 1, summary
 
 
+def _directed_cross_condition_partitions(directional_attention, local_positions):
+    """Split changed positions into source/dependent views without symmetrizing.
+
+    ``directional_attention[target, source]`` measures how strongly a target
+    reads a source.  Net outgoing flow therefore orders source-like positions
+    before dependent positions.  Alternating that order creates two
+    complementary views in which each side is scored while the other side is
+    present as explicit tokens.
+    """
+    if local_positions.numel() == 0:
+        return [], []
+    local_positions = local_positions.to(
+        device=directional_attention.device, dtype=torch.long
+    )
+    sub_rows = directional_attention.index_select(0, local_positions)
+    submatrix = sub_rows.index_select(1, local_positions).float()
+    outgoing = submatrix.sum(dim=0)
+    incoming = submatrix.sum(dim=1)
+    net_flow = outgoing - incoming
+    ordered = sorted(
+        range(local_positions.numel()),
+        key=lambda index: (
+            -float(net_flow[index].item()),
+            int(local_positions[index].item()),
+        ),
+    )
+    source_view = [int(local_positions[index].item()) for index in ordered[::2]]
+    dependent_view = [
+        int(local_positions[index].item()) for index in ordered[1::2]
+    ]
+    return source_view, dependent_view
+
+
+@torch.no_grad()
+def retain_response_refine_blocks_cross_conditioned(
+    model,
+    draft,
+    repaired,
+    remask,
+    prompt_length,
+    gen_length,
+    block_length,
+    directional_attention,
+    mask_id=126336,
+):
+    """Retain repairs only after complementary explicit-token validation.
+
+    The shared-mask selector cannot test interactions among changed tokens.
+    Here the directed-attention order divides each changed block into two
+    views.  One view is masked while the other remains explicit, then the
+    roles are exchanged.  Original and repaired drafts are evaluated in one
+    batched forward per view.  A repair is retained only when every changed
+    token improves in its cross-conditioned view.  This is a strict Pareto
+    rule and introduces no score weight or acceptance threshold.
+    """
+    if draft.shape != repaired.shape or draft.shape != remask.shape:
+        raise ValueError("draft, repaired, and remask must have identical shapes")
+    num_blocks = gen_length // block_length
+    if directional_attention.shape[:2] != (num_blocks, block_length):
+        raise ValueError("directional attention does not match generation blocks")
+    changed = (draft != repaired) & remask.to(device=draft.device, dtype=torch.bool)
+    changed[:, :prompt_length] = False
+    output = draft.clone()
+    summary = {
+        "selector": "directed_cross_conditioned_block_pareto_v1",
+        "changed_positions": int(changed.sum().item()),
+        "accepted_blocks": 0,
+        "rejected_blocks": 0,
+        "accepted_positions": 0,
+        "selector_nfe": 0,
+        "selector_candidate_evaluations": 0,
+        "blocks": [],
+    }
+    if not changed.any():
+        return output, 0, summary
+
+    for block_idx in range(num_blocks):
+        block_start = prompt_length + block_idx * block_length
+        block_end = block_start + block_length
+        local_positions = torch.where(changed[0, block_start:block_end])[0]
+        if local_positions.numel() == 0:
+            continue
+        global_positions = local_positions + block_start
+        source_view, dependent_view = _directed_cross_condition_partitions(
+            directional_attention[block_idx], local_positions
+        )
+        views = [source_view]
+        if dependent_view:
+            views.append(dependent_view)
+
+        original_candidate = draft.clone()
+        repaired_candidate = draft.clone()
+        repaired_candidate[0, global_positions] = repaired[0, global_positions]
+        view_records = []
+        all_token_margins = []
+        for view_index, local_view in enumerate(views):
+            view_global = torch.tensor(
+                [block_start + position for position in local_view],
+                dtype=torch.long,
+                device=draft.device,
+            )
+            if len(views) == 1:
+                context = original_candidate.clone()
+                context[0, view_global] = mask_id
+                logits = model(context).logits.float()
+                log_probs = torch.log_softmax(logits, dim=-1)
+                original_scores = log_probs[
+                    0, view_global, original_candidate[0, view_global]
+                ]
+                repaired_scores = log_probs[
+                    0, view_global, repaired_candidate[0, view_global]
+                ]
+                candidate_evaluations = 1
+            else:
+                contexts = torch.cat(
+                    [original_candidate.clone(), repaired_candidate.clone()], dim=0
+                )
+                contexts[:, view_global] = mask_id
+                logits = model(contexts).logits.float()
+                log_probs = torch.log_softmax(logits, dim=-1)
+                original_scores = log_probs[
+                    0, view_global, original_candidate[0, view_global]
+                ]
+                repaired_scores = log_probs[
+                    1, view_global, repaired_candidate[0, view_global]
+                ]
+                candidate_evaluations = 2
+            margins = repaired_scores - original_scores
+            all_token_margins.append(margins)
+            summary["selector_nfe"] += 1
+            summary["selector_candidate_evaluations"] += candidate_evaluations
+            view_records.append(
+                {
+                    "view_index": int(view_index),
+                    "masked_positions": [
+                        int(position) for position in view_global.tolist()
+                    ],
+                    "original_log_score": float(original_scores.sum().item()),
+                    "repaired_log_score": float(repaired_scores.sum().item()),
+                    "score_margin": float(margins.sum().item()),
+                    "minimum_token_margin": float(margins.min().item()),
+                }
+            )
+
+        token_margins = torch.cat(all_token_margins)
+        accept = bool((token_margins > 0).all().item())
+        if accept:
+            output[0, global_positions] = repaired[0, global_positions]
+            summary["accepted_blocks"] += 1
+            summary["accepted_positions"] += int(global_positions.numel())
+        else:
+            summary["rejected_blocks"] += 1
+        summary["blocks"].append(
+            {
+                "block_index": int(block_idx),
+                "changed_positions": [
+                    int(position) for position in global_positions.tolist()
+                ],
+                "source_view_local_positions": source_view,
+                "dependent_view_local_positions": dependent_view,
+                "minimum_token_margin": float(token_margins.min().item()),
+                "accepted": bool(accept),
+                "views": view_records,
+            }
+        )
+    return output, summary["selector_nfe"], summary
+
+
 @torch.no_grad()
 def generate_response_refine(
     model,
@@ -1259,9 +1427,16 @@ def generate_response_refine(
     ``extra`` keeps the full parent draft budget and adds a half-budget repair.
     These are discrete compute regimes rather than tuned score weights.
     """
-    if budget_mode not in {"matched", "extra", "gated", "causal_pareto"}:
+    if budget_mode not in {
+        "matched",
+        "extra",
+        "gated",
+        "causal_pareto",
+        "causal_cross_pareto",
+    }:
         raise ValueError(
-            "budget_mode must be matched, extra, gated, or causal_pareto"
+            "budget_mode must be matched, extra, gated, causal_pareto, "
+            "or causal_cross_pareto"
         )
     num_blocks = gen_length // block_length
     repair_steps = steps // 2
@@ -1297,8 +1472,15 @@ def generate_response_refine(
         block_length=block_length,
         dependency_threshold=dependency_threshold,
         repair_steps=repair_steps,
-        risk_gated=budget_mode in {"gated", "causal_pareto"},
-        require_commit_risk=budget_mode == "causal_pareto",
+        risk_gated=budget_mode in {
+            "gated",
+            "causal_pareto",
+            "causal_cross_pareto",
+        },
+        require_commit_risk=budget_mode in {
+            "causal_pareto",
+            "causal_cross_pareto",
+        },
     )
     repaired, repair_nfe, repair_summary = repair_response_refine_positions(
         model=model,
@@ -1316,7 +1498,21 @@ def generate_response_refine(
     retained = repaired
     selector_nfe = 0
     retention_summary = None
-    if budget_mode in {"gated", "causal_pareto"}:
+    if budget_mode == "causal_cross_pareto":
+        retained, selector_nfe, retention_summary = (
+            retain_response_refine_blocks_cross_conditioned(
+                model=model,
+                draft=draft,
+                repaired=repaired,
+                remask=remask,
+                prompt_length=prompt.shape[1],
+                gen_length=gen_length,
+                block_length=block_length,
+                directional_attention=position_risk["final_directional_attention"],
+                mask_id=mask_id,
+            )
+        )
+    elif budget_mode in {"gated", "causal_pareto"}:
         retained, selector_nfe, retention_summary = retain_response_refine_blocks(
             model=model,
             draft=draft,
@@ -1333,6 +1529,8 @@ def generate_response_refine(
         decoder = "response_refine_v2"
     elif budget_mode == "causal_pareto":
         decoder = "response_refine_v3"
+    elif budget_mode == "causal_cross_pareto":
+        decoder = "response_refine_v4"
     summary = {
         "decoder": decoder,
         "budget_mode": budget_mode,
@@ -1354,6 +1552,11 @@ def generate_response_refine(
         "draft_to_retained_changes": int((draft != retained).sum().item()),
         "residual_mask_count": int((retained == mask_id).sum().item()),
     }
+    if budget_mode == "causal_cross_pareto":
+        summary["_draft_candidate_token_ids"] = {
+            "anchor": draft.detach().to(torch.int32).cpu(),
+            "repaired": retained.detach().to(torch.int32).cpu(),
+        }
     return retained, summary["total_nfe"], summary
 
 

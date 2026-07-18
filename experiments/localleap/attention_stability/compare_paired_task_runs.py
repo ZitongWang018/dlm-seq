@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 
-VERSION = "localleap_paired_task_audit_v2"
+VERSION = "localleap_paired_task_audit_v3"
 
 
 def read_jsonl(path):
@@ -61,6 +61,31 @@ def config_duration_seconds(path):
     return (finish - start).total_seconds()
 
 
+def config_source_hashes(path):
+    """Read frozen source hashes embedded in a benchmark run config."""
+    hashes = {}
+    pattern = re.compile(r"^([0-9a-f]{64})\s+(.+)$")
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        match = pattern.match(line.strip())
+        if match:
+            hashes[Path(match.group(2)).name] = match.group(1)
+    required = {"generate.py", "eval_llada.py"}
+    missing = sorted(required - set(hashes))
+    if missing:
+        raise ValueError(f"run config is missing source hashes: {missing}")
+    return hashes
+
+
+def verify_matching_source_hashes(baseline_config, method_config):
+    baseline = config_source_hashes(baseline_config)
+    method = config_source_hashes(method_config)
+    common = sorted(set(baseline) & set(method))
+    mismatches = [name for name in common if baseline[name] != method[name]]
+    if mismatches:
+        raise ValueError(f"source hash mismatch: {mismatches}")
+    return common
+
+
 def log_metrics(path):
     if path is None:
         return {}
@@ -89,6 +114,13 @@ def main():
     parser.add_argument("--method-log")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
+
+    try:
+        verified_source_files = verify_matching_source_hashes(
+            args.baseline_config, args.method_config
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     baseline = index_records(read_jsonl(args.baseline_records))
     method = index_records(read_jsonl(args.method_records))
@@ -160,6 +192,9 @@ def main():
         "prompt_hash_mismatches": 0,
         "target_hash_mismatches": 0,
         "duplicate_or_missing_ids": 0,
+        "source_hashes_verified": True,
+        "source_hash_file_count": len(verified_source_files),
+        "source_hash_mismatches": 0,
     }
 
     output = Path(args.output_dir)

@@ -216,6 +216,82 @@ def test_pareto_retention_rejects_block_with_one_regressing_token():
     assert summary["blocks"][0]["minimum_token_margin"] < 0
 
 
+def test_directed_cross_partition_preserves_attention_asymmetry():
+    # A[target, source]: position 0 is the source read by position 1.
+    directional = torch.tensor([[0.0, 0.0], [0.9, 0.0]])
+    source_view, dependent_view = generate._directed_cross_condition_partitions(
+        directional, torch.tensor([0, 1])
+    )
+    assert source_view == [0]
+    assert dependent_view == [1]
+
+
+def test_cross_conditioned_pareto_requires_both_explicit_views():
+    class FakeModel:
+        def __init__(self, reject_second_view=False):
+            self.reject_second_view = reject_second_view
+
+        def __call__(self, x):
+            logits = torch.zeros((*x.shape, 10), dtype=torch.float32)
+            for batch in range(x.shape[0]):
+                # When position 1 is masked, position 2 supplies the explicit
+                # draft/repaired condition.
+                if x[batch, 1].item() == 7:
+                    conditioned_repair = x[batch, 2].item() == 2
+                    logits[batch, 1, 2 if conditioned_repair else 1] = (
+                        8.0 if conditioned_repair else 4.0
+                    )
+                # The complementary view masks position 2 and conditions on 1.
+                if x[batch, 2].item() == 7:
+                    conditioned_repair = x[batch, 1].item() == 2
+                    if self.reject_second_view and conditioned_repair:
+                        conditioned_repair = False
+                    logits[batch, 2, 2 if conditioned_repair else 1] = (
+                        8.0 if conditioned_repair else 4.0
+                    )
+            return SimpleNamespace(logits=logits)
+
+    draft = torch.tensor([[9, 1, 1]], dtype=torch.long)
+    repaired = torch.tensor([[9, 2, 2]], dtype=torch.long)
+    remask = torch.tensor([[False, True, True]])
+    directional = torch.tensor([[[0.0, 0.0], [0.9, 0.0]]])
+    retained, nfe, summary = (
+        generate.retain_response_refine_blocks_cross_conditioned(
+            model=FakeModel(),
+            draft=draft,
+            repaired=repaired,
+            remask=remask,
+            prompt_length=1,
+            gen_length=2,
+            block_length=2,
+            directional_attention=directional,
+            mask_id=7,
+        )
+    )
+    assert nfe == 2
+    assert torch.equal(retained, repaired)
+    assert summary["accepted_blocks"] == 1
+    assert summary["selector_candidate_evaluations"] == 4
+
+    retained, nfe, summary = (
+        generate.retain_response_refine_blocks_cross_conditioned(
+            model=FakeModel(reject_second_view=True),
+            draft=draft,
+            repaired=repaired,
+            remask=remask,
+            prompt_length=1,
+            gen_length=2,
+            block_length=2,
+            directional_attention=directional,
+            mask_id=7,
+        )
+    )
+    assert nfe == 2
+    assert torch.equal(retained, draft)
+    assert summary["rejected_blocks"] == 1
+    assert summary["blocks"][0]["minimum_token_margin"] < 0
+
+
 if __name__ == "__main__":
     test_frontier_prefers_forced_conditioned_risk_without_score_weight()
     test_risk_gated_frontier_underfills_instead_of_rewriting_stable_tokens()
@@ -224,4 +300,6 @@ if __name__ == "__main__":
     test_matched_mode_preserves_total_forward_budget()
     test_shared_mask_retention_accepts_or_rejects_whole_blocks()
     test_pareto_retention_rejects_block_with_one_regressing_token()
-    print("7 response-refine tests passed")
+    test_directed_cross_partition_preserves_attention_asymmetry()
+    test_cross_conditioned_pareto_requires_both_explicit_views()
+    print("9 response-refine tests passed")
