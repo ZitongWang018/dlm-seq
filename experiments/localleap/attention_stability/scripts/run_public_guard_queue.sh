@@ -163,7 +163,11 @@ fi
 # Confirm the integrated path on real model output after the accuracy gate.
 wait_for_file "${parent_queue}/DONE"
 run_gpu he_public_guard_smoke4 0 "${runner}" humaneval 0 128 \
-  trajectory_confirmed_public_guard 0.004 trace he_public_guard_smoke4 4 256
+  trajectory_confirmed_public_guard 0.004 trace he_public_guard_smoke4 4 256 & p0=$!
+run_gpu mbpp_public_guard_n100 1 "${runner}" mbpp 0 128 \
+  trajectory_confirmed_public_guard 0.004 trace mbpp_public_guard_n100 100 256 & p1=$!
+wait "${p0}"
+wait "${p1}"
 
 # MATH has no public function examples, so v11 is exactly v9 there.  Reuse the
 # parent's audited arm when present; otherwise run the same frozen v9 decoder.
