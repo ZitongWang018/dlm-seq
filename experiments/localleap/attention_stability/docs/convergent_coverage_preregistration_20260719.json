@@ -1,0 +1,47 @@
+{
+  "method": "trajectory_convergent_coverage_consensus_block_v6",
+  "source_commit": "fd32438c75725ae5a235fc2ffa68ece643ac42ee",
+  "registered_at": "2026-07-19T05:14:38+08:00",
+  "active_parent_trace_records_at_registration": 77,
+  "development_scope": {
+    "dataset": "HumanEval",
+    "start_absolute_index": 0,
+    "end_absolute_index_exclusive": 64,
+    "posthoc_expected_correct": 33,
+    "fast_correct": 30,
+    "accuracy_correct": 26,
+    "oracle_correct": 34,
+    "recoveries": ["HumanEval/2", "HumanEval/14", "HumanEval/41"],
+    "losses": []
+  },
+  "unseen_scope": {
+    "start_absolute_index": 64,
+    "end_absolute_index_exclusive": 96,
+    "correctness_or_candidate_labels_observed_before_registration": false,
+    "diagnostic_trace_indexes_incidentally_inspected": [64, 65, 66, 67, 68],
+    "diagnostic_fields_inspected": [
+      "selected_name",
+      "block_evidence_margin",
+      "baseline_fast_matches",
+      "baseline_accuracy_matches",
+      "nfe"
+    ],
+    "diagnostics_used_to_define_rule": false
+  },
+  "selection_rule": {
+    "default_parent": "symmetric_fast_tau_0.004",
+    "horizontal_requirement": "original_llada_matches_accuracy_more_than_fast_at_final_parent_disagreement_positions",
+    "convergent_vertical_route": "accuracy_has_more_than_one_nat_per_existing block and no more conditioned invalidations than fast",
+    "comprehensive_vertical_route": "accuracy_has at least one extra conditioned invalidation per final parent disagreement",
+    "fitted_weights_or_continuous_thresholds": "none"
+  },
+  "development_insight": "Every credible strong-margin accuracy selection in HumanEval/0..63 reduced conditioned invalidations by 42 to 174. The sole fast-only loss, HumanEval/63, increased invalidations by 31 without covering its 233 final disagreements. HumanEval/41 supplied the complementary comprehensive-revision route with 227 extra invalidations for 227 disagreements.",
+  "promotion_gate": "On fresh same-source HumanEval/64..95, method_correct must be strictly greater than both symmetric_fast and original LLaDA, with at least one method-only recovery and complete evaluator audit.",
+  "required_audits": [
+    "stable task ids and matching prompt/gold hashes",
+    "no duplicate or missing ids",
+    "no residual masks",
+    "valid NFE range and frozen source hashes",
+    "separate algorithm, extraction, execution, timeout, and infrastructure failures"
+  ]
+}
