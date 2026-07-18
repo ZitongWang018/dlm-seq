@@ -218,10 +218,11 @@ class LLaDAEvalHarness(LM):
         if self.dependency_likelihood_selection_mode not in {
             "mean",
             "block_evidence",
+            "disagreement_evidence",
         }:
             raise ValueError(
-                "dependency_likelihood_selection_mode must be mean or "
-                "block_evidence"
+                "dependency_likelihood_selection_mode must be mean, "
+                "block_evidence, or disagreement_evidence"
             )
         self.dependency_draft_exchange = (
             dependency_draft_exchange.lower() == "true"

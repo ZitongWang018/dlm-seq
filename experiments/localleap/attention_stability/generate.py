@@ -480,8 +480,8 @@ def select_attention_stability_tokens(
     return x0, transfer_index, diagnostics, current_topk_full
 
 
-def score_committed_tokens(candidate_state):
-    """Return log-confidence sum and count for positions committed this step."""
+def committed_token_logprobs(candidate_state):
+    """Return committed global positions and their top-1 log probabilities."""
     candidate_positions = candidate_state["masked_positions_global"].to(torch.long)
     selected_positions = candidate_state["selected_positions_global"].to(torch.long)
     position_to_candidate = {
@@ -496,10 +496,13 @@ def score_committed_tokens(candidate_state):
             for position in selected_positions.tolist()
         ]
     )
-    return (
-        float(selected_confidences.clamp_min(1e-12).log().sum().item()),
-        int(selected_confidences.numel()),
-    )
+    return selected_positions, selected_confidences.clamp_min(1e-12).log()
+
+
+def score_committed_tokens(candidate_state):
+    """Return log-confidence sum and count for positions committed this step."""
+    _, selected_logprobs = committed_token_logprobs(candidate_state)
+    return float(selected_logprobs.sum().item()), int(selected_logprobs.numel())
 
 
 @torch.no_grad()
@@ -522,6 +525,7 @@ def generate_attention_stability(
     prune_stable_conflicts=False,
     fill_budget=False,
     collect_position_risk=False,
+    collect_commit_logprobs=False,
 ):
     """Baseline LLaDA decoding with the proposed attention/stability selection layered on top."""
     x = torch.full((1, prompt.shape[1] + gen_length), mask_id, dtype=torch.long, device=model.device)
@@ -583,6 +587,11 @@ def generate_attention_stability(
         "commit_token_count": 0,
     }
     step_records = []
+    commit_logprob_by_position = None
+    if collect_commit_logprobs:
+        commit_logprob_by_position = torch.full(
+            (x.shape[1],), float("nan"), dtype=torch.float32
+        )
     position_risk = None
     if collect_position_risk:
         sequence_length = x.shape[1]
@@ -697,9 +706,13 @@ def generate_attention_stability(
             summary["underfilled_steps"] += int(step_diagnostics["underfilled"])
             summary["all_immature_fallback_steps"] += int(step_diagnostics["all_immature_fallback"])
             candidate_state = step_diagnostics["candidate_state"][0]
-            step_logprob, step_token_count = score_committed_tokens(candidate_state)
-            summary["commit_logprob_sum"] += step_logprob
-            summary["commit_token_count"] += step_token_count
+            selected_positions, selected_logprobs = committed_token_logprobs(
+                candidate_state
+            )
+            summary["commit_logprob_sum"] += float(selected_logprobs.sum().item())
+            summary["commit_token_count"] += int(selected_logprobs.numel())
+            if commit_logprob_by_position is not None:
+                commit_logprob_by_position[selected_positions] = selected_logprobs
             if collect_position_risk:
                 candidate_positions = candidate_state[
                     "masked_positions_global"
@@ -833,6 +846,8 @@ def generate_attention_stability(
         summary["commit_logprob_mean"] = float("-inf")
     if collect_step_diagnostics:
         summary["_step_records"] = step_records
+    if commit_logprob_by_position is not None:
+        summary["_commit_logprob_by_position"] = commit_logprob_by_position
     if collect_position_risk:
         position_risk["final_directional_attention"] = torch.stack(
             position_risk["final_directional_attention"], dim=0
@@ -845,8 +860,9 @@ def select_likelihood_trajectory(
     candidate_summaries,
     block_length=None,
     selection_mode="mean",
+    candidate_token_ids=None,
 ):
-    """Select the path with the best mean committed-token log confidence.
+    """Select a horizontal path using its requested vertical evidence rule.
 
     Ties preserve the fixed-budget fast parent, making the selection deterministic
     and avoiding an extra threshold or task-specific preference.
@@ -874,7 +890,46 @@ def select_likelihood_trajectory(
         # structure rather than a fitted margin hyperparameter.
         evidence_per_block = (accuracy_score - fast_score) * int(block_length)
         return "accuracy" if evidence_per_block > 1.0 else "fast"
+    if selection_mode == "disagreement_evidence":
+        scores, _, _ = score_disagreement_evidence(
+            candidate_token_ids, candidate_summaries
+        )
+        return max(ordered_names, key=lambda name: scores[name])
     raise ValueError(f"unsupported trajectory selection mode: {selection_mode}")
+
+
+def score_disagreement_evidence(candidate_token_ids, candidate_summaries):
+    """Score only final positions where the two horizontal schedules disagree.
+
+    Each path contributes the log probability recorded when its own final token
+    was committed. Positions with identical final tokens carry no selection
+    information and are intentionally excluded.
+    """
+    ordered_names = ("fast", "accuracy")
+    if candidate_token_ids is None:
+        raise ValueError("disagreement_evidence requires candidate token ids")
+    token_ids = {}
+    logprobs = {}
+    for name in ordered_names:
+        if name not in candidate_token_ids:
+            raise ValueError(f"missing candidate token ids: {name}")
+        if "_commit_logprob_by_position" not in candidate_summaries[name]:
+            raise ValueError(f"missing per-position commit evidence: {name}")
+        token_ids[name] = candidate_token_ids[name].detach().to("cpu").reshape(-1)
+        logprobs[name] = candidate_summaries[name][
+            "_commit_logprob_by_position"
+        ].detach().to("cpu").reshape(-1)
+    shapes = {tuple(value.shape) for value in (*token_ids.values(), *logprobs.values())}
+    if len(shapes) != 1:
+        raise ValueError("candidate tokens and commit evidence must share a shape")
+    disagreement = token_ids["fast"] != token_ids["accuracy"]
+    valid = disagreement & torch.isfinite(logprobs["fast"]) & torch.isfinite(
+        logprobs["accuracy"]
+    )
+    scores = {
+        name: float(logprobs[name][valid].sum().item()) for name in ordered_names
+    }
+    return scores, int(disagreement.sum().item()), int(valid.sum().item())
 
 
 @torch.no_grad()
@@ -918,6 +973,7 @@ def generate_trajectory_likelihood_selection(
         dependency_mode=dependency_mode,
         temporal_mode=temporal_mode,
         temporal_topk=temporal_topk,
+        collect_commit_logprobs=(selection_mode == "disagreement_evidence"),
     )
     fast_x, fast_nfe, fast_summary = generate_attention_stability(
         **shared,
@@ -933,22 +989,51 @@ def generate_trajectory_likelihood_selection(
         "fast": fast_summary,
         "accuracy": accuracy_summary,
     }
+    candidate_ids = {"fast": fast_x, "accuracy": accuracy_x}
     selected_name = select_likelihood_trajectory(
         candidate_summaries,
         block_length=block_length,
         selection_mode=selection_mode,
+        candidate_token_ids=candidate_ids,
     )
-    candidate_ids = {"fast": fast_x, "accuracy": accuracy_x}
+    disagreement_scores = None
+    disagreement_count = 0
+    scored_disagreement_count = 0
+    if selection_mode == "disagreement_evidence":
+        (
+            disagreement_scores,
+            disagreement_count,
+            scored_disagreement_count,
+        ) = score_disagreement_evidence(candidate_ids, candidate_summaries)
+    for value in candidate_summaries.values():
+        value.pop("_commit_logprob_by_position", None)
     selected_summary = candidate_summaries[selected_name]
     selected_steps = selected_summary.pop("_step_records", None)
     fast_summary.pop("_step_records", None)
     accuracy_summary.pop("_step_records", None)
+    mean_candidate_scores = {
+        name: float(value["commit_logprob_mean"])
+        for name, value in candidate_summaries.items()
+    }
+    selection_candidate_scores = (
+        disagreement_scores
+        if disagreement_scores is not None
+        else mean_candidate_scores
+    )
     summary = {
-        "decoder": "trajectory_likelihood_selection_v1",
+        "decoder": (
+            "trajectory_disagreement_evidence_v2"
+            if selection_mode == "disagreement_evidence"
+            else "trajectory_likelihood_selection_v1"
+        ),
         "selection_rule": (
             "one_nat_per_block_evidence"
             if selection_mode == "block_evidence"
-            else "max_mean_committed_token_log_confidence"
+            else (
+                "max_disagreement_committed_token_log_evidence"
+                if selection_mode == "disagreement_evidence"
+                else "max_mean_committed_token_log_confidence"
+            )
         ),
         "selection_mode": selection_mode,
         "block_evidence_margin": (
@@ -959,13 +1044,12 @@ def generate_trajectory_likelihood_selection(
             * int(block_length)
         ),
         "selected_name": selected_name,
-        "selected_score": float(
-            candidate_summaries[selected_name]["commit_logprob_mean"]
-        ),
-        "candidate_scores": {
-            name: float(value["commit_logprob_mean"])
-            for name, value in candidate_summaries.items()
-        },
+        "selected_score": float(selection_candidate_scores[selected_name]),
+        "candidate_scores": mean_candidate_scores,
+        "selection_candidate_scores": selection_candidate_scores,
+        "disagreement_token_count": disagreement_count,
+        "scored_disagreement_token_count": scored_disagreement_count,
+        "disagreement_candidate_scores": disagreement_scores,
         "candidate_nfe": {"fast": int(fast_nfe), "accuracy": int(accuracy_nfe)},
         "candidate_summaries": candidate_summaries,
         "_trajectory_candidate_token_ids": candidate_ids,

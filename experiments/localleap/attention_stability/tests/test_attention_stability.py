@@ -2,6 +2,7 @@ import torch
 
 from generate import (
     score_committed_tokens,
+    score_disagreement_evidence,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
 )
@@ -243,6 +244,56 @@ def test_block_evidence_requires_one_nat_per_existing_block():
     ) == "accuracy"
 
 
+def test_disagreement_evidence_ignores_shared_tokens():
+    token_ids = {
+        "fast": torch.tensor([[10, 20, 30, 40]]),
+        "accuracy": torch.tensor([[10, 21, 30, 41]]),
+    }
+    summaries = {
+        "fast": {
+            "commit_logprob_mean": -0.20,
+            "_commit_logprob_by_position": torch.tensor([-9.0, -0.2, -9.0, -0.3]),
+        },
+        "accuracy": {
+            "commit_logprob_mean": -0.30,
+            "_commit_logprob_by_position": torch.tensor([-0.01, -0.1, -0.01, -0.1]),
+        },
+    }
+    scores, disagreement_count, scored_count = score_disagreement_evidence(
+        token_ids, summaries
+    )
+    assert disagreement_count == 2
+    assert scored_count == 2
+    assert scores["accuracy"] > scores["fast"]
+    assert select_likelihood_trajectory(
+        summaries,
+        selection_mode="disagreement_evidence",
+        candidate_token_ids=token_ids,
+    ) == "accuracy"
+
+
+def test_disagreement_evidence_tie_preserves_fast_parent():
+    token_ids = {
+        "fast": torch.tensor([[1, 2]]),
+        "accuracy": torch.tensor([[1, 2]]),
+    }
+    summaries = {
+        "fast": {
+            "commit_logprob_mean": -0.2,
+            "_commit_logprob_by_position": torch.tensor([-0.2, -0.2]),
+        },
+        "accuracy": {
+            "commit_logprob_mean": -0.1,
+            "_commit_logprob_by_position": torch.tensor([-0.1, -0.1]),
+        },
+    }
+    assert select_likelihood_trajectory(
+        summaries,
+        selection_mode="disagreement_evidence",
+        candidate_token_ids=token_ids,
+    ) == "fast"
+
+
 def test_topk_overlap_creates_intermediate_temporal_tier():
     logits = make_logits([1, 2, 3], [0.70, 0.80, 0.95])
     dependency = torch.zeros((1, 3, 3))
@@ -406,6 +457,8 @@ if __name__ == "__main__":
     test_committed_token_score_uses_selected_positions_only()
     test_likelihood_trajectory_selection_tie_preserves_fast_parent()
     test_block_evidence_requires_one_nat_per_existing_block()
+    test_disagreement_evidence_ignores_shared_tokens()
+    test_disagreement_evidence_tie_preserves_fast_parent()
     test_topk_overlap_creates_intermediate_temporal_tier()
     test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates()
     test_topk_overlap_rejects_invalid_k()
@@ -413,4 +466,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("20 selector tests passed")
+    print("22 selector tests passed")

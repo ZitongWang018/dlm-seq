@@ -56,6 +56,11 @@ case "${profile}" in
     # nat of extra commit evidence per existing generation block.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=block_evidence"
     ;;
+  trajectory_disagreement_evidence)
+    # Compare vertical commit evidence only where the two horizontal schedules
+    # produce different final tokens; shared tokens cannot justify a path swap.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=disagreement_evidence"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;
