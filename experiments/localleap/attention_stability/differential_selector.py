@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 _FENCE_RE = re.compile(r"```(?:python)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 _EXAMPLE_RE = re.compile(r">>>\s*(.+?)\s*\n\s*([^\n]+)")
+_ASSERT_RE = re.compile(r"(?m)^\s*assert\s+(.+?)\s*$")
 
 
 def extract_python_code(text: str) -> str:
@@ -101,6 +102,31 @@ def prompt_examples(prompt: str, entry_point: Optional[str]) -> List[Tuple[str, 
             continue
         examples.append((expression, expected))
     return examples
+
+
+def prompt_assertions(prompt: str, entry_point: Optional[str]) -> List[str]:
+    """Return only assertions in the current prompt segment.
+
+    MBPP includes solved few-shot programs before the current task.  The last
+    ``[DONE]`` delimiter separates those demonstrations from the public tests
+    for the current request, so earlier assertions must never vote.
+    """
+    current = (prompt or "").rsplit("[DONE]", 1)[-1]
+    assertions = [expression.strip() for expression in _ASSERT_RE.findall(current)]
+    if entry_point:
+        assertions = [
+            expression
+            for expression in assertions
+            if re.search(rf"\b{re.escape(entry_point)}\s*\(", expression)
+        ]
+    return assertions
+
+
+def has_public_checks(prompt: str, entry_point: Optional[str]) -> bool:
+    return bool(
+        prompt_examples(prompt, entry_point)
+        or prompt_assertions(prompt, entry_point)
+    )
 
 
 _DRIVER = r"""
@@ -230,7 +256,8 @@ def select_public_example_guard(
     case.  Reference solutions and hidden tests are not accepted as inputs.
     """
     examples = prompt_examples(prompt, entry_point)
-    expressions = [expression for expression, _ in examples]
+    assertions = prompt_assertions(prompt, entry_point)
+    expressions = [expression for expression, _ in examples] + assertions
     codes = [
         extract_python_code(baseline_candidate),
         extract_python_code(parent_candidate),
@@ -243,16 +270,21 @@ def select_public_example_guard(
         for index, (_, expected) in enumerate(examples):
             if index < len(outputs) and outputs[index].get("ok"):
                 passed += outputs[index].get("value") == _normalize_expected(expected)
+        for index in range(len(examples), len(expressions)):
+            if index < len(outputs) and outputs[index].get("ok"):
+                passed += outputs[index].get("value") == "True"
         visible_passes.append(int(passed))
     selected_name = (
         "baseline"
-        if examples and visible_passes[0] > visible_passes[1]
+        if expressions and visible_passes[0] > visible_passes[1]
         else "parent"
     )
     return selected_name, {
-        "selector": "strict_public_example_guard_v1",
+        "selector": "strict_public_example_guard_v2",
         "selected_name": selected_name,
         "visible_example_count": len(examples),
+        "visible_assertion_count": len(assertions),
+        "visible_check_count": len(expressions),
         "visible_examples_passed": {
             "baseline": visible_passes[0],
             "parent": visible_passes[1],

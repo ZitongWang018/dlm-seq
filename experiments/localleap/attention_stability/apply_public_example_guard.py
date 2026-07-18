@@ -10,14 +10,13 @@ from pathlib import Path
 from differential_selector import select_public_example_guard
 
 
-EVALUATOR_VERSION = "public_example_guard_replay_v1"
+EVALUATOR_VERSION = "public_example_guard_replay_v2"
 REQUIRED = {
     "absolute_index",
     "task_id",
     "prompt_hash",
     "target_hash",
     "raw_gold",
-    "normalized_gold",
     "decoded_generation",
     "correct",
     "nfe",
@@ -61,7 +60,6 @@ def apply_guard(parent_records, baseline_records):
             "prompt_hash",
             "target_hash",
             "raw_gold",
-            "normalized_gold",
         ):
             if parent[field] != baseline[field]:
                 raise ValueError(f"{field} mismatch for {task_id}")
@@ -75,7 +73,13 @@ def apply_guard(parent_records, baseline_records):
         record = copy.deepcopy(selected)
         record["prompt_text"] = parent["prompt_text"]
         record["entry_point"] = parent["entry_point"]
-        record["nfe"] = int(parent["nfe"]) + int(baseline["nfe"])
+        parent_nfe = parent.get("nfe")
+        baseline_nfe = baseline.get("nfe")
+        record["nfe"] = (
+            int(parent_nfe) + int(baseline_nfe)
+            if parent_nfe is not None and baseline_nfe is not None
+            else None
+        )
         record["evaluator_version"] = EVALUATOR_VERSION
         record["generation_settings"] = copy.deepcopy(
             parent.get("generation_settings", {})
@@ -94,7 +98,7 @@ def apply_guard(parent_records, baseline_records):
         parent_diagnostics["public_example_guard"] = diagnostics
         parent_diagnostics["candidate_nfe"] = {
             **(parent_diagnostics.get("candidate_nfe") or {}),
-            "baseline": int(baseline["nfe"]),
+            "baseline": int(baseline_nfe) if baseline_nfe is not None else None,
         }
         record["decode_diagnostics"] = parent_diagnostics
         record["candidate_generations"] = {

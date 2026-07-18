@@ -40,7 +40,7 @@ from model.modeling_llada import LLaDAModelLM
 from generate import *
 from stcc_generate import generate_stcc
 from differential_selector import (
-    prompt_examples,
+    has_public_checks,
     select_differential_candidate,
     select_public_example_guard,
 )
@@ -574,7 +574,7 @@ class LLaDAEvalHarness(LM):
                         == "confirmed_bidirectional_public_guard"
                     )
                     public_guard_active = public_guard_requested and bool(
-                        prompt_examples(question, req.doc.get("entry_point"))
+                        has_public_checks(question, req.doc.get("entry_point"))
                     )
                     effective_selection_mode = (
                         requested_selection_mode
@@ -779,7 +779,7 @@ class LLaDAEvalHarness(LM):
                         )
                     else:
                         decode_diagnostics["public_example_guard"] = {
-                            "selector": "strict_public_example_guard_v1",
+                            "selector": "strict_public_example_guard_v2",
                             "status": "skipped_no_public_examples",
                             "uses_hidden_tests": False,
                             "uses_reference_solution": False,

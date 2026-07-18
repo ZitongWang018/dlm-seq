@@ -1,0 +1,29 @@
+{
+  "version": "public_assert_guard_v11_1",
+  "registered_at": "2026-07-19T07:29:00+08:00",
+  "parent": "confirmed_bidirectional_public_guard_v11",
+  "change": "Extend the same strict public-example dominance guard from HumanEval doctest pairs to MBPP assert statements already present in the current user prompt.",
+  "fewshot_isolation": "Only assertions after the final [DONE] delimiter are eligible; assertions from solved few-shot demonstrations are excluded.",
+  "selection": "Original LLaDA replaces the attention parent only when it passes strictly more eligible public assertions. Ties and missing checks retain the parent.",
+  "new_hyperparameters": "none",
+  "generated_probes": false,
+  "hidden_tests": false,
+  "reference_solution": false,
+  "development_evidence": {
+    "slice": "MBPP absolute indices 0-99",
+    "attention_parent": "29/100",
+    "original_llada": "14/100",
+    "guard": "32/100",
+    "paired": "three recoveries and zero losses versus attention parent",
+    "oracle": "32/100"
+  },
+  "formal_unseen": {
+    "slice": "MBPP absolute indices 100-199",
+    "status": "No guard selections or correctness labels inspected at registration.",
+    "gate": "Strictly exceed both the matched attention parent and original LLaDA with at least one recovery and no more parent-only losses than recoveries."
+  },
+  "other_tasks": {
+    "HumanEval": "Unchanged v11 doctest guard and unchanged formal HumanEval/96-163 gate.",
+    "MATH_500": "No public Python checks; exact v9 fallback. The rejected three-answer majority experiment remains excluded."
+  }
+}

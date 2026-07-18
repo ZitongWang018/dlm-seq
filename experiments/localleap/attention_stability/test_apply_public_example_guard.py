@@ -61,6 +61,21 @@ def test_replay_preserves_parent_on_tie():
     assert output[0]["decode_diagnostics"]["selected_name"] == "fast"
 
 
+def test_missing_historical_nfe_remains_explicitly_unknown():
+    parent_record = record(
+        "HumanEval/0", "def square(x):\n    return x ** 2", True, 270
+    )
+    baseline_record = record(
+        "HumanEval/0", "def square(x):\n    return x * x", True, 128
+    )
+    baseline_record["nfe"] = None
+    output = apply_guard(
+        {"HumanEval/0": parent_record}, {"HumanEval/0": baseline_record}
+    )
+    assert output[0]["nfe"] is None
+    assert output[0]["decode_diagnostics"]["candidate_nfe"]["baseline"] is None
+
+
 def test_alignment_mismatch_is_rejected():
     parent = {"HumanEval/0": record("HumanEval/0", "", False, 1)}
     baseline = copy.deepcopy(parent)
@@ -75,5 +90,6 @@ def test_alignment_mismatch_is_rejected():
 if __name__ == "__main__":
     test_replay_selects_strict_public_example_winner_and_sums_nfe()
     test_replay_preserves_parent_on_tie()
+    test_missing_historical_nfe_remains_explicitly_unknown()
     test_alignment_mismatch_is_rejected()
-    print("3 public-example replay tests passed")
+    print("4 public-example replay tests passed")

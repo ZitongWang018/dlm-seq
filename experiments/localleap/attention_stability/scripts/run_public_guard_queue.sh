@@ -98,7 +98,8 @@ if [[ ! -s "${frozen}" ]]; then
     "${source_root}/test_apply_public_example_guard.py" \
     "${source_root}/test_build_selected_sample_view.py" \
     "${source_root}/test_verify_selected_execution.py" \
-    "${source_root}/public_example_guard_preregistration_20260719.json" >"${frozen}"
+    "${source_root}/public_example_guard_preregistration_20260719.json" \
+    "${source_root}/public_assert_guard_preregistration_20260719.json" >"${frozen}"
 fi
 verify
 /root/miniconda3/bin/python -m py_compile generate.py eval_llada.py differential_selector.py \
