@@ -899,6 +899,7 @@ def select_likelihood_trajectory(
         "consensus_block",
         "lazy_consensus_block",
         "coverage_consensus_block",
+        "convergent_coverage_consensus_block",
     }:
         if block_length is None or int(block_length) <= 0:
             raise ValueError(
@@ -909,13 +910,11 @@ def select_likelihood_trajectory(
             candidate_summaries["accuracy"]["commit_logprob_mean"]
         )
         evidence_per_block = (accuracy_score - fast_score) * int(block_length)
-        # The baseline trajectory cannot affect the result until the vertical
-        # evidence is strong enough to permit an accuracy-parent override.  In
-        # lazy mode, preserve fast immediately and avoid a zero-information
-        # third trajectory.
-        if evidence_per_block <= 1.0:
-            if selection_mode != "coverage_consensus_block":
-                return "fast"
+        vertical_override = evidence_per_block > 1.0
+        if selection_mode in {
+            "coverage_consensus_block",
+            "convergent_coverage_consensus_block",
+        }:
             fast_ids = candidate_token_ids["fast"]
             accuracy_ids = candidate_token_ids["accuracy"]
             disagreement_count = int((fast_ids != accuracy_ids).sum().item())
@@ -923,11 +922,21 @@ def select_likelihood_trajectory(
                 candidate_summaries["accuracy"]["response_invalidations"]
                 - candidate_summaries["fast"]["response_invalidations"]
             )
-            # A weak mean likelihood gain can still be vertically meaningful
-            # when the slower schedule performs at least one additional
-            # conditioned revision for every final token disagreement.
-            if disagreement_count == 0 or extra_invalidations < disagreement_count:
-                return "fast"
+            revision_coverage = (
+                disagreement_count > 0
+                and extra_invalidations >= disagreement_count
+            )
+            if selection_mode == "coverage_consensus_block":
+                vertical_override = vertical_override or revision_coverage
+            else:
+                # Strong likelihood evidence is credible when the slower path
+                # converges by invalidating fewer conditioned candidates.  A
+                # divergent path must instead cover every final disagreement.
+                vertical_override = (
+                    vertical_override and extra_invalidations <= 0
+                ) or revision_coverage
+        if not vertical_override:
+            return "fast"
         consensus = score_baseline_consensus(candidate_token_ids)
         return (
             "accuracy"
@@ -1069,12 +1078,16 @@ def generate_trajectory_likelihood_selection(
         "consensus_block",
         "lazy_consensus_block",
         "coverage_consensus_block",
+        "convergent_coverage_consensus_block",
     }:
         evidence_per_block = (
             float(accuracy_summary["commit_logprob_mean"])
             - float(fast_summary["commit_logprob_mean"])
         ) * int(block_length)
-        if selection_mode == "coverage_consensus_block":
+        if selection_mode in {
+            "coverage_consensus_block",
+            "convergent_coverage_consensus_block",
+        }:
             disagreement_count_for_coverage = int(
                 (fast_x != accuracy_x).sum().item()
             )
@@ -1087,13 +1100,17 @@ def generate_trajectory_likelihood_selection(
                 and extra_invalidations_for_coverage
                 >= disagreement_count_for_coverage
             )
-        needs_baseline = selection_mode == "consensus_block" or (
-            evidence_per_block > 1.0
-            or (
-                selection_mode == "coverage_consensus_block"
-                and revision_coverage
-            )
-        )
+        if selection_mode == "consensus_block":
+            needs_baseline = True
+        elif selection_mode == "lazy_consensus_block":
+            needs_baseline = evidence_per_block > 1.0
+        elif selection_mode == "coverage_consensus_block":
+            needs_baseline = evidence_per_block > 1.0 or revision_coverage
+        else:
+            needs_baseline = (
+                evidence_per_block > 1.0
+                and extra_invalidations_for_coverage <= 0
+            ) or revision_coverage
         if needs_baseline:
             baseline_x, baseline_nfe = generate(
                 model=model,
@@ -1145,7 +1162,9 @@ def generate_trajectory_likelihood_selection(
             if selection_mode == "disagreement_evidence"
             else (
                 (
-                    "trajectory_coverage_consensus_block_v5"
+                    "trajectory_convergent_coverage_consensus_block_v6"
+                    if selection_mode == "convergent_coverage_consensus_block"
+                    else "trajectory_coverage_consensus_block_v5"
                     if selection_mode == "coverage_consensus_block"
                     else "trajectory_lazy_consensus_block_v4"
                     if selection_mode == "lazy_consensus_block"
@@ -1155,6 +1174,7 @@ def generate_trajectory_likelihood_selection(
                     "consensus_block",
                     "lazy_consensus_block",
                     "coverage_consensus_block",
+                    "convergent_coverage_consensus_block",
                 }
                 else "trajectory_likelihood_selection_v1"
             )
@@ -1167,7 +1187,9 @@ def generate_trajectory_likelihood_selection(
                 if selection_mode == "disagreement_evidence"
                 else (
                     (
-                        "one_revision_per_disagreement_or_one_nat_then_consensus"
+                        "convergent_one_nat_or_full_revision_coverage_then_consensus"
+                        if selection_mode == "convergent_coverage_consensus_block"
+                        else "one_revision_per_disagreement_or_one_nat_then_consensus"
                         if selection_mode == "coverage_consensus_block"
                         else "lazy_one_nat_block_evidence_then_baseline_consensus"
                         if selection_mode == "lazy_consensus_block"
@@ -1177,6 +1199,7 @@ def generate_trajectory_likelihood_selection(
                         "consensus_block",
                         "lazy_consensus_block",
                         "coverage_consensus_block",
+                        "convergent_coverage_consensus_block",
                     }
                     else "max_mean_committed_token_log_confidence"
                 )
@@ -1203,7 +1226,10 @@ def generate_trajectory_likelihood_selection(
             "extra_response_invalidations": extra_invalidations_for_coverage,
             "satisfied": revision_coverage,
         }
-        if selection_mode == "coverage_consensus_block"
+        if selection_mode in {
+            "coverage_consensus_block",
+            "convergent_coverage_consensus_block",
+        }
         else None,
         "candidate_nfe": {
             "fast": int(fast_nfe),

@@ -77,6 +77,11 @@ case "${profile}" in
     # extra conditioned revisions cover every final parent disagreement.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=coverage_consensus_block"
     ;;
+  trajectory_convergent_coverage_consensus_block)
+    # Strong likelihood gains must reduce conditioned invalidations; otherwise
+    # the slower path must revise at least once per final disagreement.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=convergent_coverage_consensus_block"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

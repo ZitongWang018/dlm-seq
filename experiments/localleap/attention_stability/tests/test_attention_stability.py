@@ -530,6 +530,124 @@ def test_coverage_consensus_runs_horizontal_vote_for_covered_weak_margin():
     }
 
 
+def test_convergent_consensus_accepts_strong_evidence_with_fewer_invalidations():
+    token_ids = {
+        "fast": torch.tensor([[1, 2, 3, 4]]),
+        "accuracy": torch.tensor([[1, 8, 3, 9]]),
+        "baseline": torch.tensor([[1, 8, 3, 9]]),
+    }
+    summaries = {
+        "fast": {
+            "commit_logprob_mean": -0.20,
+            "response_invalidations": 12,
+        },
+        "accuracy": {
+            "commit_logprob_mean": -0.10,
+            "response_invalidations": 10,
+        },
+    }
+    assert select_likelihood_trajectory(
+        summaries,
+        block_length=32,
+        selection_mode="convergent_coverage_consensus_block",
+        candidate_token_ids=token_ids,
+    ) == "accuracy"
+
+
+def test_convergent_consensus_rejects_strong_but_uncovered_divergence():
+    token_ids = {
+        "fast": torch.tensor([[1, 2, 3, 4]]),
+        "accuracy": torch.tensor([[1, 8, 3, 9]]),
+    }
+    summaries = {
+        "fast": {
+            "commit_logprob_mean": -0.20,
+            "response_invalidations": 10,
+        },
+        "accuracy": {
+            "commit_logprob_mean": -0.10,
+            "response_invalidations": 11,
+        },
+    }
+    assert select_likelihood_trajectory(
+        summaries,
+        block_length=32,
+        selection_mode="convergent_coverage_consensus_block",
+        candidate_token_ids=token_ids,
+    ) == "fast"
+
+
+def test_convergent_consensus_accepts_comprehensive_revision_coverage():
+    token_ids = {
+        "fast": torch.tensor([[1, 2, 3, 4]]),
+        "accuracy": torch.tensor([[1, 8, 3, 9]]),
+        "baseline": torch.tensor([[1, 8, 3, 9]]),
+    }
+    summaries = {
+        "fast": {
+            "commit_logprob_mean": -0.20,
+            "response_invalidations": 10,
+        },
+        "accuracy": {
+            "commit_logprob_mean": -0.19,
+            "response_invalidations": 12,
+        },
+    }
+    assert select_likelihood_trajectory(
+        summaries,
+        block_length=32,
+        selection_mode="convergent_coverage_consensus_block",
+        candidate_token_ids=token_ids,
+    ) == "accuracy"
+
+
+def test_convergent_consensus_skips_vote_for_uncovered_divergent_path():
+    original_attention = generate_module.generate_attention_stability
+    original_baseline = generate_module.generate
+    baseline_calls = []
+
+    def fake_attention(**kwargs):
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2, 3]]), 128, {
+                "commit_logprob_mean": -0.20,
+                "response_invalidations": 10,
+            }
+        return torch.tensor([[1, 8, 9]]), 144, {
+            "commit_logprob_mean": -0.10,
+            "response_invalidations": 11,
+        }
+
+    def fake_baseline(**kwargs):
+        baseline_calls.append(True)
+        return torch.tensor([[1, 8, 9]]), 128
+
+    generate_module.generate_attention_stability = fake_attention
+    generate_module.generate = fake_baseline
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=3,
+            block_length=32,
+            selection_mode="convergent_coverage_consensus_block",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+        generate_module.generate = original_baseline
+
+    assert baseline_calls == []
+    assert output.tolist() == [[1, 2, 3]]
+    assert nfe == 272
+    assert summary["selected_name"] == "fast"
+    assert summary["revision_coverage"] == {
+        "disagreement_token_count": 2,
+        "extra_response_invalidations": 1,
+        "satisfied": False,
+    }
+
+
 def test_topk_overlap_creates_intermediate_temporal_tier():
     logits = make_logits([1, 2, 3], [0.70, 0.80, 0.95])
     dependency = torch.zeros((1, 3, 3))
@@ -702,6 +820,10 @@ if __name__ == "__main__":
     test_coverage_consensus_accepts_one_extra_revision_per_disagreement()
     test_coverage_consensus_preserves_fast_when_revisions_do_not_cover_differences()
     test_coverage_consensus_runs_horizontal_vote_for_covered_weak_margin()
+    test_convergent_consensus_accepts_strong_evidence_with_fewer_invalidations()
+    test_convergent_consensus_rejects_strong_but_uncovered_divergence()
+    test_convergent_consensus_accepts_comprehensive_revision_coverage()
+    test_convergent_consensus_skips_vote_for_uncovered_divergent_path()
     test_topk_overlap_creates_intermediate_temporal_tier()
     test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates()
     test_topk_overlap_rejects_invalid_k()
@@ -709,4 +831,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("29 selector tests passed")
+    print("33 selector tests passed")
