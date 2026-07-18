@@ -227,9 +227,10 @@ class LLaDAEvalHarness(LM):
             "matched",
             "extra",
             "gated",
+            "causal_pareto",
         }:
             raise ValueError(
-                "dependency_response_refine_budget_mode must be matched, extra, or gated"
+                "dependency_response_refine_budget_mode must be matched, extra, gated, or causal_pareto"
             )
         self.candidate_memory_topk = candidate_memory_topk
         self.candidate_memory_confidence_threshold = candidate_memory_confidence_threshold
@@ -564,7 +565,10 @@ class LLaDAEvalHarness(LM):
                 )
                 trace_evaluator_version = (
                     (
-                        "response_refine_trace_v2"
+                        "response_refine_trace_v3"
+                        if self.dependency_response_refine_budget_mode
+                        == "causal_pareto"
+                        else "response_refine_trace_v2"
                         if self.dependency_response_refine_budget_mode == "gated"
                         else "response_refine_trace_v1"
                     )

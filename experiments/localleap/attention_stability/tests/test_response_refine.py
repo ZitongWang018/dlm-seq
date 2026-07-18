@@ -54,6 +54,26 @@ def test_risk_gated_frontier_underfills_instead_of_rewriting_stable_tokens():
     assert summary["remasked_positions"] == 1
 
 
+def test_causal_risk_requires_invalidation_and_commit_risk():
+    risk = make_position_risk()
+    risk["response_invalidations"][1] = 2
+    risk["commit_forced"][2] = True
+    risk["response_invalidations"][3] = 1
+    risk["commit_maturity"][3] = False
+    remask, summary = generate.build_response_refine_mask(
+        position_risk=risk,
+        prompt_length=1,
+        gen_length=4,
+        block_length=4,
+        dependency_threshold=0.004,
+        repair_steps=4,
+        risk_gated=True,
+        require_commit_risk=True,
+    )
+    assert torch.where(remask[0])[0].tolist() == [3]
+    assert summary["require_commit_risk"] is True
+
+
 def test_repair_decodes_live_directed_source_before_dependent():
     original_forward = generate._forward_with_block_attention
 
@@ -164,10 +184,44 @@ def test_shared_mask_retention_accepts_or_rejects_whole_blocks():
     assert summary["rejected_blocks"] == 1
 
 
+def test_pareto_retention_rejects_block_with_one_regressing_token():
+    class FakeModel:
+        def __call__(self, x):
+            logits = torch.zeros((*x.shape, 10), dtype=torch.float32)
+            logits[0, 1, 2] = 8.0
+            logits[0, 1, 1] = 1.0
+            logits[0, 2, 2] = 3.0
+            logits[0, 2, 3] = 2.0
+            return SimpleNamespace(logits=logits)
+
+    draft = torch.tensor([[9, 1, 2]], dtype=torch.long)
+    repaired = torch.tensor([[9, 2, 3]], dtype=torch.long)
+    remask = torch.tensor([[False, True, True]])
+    retained, nfe, summary = generate.retain_response_refine_blocks(
+        model=FakeModel(),
+        draft=draft,
+        repaired=repaired,
+        remask=remask,
+        prompt_length=1,
+        gen_length=2,
+        block_length=2,
+        mask_id=7,
+        require_pareto=True,
+    )
+    assert nfe == 1
+    assert torch.equal(retained, draft)
+    assert summary["accepted_blocks"] == 0
+    assert summary["rejected_blocks"] == 1
+    assert summary["blocks"][0]["score_margin"] > 0
+    assert summary["blocks"][0]["minimum_token_margin"] < 0
+
+
 if __name__ == "__main__":
     test_frontier_prefers_forced_conditioned_risk_without_score_weight()
     test_risk_gated_frontier_underfills_instead_of_rewriting_stable_tokens()
+    test_causal_risk_requires_invalidation_and_commit_risk()
     test_repair_decodes_live_directed_source_before_dependent()
     test_matched_mode_preserves_total_forward_budget()
     test_shared_mask_retention_accepts_or_rejects_whole_blocks()
-    print("5 response-refine tests passed")
+    test_pareto_retention_rejects_block_with_one_regressing_token()
+    print("7 response-refine tests passed")

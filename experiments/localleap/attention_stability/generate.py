@@ -817,6 +817,7 @@ def build_response_refine_mask(
     dependency_threshold,
     repair_steps,
     risk_gated=False,
+    require_commit_risk=False,
 ):
     """Choose a fixed-budget remasking frontier from horizontal/vertical risk.
 
@@ -872,25 +873,26 @@ def build_response_refine_mask(
 
         candidate_local = list(range(block_length))
         if risk_gated:
+            def observed_risk(local_position):
+                global_position = block_start + local_position
+                invalidated = int(
+                    position_risk["response_invalidations"][global_position].item()
+                ) > 0
+                commit_risk = bool(
+                    position_risk["commit_forced"][global_position].item()
+                ) or not bool(
+                    position_risk["commit_maturity"][global_position].item()
+                )
+                return (
+                    invalidated and commit_risk
+                    if require_commit_risk
+                    else invalidated or commit_risk
+                )
+
             candidate_local = [
                 local_position
                 for local_position in candidate_local
-                if bool(
-                    position_risk["commit_forced"][
-                        block_start + local_position
-                    ].item()
-                )
-                or not bool(
-                    position_risk["commit_maturity"][
-                        block_start + local_position
-                    ].item()
-                )
-                or int(
-                    position_risk["response_invalidations"][
-                        block_start + local_position
-                    ].item()
-                )
-                > 0
+                if observed_risk(local_position)
             ]
         selected_local = sorted(candidate_local, key=risk_key)[:remask_per_block]
         selected_global = [block_start + item for item in selected_local]
@@ -952,6 +954,7 @@ def build_response_refine_mask(
             else "forced_invalidation_maturity_incidence_confidence_v1"
         ),
         "risk_gated": bool(risk_gated),
+        "require_commit_risk": bool(require_commit_risk),
         "remask_per_block": int(remask_per_block),
         "remasked_positions": selected_count,
         "selected_forced_commits": int(selected_forced),
@@ -1159,6 +1162,7 @@ def retain_response_refine_blocks(
     gen_length,
     block_length,
     mask_id=126336,
+    require_pareto=False,
 ):
     """Keep a repaired block only when it beats the retained draft.
 
@@ -1174,7 +1178,11 @@ def retain_response_refine_blocks(
     changed[:, :prompt_length] = False
     output = draft.clone()
     summary = {
-        "selector": "shared_mask_block_retention_v1",
+        "selector": (
+            "shared_mask_block_pareto_retention_v2"
+            if require_pareto
+            else "shared_mask_block_retention_v1"
+        ),
         "changed_positions": int(changed.sum().item()),
         "accepted_blocks": 0,
         "rejected_blocks": 0,
@@ -1200,13 +1208,16 @@ def retain_response_refine_blocks(
         global_positions = local_positions + block_start
         original_tokens = draft[0, global_positions]
         repaired_tokens = repaired[0, global_positions]
-        original_score = float(
-            log_probs[0, global_positions, original_tokens].sum().item()
+        original_token_scores = log_probs[0, global_positions, original_tokens]
+        repaired_token_scores = log_probs[0, global_positions, repaired_tokens]
+        token_margins = repaired_token_scores - original_token_scores
+        original_score = float(original_token_scores.sum().item())
+        repaired_score = float(repaired_token_scores.sum().item())
+        accept = bool(
+            (token_margins > 0).all().item()
+            if require_pareto
+            else repaired_score > original_score
         )
-        repaired_score = float(
-            log_probs[0, global_positions, repaired_tokens].sum().item()
-        )
-        accept = repaired_score > original_score
         if accept:
             output[0, global_positions] = repaired[0, global_positions]
             summary["accepted_blocks"] += 1
@@ -1220,6 +1231,7 @@ def retain_response_refine_blocks(
                 "original_log_score": original_score,
                 "repaired_log_score": repaired_score,
                 "score_margin": repaired_score - original_score,
+                "minimum_token_margin": float(token_margins.min().item()),
                 "accepted": bool(accept),
             }
         )
@@ -1247,8 +1259,10 @@ def generate_response_refine(
     ``extra`` keeps the full parent draft budget and adds a half-budget repair.
     These are discrete compute regimes rather than tuned score weights.
     """
-    if budget_mode not in {"matched", "extra", "gated"}:
-        raise ValueError("budget_mode must be matched, extra, or gated")
+    if budget_mode not in {"matched", "extra", "gated", "causal_pareto"}:
+        raise ValueError(
+            "budget_mode must be matched, extra, gated, or causal_pareto"
+        )
     num_blocks = gen_length // block_length
     repair_steps = steps // 2
     fill_steps = steps // 2 if budget_mode == "matched" else steps
@@ -1283,7 +1297,8 @@ def generate_response_refine(
         block_length=block_length,
         dependency_threshold=dependency_threshold,
         repair_steps=repair_steps,
-        risk_gated=budget_mode == "gated",
+        risk_gated=budget_mode in {"gated", "causal_pareto"},
+        require_commit_risk=budget_mode == "causal_pareto",
     )
     repaired, repair_nfe, repair_summary = repair_response_refine_positions(
         model=model,
@@ -1301,7 +1316,7 @@ def generate_response_refine(
     retained = repaired
     selector_nfe = 0
     retention_summary = None
-    if budget_mode == "gated":
+    if budget_mode in {"gated", "causal_pareto"}:
         retained, selector_nfe, retention_summary = retain_response_refine_blocks(
             model=model,
             draft=draft,
@@ -1311,9 +1326,15 @@ def generate_response_refine(
             gen_length=gen_length,
             block_length=block_length,
             mask_id=mask_id,
+            require_pareto=budget_mode == "causal_pareto",
         )
+    decoder = "response_refine_v1"
+    if budget_mode == "gated":
+        decoder = "response_refine_v2"
+    elif budget_mode == "causal_pareto":
+        decoder = "response_refine_v3"
     summary = {
-        "decoder": "response_refine_v2" if budget_mode == "gated" else "response_refine_v1",
+        "decoder": decoder,
         "budget_mode": budget_mode,
         "dependency_threshold": float(dependency_threshold),
         "configured_steps": int(steps),

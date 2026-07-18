@@ -23,7 +23,8 @@ def main():
         raise SystemExit("empty trace")
     diagnostics = [record["decode_diagnostics"] for record in records]
     if any(
-        item.get("decoder") not in {"response_refine_v1", "response_refine_v2"}
+        item.get("decoder")
+        not in {"response_refine_v1", "response_refine_v2", "response_refine_v3"}
         for item in diagnostics
     ):
         raise SystemExit("trace contains a non-response-refine decoder")

@@ -2,6 +2,8 @@
 set -uo pipefail
 
 queue_id=${ATTENTION_QUEUE_ID:-response_refine_gated_20260718_v2}
+method_profile=${ATTENTION_METHOD_PROFILE:-response_refine_gated}
+method_label=${ATTENTION_METHOD_LABEL:-gated}
 llada_root=/root/autodl-tmp/LocalLeap/llada
 source_root=/root/autodl-tmp/dlm-seq-flow/experiments/localleap/attention_stability
 runner=${source_root}/scripts/run_best_symmetric_benchmark.sh
@@ -95,24 +97,25 @@ bash -n "${runner}" "${source_root}/scripts/run_response_refine_gated_queue.sh"
 
 echo "formal_baseline=original_llada_low_confidence"
 echo "development_parent=symmetric_fast_tau_0.004"
-echo "method=risk_gated_directed_local_branch_with_shared_mask_block_retention"
+echo "method_profile=${method_profile}"
+echo "method_label=${method_label}"
 
 # Health smoke uses both GPUs concurrently.
-run_gpu smoke_he_gated 0 "${runner}" humaneval 0 128 response_refine_gated 0.004 trace smoke_he_gated 2 256 & p0=$!
-run_gpu smoke_math_gated 1 "${runner}" localleap_math500 0 128 response_refine_gated 0.004 trace smoke_math_gated 2 256 & p1=$!
+run_gpu "smoke_he_${method_label}" 0 "${runner}" humaneval 0 128 "${method_profile}" 0.004 trace "smoke_he_${method_label}" 2 256 & p0=$!
+run_gpu "smoke_math_${method_label}" 1 "${runner}" localleap_math500 0 128 "${method_profile}" 0.004 trace "smoke_math_${method_label}" 2 256 & p1=$!
 wait "${p0}" || true; wait "${p1}" || true
-[[ -e "${run_base}/humaneval/smoke_he_gated/DONE" && -e "${run_base}/localleap_math500/smoke_math_gated/DONE" ]] || { touch "${queue_root}/FAILED_SMOKE"; exit 22; }
+[[ -e "${run_base}/humaneval/smoke_he_${method_label}/DONE" && -e "${run_base}/localleap_math500/smoke_math_${method_label}/DONE" ]] || { touch "${queue_root}/FAILED_SMOKE"; exit 22; }
 
 # First formal sampled gate: one benchmark per GPU, identical prompt/evaluator setup.
-run_gpu he_gated_n32 0 "${runner}" humaneval 0 128 response_refine_gated 0.004 trace he_gated_n32 32 256 & p0=$!
-run_gpu math_gated_n50 1 "${runner}" localleap_math500 0 128 response_refine_gated 0.004 trace math_gated_n50 50 256 & p1=$!
+run_gpu "he_${method_label}_n32" 0 "${runner}" humaneval 0 128 "${method_profile}" 0.004 trace "he_${method_label}_n32" 32 256 & p0=$!
+run_gpu "math_${method_label}_n50" 1 "${runner}" localleap_math500 0 128 "${method_profile}" 0.004 trace "math_${method_label}_n50" 50 256 & p1=$!
 wait "${p0}" || true; wait "${p1}" || true
 
 v1=/root/autodl-tmp/LocalLeap/llada/results/best_symmetric_benchmarks/response_refine_he_math_20260718_v1
-pair_runs he_gate_vs_base_n32 "${v1}/humaneval/he_baseline_128_n32" "${run_base}/humaneval/he_gated_n32"
-pair_runs he_gate_vs_parent_n32 "${v1}/humaneval/he_parent_128_n32" "${run_base}/humaneval/he_gated_n32"
-pair_runs math_gate_vs_base_n50 "${v1}/localleap_math500/math_baseline_128_n50" "${run_base}/localleap_math500/math_gated_n50"
-pair_runs math_gate_vs_parent_n50 "${v1}/localleap_math500/math_parent_128_n50" "${run_base}/localleap_math500/math_gated_n50"
+pair_runs he_gate_vs_base_n32 "${v1}/humaneval/he_baseline_128_n32" "${run_base}/humaneval/he_${method_label}_n32"
+pair_runs he_gate_vs_parent_n32 "${v1}/humaneval/he_parent_128_n32" "${run_base}/humaneval/he_${method_label}_n32"
+pair_runs math_gate_vs_base_n50 "${v1}/localleap_math500/math_baseline_128_n50" "${run_base}/localleap_math500/math_${method_label}_n50"
+pair_runs math_gate_vs_parent_n50 "${v1}/localleap_math500/math_parent_128_n50" "${run_base}/localleap_math500/math_${method_label}_n50"
 
 he_summary=${queue_root}/paired/he_gate_vs_parent_n32/paired_summary.json
 math_summary=${queue_root}/paired/math_gate_vs_parent_n50/paired_summary.json
@@ -126,13 +129,13 @@ promote=0
 if (( he_method + 1 >= he_parent && math_method + 1 >= math_parent && combined_method > combined_parent )); then
   promote=1
 elif (( he_method + 1 >= he_parent && math_method + 1 >= math_parent && combined_method + 1 >= combined_parent )); then
-  run_gpu he_gated_n64 0 "${runner}" humaneval 0 128 response_refine_gated 0.004 trace he_gated_n64 64 256 & p0=$!
-  run_gpu math_gated_n100 1 "${runner}" localleap_math500 0 128 response_refine_gated 0.004 trace math_gated_n100 100 256 & p1=$!
+  run_gpu "he_${method_label}_n64" 0 "${runner}" humaneval 0 128 "${method_profile}" 0.004 trace "he_${method_label}_n64" 64 256 & p0=$!
+  run_gpu "math_${method_label}_n100" 1 "${runner}" localleap_math500 0 128 "${method_profile}" 0.004 trace "math_${method_label}_n100" 100 256 & p1=$!
   wait "${p0}" || true; wait "${p1}" || true
   he_full_base=/root/autodl-tmp/LocalLeap/llada/results/attention_recovery/humaneval/recovery_he_symmetric_fast_128
   math_full_base=/root/autodl-tmp/LocalLeap/llada/results/best_symmetric_benchmarks/best_symmetric_long_20260716_v2/localleap_math500/math500_symmetric_fast_128
-  pair_runs_subset he_gate_vs_parent_n64 "${he_full_base}" "${run_base}/humaneval/he_gated_n64"
-  pair_runs_subset math_gate_vs_parent_n100 "${math_full_base}" "${run_base}/localleap_math500/math_gated_n100"
+  pair_runs_subset he_gate_vs_parent_n64 "${he_full_base}" "${run_base}/humaneval/he_${method_label}_n64"
+  pair_runs_subset math_gate_vs_parent_n100 "${math_full_base}" "${run_base}/localleap_math500/math_${method_label}_n100"
   hs=${queue_root}/paired/he_gate_vs_parent_n64/paired_summary.json; ms=${queue_root}/paired/math_gate_vs_parent_n100/paired_summary.json
   hm=$(correct_count "${hs}"); hp=$(baseline_count "${hs}"); mm=$(correct_count "${ms}"); mp=$(baseline_count "${ms}")
   (( hm + 1 >= hp && mm + 1 >= mp && hm + mm > hp + mp )) && promote=1
@@ -140,16 +143,16 @@ fi
 
 if (( ! promote )); then touch "${queue_root}/DONE_NO_PROMOTION" "${queue_root}/DONE"; exit 0; fi
 
-run_gpu he_gated_full 0 "${runner}" humaneval 0 128 response_refine_gated 0.004 trace he_gated_full full 256 & p0=$!
-run_gpu math_gated_full 1 "${runner}" localleap_math500 0 128 response_refine_gated 0.004 trace math_gated_full full 256 & p1=$!
+run_gpu "he_${method_label}_full" 0 "${runner}" humaneval 0 128 "${method_profile}" 0.004 trace "he_${method_label}_full" full 256 & p0=$!
+run_gpu "math_${method_label}_full" 1 "${runner}" localleap_math500 0 128 "${method_profile}" 0.004 trace "math_${method_label}_full" full 256 & p1=$!
 wait "${p0}" || true; wait "${p1}" || true
 
 he_base=/root/autodl-tmp/LocalLeap/llada/results/attention_recovery/humaneval/recovery_he_baseline_128
 he_parent_full=/root/autodl-tmp/LocalLeap/llada/results/attention_recovery/humaneval/recovery_he_symmetric_fast_128
 math_base=/root/autodl-tmp/LocalLeap/llada/results/best_symmetric_benchmarks/best_symmetric_long_20260716_v2/localleap_math500/math500_baseline_128
 math_parent_full=/root/autodl-tmp/LocalLeap/llada/results/best_symmetric_benchmarks/best_symmetric_long_20260716_v2/localleap_math500/math500_symmetric_fast_128
-pair_runs he_full_vs_base "${he_base}" "${run_base}/humaneval/he_gated_full"
-pair_runs he_full_vs_parent "${he_parent_full}" "${run_base}/humaneval/he_gated_full"
-pair_runs math_full_vs_base "${math_base}" "${run_base}/localleap_math500/math_gated_full"
-pair_runs math_full_vs_parent "${math_parent_full}" "${run_base}/localleap_math500/math_gated_full"
+pair_runs he_full_vs_base "${he_base}" "${run_base}/humaneval/he_${method_label}_full"
+pair_runs he_full_vs_parent "${he_parent_full}" "${run_base}/humaneval/he_${method_label}_full"
+pair_runs math_full_vs_base "${math_base}" "${run_base}/localleap_math500/math_${method_label}_full"
+pair_runs math_full_vs_parent "${math_parent_full}" "${run_base}/localleap_math500/math_${method_label}_full"
 touch "${queue_root}/DONE"
