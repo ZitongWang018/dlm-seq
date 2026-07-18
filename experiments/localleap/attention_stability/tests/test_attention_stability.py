@@ -7,6 +7,7 @@ from generate import (
     score_disagreement_evidence,
     score_baseline_consensus,
     score_shared_skeleton_candidates,
+    score_bidirectional_block_candidates,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
 )
@@ -55,6 +56,65 @@ def test_shared_skeleton_tie_preserves_fast_without_extra_forward():
     assert scores == {"fast": 0.0, "accuracy": 0.0}
     assert disagreements == 0
     assert nfe == 0
+    assert model.inputs == []
+
+
+class BidirectionalBlockModel:
+    def __init__(self):
+        self.inputs = []
+
+    def __call__(self, input_ids):
+        self.inputs.append(input_ids.clone())
+        logits = torch.zeros((*input_ids.shape, 10))
+        if len(self.inputs) == 1:
+            logits[:, 2, 4] = 4.0
+        else:
+            logits[:, 4, 6] = 4.0
+        return type("Output", (), {"logits": logits})()
+
+
+def test_bidirectional_block_masks_one_block_under_both_external_drafts():
+    model = BidirectionalBlockModel()
+    scores, disagreements, nfe, blocks = score_bidirectional_block_candidates(
+        model,
+        {
+            "fast": torch.tensor([[9, 1, 2, 3, 4]]),
+            "accuracy": torch.tensor([[9, 1, 4, 3, 6]]),
+        },
+        prompt_length=1,
+        block_length=2,
+        mask_id=7,
+    )
+    assert model.inputs[0].tolist() == [
+        [9, 1, 7, 3, 4],
+        [9, 1, 7, 3, 6],
+    ]
+    assert model.inputs[1].tolist() == [
+        [9, 1, 2, 3, 7],
+        [9, 1, 4, 3, 7],
+    ]
+    assert scores["accuracy"] > scores["fast"]
+    assert disagreements == 2
+    assert nfe == 2
+    assert [row["disagreement_token_count"] for row in blocks] == [1, 1]
+
+
+def test_bidirectional_block_identical_paths_need_no_selector_forward():
+    model = BidirectionalBlockModel()
+    scores, disagreements, nfe, blocks = score_bidirectional_block_candidates(
+        model,
+        {
+            "fast": torch.tensor([[9, 1, 2]]),
+            "accuracy": torch.tensor([[9, 1, 2]]),
+        },
+        prompt_length=1,
+        block_length=2,
+        mask_id=7,
+    )
+    assert scores == {"fast": 0.0, "accuracy": 0.0}
+    assert disagreements == 0
+    assert nfe == 0
+    assert blocks == []
     assert model.inputs == []
 
 
@@ -845,6 +905,8 @@ def test_revision_margin_prioritizes_decisive_conditioned_change():
 
 
 if __name__ == "__main__":
+    test_bidirectional_block_masks_one_block_under_both_external_drafts()
+    test_bidirectional_block_identical_paths_need_no_selector_forward()
     test_shared_skeleton_scores_both_paths_from_identical_context()
     test_shared_skeleton_tie_preserves_fast_without_extra_forward()
     test_high_dependency_positions_are_not_committed_together()
@@ -880,4 +942,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("35 selector tests passed")
+    print("37 selector tests passed")

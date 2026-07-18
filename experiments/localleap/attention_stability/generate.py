@@ -1057,6 +1057,84 @@ def score_shared_skeleton_candidates(
 
 
 @torch.no_grad()
+def score_bidirectional_block_candidates(
+    model,
+    candidate_token_ids,
+    prompt_length,
+    block_length,
+    mask_id=126336,
+):
+    """Cross-verify one disagreement block while preserving both full drafts.
+
+    Dense all-disagreement masking removes the very long-range program context
+    needed to judge an alternative.  For each existing generation block, this
+    verifier masks only that block's disagreements.  It evaluates the same two
+    alternatives once under the fast external draft and once under the
+    accuracy-first external draft, then averages the directional scores.  The
+    two contexts are batched, so the cost is one forward per active block.
+    """
+    required = ("fast", "accuracy")
+    if candidate_token_ids is None:
+        raise ValueError("bidirectional_block requires candidate token ids")
+    missing = [name for name in required if name not in candidate_token_ids]
+    if missing:
+        raise ValueError(f"missing bidirectional-block candidate ids: {missing}")
+    fast = candidate_token_ids["fast"]
+    accuracy = candidate_token_ids["accuracy"]
+    if fast.shape != accuracy.shape or fast.ndim != 2 or fast.shape[0] != 1:
+        raise ValueError("bidirectional-block candidates must be aligned batch-one tensors")
+    if int(block_length) <= 0:
+        raise ValueError("bidirectional_block requires a positive block_length")
+
+    disagreement = fast != accuracy
+    disagreement[:, : int(prompt_length)] = False
+    total_disagreements = int(disagreement.sum().item())
+    if total_disagreements == 0:
+        return {"fast": 0.0, "accuracy": 0.0}, 0, 0, []
+
+    score_sums = {"fast": 0.0, "accuracy": 0.0}
+    selector_nfe = 0
+    block_records = []
+    sequence_length = fast.shape[1]
+    for block_start in range(int(prompt_length), sequence_length, int(block_length)):
+        block_end = min(block_start + int(block_length), sequence_length)
+        block_disagreement = disagreement.clone()
+        block_disagreement[:, :block_start] = False
+        block_disagreement[:, block_end:] = False
+        local_positions = block_disagreement[0].nonzero(as_tuple=True)[0]
+        count = int(local_positions.numel())
+        if count == 0:
+            continue
+
+        fast_context = fast.clone()
+        accuracy_context = accuracy.clone()
+        fast_context[block_disagreement] = int(mask_id)
+        accuracy_context[block_disagreement] = int(mask_id)
+        contexts = torch.cat((fast_context, accuracy_context), dim=0)
+        logits = model(contexts).logits[:, local_positions, :].float()
+        log_probs = torch.log_softmax(logits, dim=-1)
+        local_scores = {}
+        for name in required:
+            target = candidate_token_ids[name][0, local_positions].long()
+            target = target[None, :, None].expand(2, -1, 1)
+            directional = log_probs.gather(-1, target).squeeze(-1)
+            local_scores[name] = float(directional.mean(dim=0).mean().item())
+            score_sums[name] += float(directional.mean(dim=0).sum().item())
+        selector_nfe += 1
+        block_records.append({
+            "block_start": int(block_start - int(prompt_length)),
+            "block_end": int(block_end - int(prompt_length)),
+            "disagreement_token_count": count,
+            "candidate_scores": local_scores,
+        })
+
+    scores = {
+        name: score_sums[name] / total_disagreements for name in required
+    }
+    return scores, total_disagreements, selector_nfe, block_records
+
+
+@torch.no_grad()
 def generate_trajectory_likelihood_selection(
     model,
     prompt,
@@ -1118,6 +1196,9 @@ def generate_trajectory_likelihood_selection(
     baseline_consensus = None
     shared_skeleton_scores = None
     shared_skeleton_nfe = 0
+    bidirectional_block_scores = None
+    bidirectional_block_nfe = 0
+    bidirectional_block_records = None
     disagreement_count_for_coverage = None
     extra_invalidations_for_coverage = None
     revision_coverage = None
@@ -1188,6 +1269,23 @@ def generate_trajectory_likelihood_selection(
             ("fast", "accuracy"),
             key=lambda name: shared_skeleton_scores[name],
         )
+    elif selection_mode == "bidirectional_block":
+        (
+            bidirectional_block_scores,
+            bidirectional_block_disagreements,
+            bidirectional_block_nfe,
+            bidirectional_block_records,
+        ) = score_bidirectional_block_candidates(
+            model,
+            candidate_ids,
+            prompt_length=prompt.shape[1],
+            block_length=block_length,
+            mask_id=mask_id,
+        )
+        selected_name = max(
+            ("fast", "accuracy"),
+            key=lambda name: bidirectional_block_scores[name],
+        )
     else:
         selected_name = select_likelihood_trajectory(
             candidate_summaries,
@@ -1207,6 +1305,9 @@ def generate_trajectory_likelihood_selection(
     elif selection_mode == "shared_skeleton":
         disagreement_count = shared_skeleton_disagreements
         scored_disagreement_count = shared_skeleton_disagreements
+    elif selection_mode == "bidirectional_block":
+        disagreement_count = bidirectional_block_disagreements
+        scored_disagreement_count = bidirectional_block_disagreements
     for value in candidate_summaries.values():
         value.pop("_commit_logprob_by_position", None)
     selected_summary = candidate_summaries[selected_name]
@@ -1218,7 +1319,9 @@ def generate_trajectory_likelihood_selection(
         for name, value in candidate_summaries.items()
     }
     selection_candidate_scores = (
-        shared_skeleton_scores
+        bidirectional_block_scores
+        if bidirectional_block_scores is not None
+        else shared_skeleton_scores
         if shared_skeleton_scores is not None
         else disagreement_scores
         if disagreement_scores is not None
@@ -1226,7 +1329,9 @@ def generate_trajectory_likelihood_selection(
     )
     summary = {
         "decoder": (
-            "trajectory_shared_skeleton_verification_v7"
+            "trajectory_bidirectional_block_verification_v8"
+            if selection_mode == "bidirectional_block"
+            else "trajectory_shared_skeleton_verification_v7"
             if selection_mode == "shared_skeleton"
             else "trajectory_disagreement_evidence_v2"
             if selection_mode == "disagreement_evidence"
@@ -1250,7 +1355,9 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "shared_skeleton_counterfactual_mean_log_evidence"
+            "bidirectional_block_full_draft_mean_log_evidence"
+            if selection_mode == "bidirectional_block"
+            else "shared_skeleton_counterfactual_mean_log_evidence"
             if selection_mode == "shared_skeleton"
             else "one_nat_per_block_evidence"
             if selection_mode == "block_evidence"
@@ -1299,6 +1406,14 @@ def generate_trajectory_likelihood_selection(
         }
         if selection_mode == "shared_skeleton"
         else None,
+        "bidirectional_block_verification": {
+            "candidate_scores": bidirectional_block_scores,
+            "disagreement_token_count": disagreement_count,
+            "selector_nfe": int(bidirectional_block_nfe),
+            "blocks": bidirectional_block_records,
+        }
+        if selection_mode == "bidirectional_block"
+        else None,
         "baseline_consensus": baseline_consensus,
         "revision_coverage": {
             "disagreement_token_count": disagreement_count_for_coverage,
@@ -1319,6 +1434,11 @@ def generate_trajectory_likelihood_selection(
                 else {}
             ),
             **(
+                {"bidirectional_block_selector": int(bidirectional_block_nfe)}
+                if selection_mode == "bidirectional_block"
+                else {}
+            ),
+            **(
                 {"baseline": int(baseline_nfe)}
                 if baseline_nfe is not None
                 else {}
@@ -1334,7 +1454,8 @@ def generate_trajectory_likelihood_selection(
         fast_nfe
         + accuracy_nfe
         + (baseline_nfe or 0)
-        + shared_skeleton_nfe,
+        + shared_skeleton_nfe
+        + bidirectional_block_nfe,
         summary,
     )
 

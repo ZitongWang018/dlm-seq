@@ -1,0 +1,27 @@
+{
+  "version": "bidirectional_block_full_draft_verification_v8",
+  "registered_at": "2026-07-19T06:05:00+08:00",
+  "formal_baseline": "original LLaDA low-confidence, steps 128, generation length 256, block length 32",
+  "parent": "symmetric_fast tau=0.004",
+  "motivation_from_development_only": "In HumanEval/0-9, masking all final disagreements at once removed 16-246 tokens of candidate-specific structure and produced 0 recoveries / 2 losses. The only oracle recovery, HumanEval/2, was rejected by the all-mask score despite strong vertical commit evidence.",
+  "method": {
+    "horizontal": "Generate the existing symmetric_fast and conservative accuracy-first trajectories.",
+    "vertical": "For each existing 32-token generation block that contains a final parent disagreement, mask only that block's disagreement positions. Score both alternatives under the fast external full draft and under the accuracy external full draft, average the two directional scores, and aggregate over all disagreement tokens.",
+    "selection": "Choose one complete trajectory by the higher aggregated bidirectional score; ties preserve symmetric_fast.",
+    "parallelization": "The two external contexts for one block are batched in a single forward, for at most 8 selector NFE.",
+    "new_thresholds_or_weights": "none",
+    "token_splicing": false,
+    "task_execution_selection": false,
+    "gold_or_hidden_tests": false
+  },
+  "development_gates": {
+    "first": "HumanEval/0-9; require method > symmetric_fast, method >= original LLaDA, and at least one method-only recovery",
+    "second": "HumanEval/0-31 with the same gate"
+  },
+  "formal_unseen": {
+    "slice": "HumanEval/96-163",
+    "status_at_registration": "No labels, outputs, selector scores, or candidate evidence inspected",
+    "gate": "method > symmetric_fast, method > original LLaDA, and at least one method-only recovery"
+  },
+  "promotion": "Only a strict unseen HumanEval win reaches Prism-aligned MATH-50; MATH non-loss unlocks sampled MBPP/GSM."
+}

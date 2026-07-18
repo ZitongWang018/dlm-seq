@@ -87,6 +87,12 @@ case "${profile}" in
     # horizontal skeleton, and verify both alternatives in one common forward.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=shared_skeleton"
     ;;
+  trajectory_bidirectional_block)
+    # Preserve each complete draft outside one existing generation block,
+    # mask only that block's disagreements, and average scores under both
+    # external drafts. The two directions share one batched model forward.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=bidirectional_block"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;
