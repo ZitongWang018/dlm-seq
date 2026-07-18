@@ -1012,6 +1012,51 @@ def score_baseline_consensus(candidate_token_ids):
 
 
 @torch.no_grad()
+def score_shared_skeleton_candidates(
+    model,
+    candidate_token_ids,
+    prompt_length,
+    mask_id=126336,
+):
+    """Verify both trajectories from one common counterfactual context.
+
+    Positions where the horizontal schedules agree remain explicit conditions;
+    every generated disagreement is re-masked.  A single forward pass then
+    scores both complete alternatives at exactly the same positions and under
+    exactly the same context, avoiding incomparable self-conditioned path
+    likelihoods.  The mean is only used to make the diagnostic length-neutral;
+    both candidates always share the same denominator.
+    """
+    required = ("fast", "accuracy")
+    if candidate_token_ids is None:
+        raise ValueError("shared_skeleton requires candidate token ids")
+    missing = [name for name in required if name not in candidate_token_ids]
+    if missing:
+        raise ValueError(f"missing shared-skeleton candidate ids: {missing}")
+    fast = candidate_token_ids["fast"]
+    accuracy = candidate_token_ids["accuracy"]
+    if fast.shape != accuracy.shape or fast.ndim != 2 or fast.shape[0] != 1:
+        raise ValueError("shared-skeleton candidates must be aligned batch-one tensors")
+    disagreement = fast != accuracy
+    disagreement[:, : int(prompt_length)] = False
+    disagreement_count = int(disagreement.sum().item())
+    if disagreement_count == 0:
+        return {"fast": 0.0, "accuracy": 0.0}, 0, 0
+
+    shared_context = fast.clone()
+    shared_context[disagreement] = int(mask_id)
+    logits = model(shared_context).logits[disagreement].float()
+    log_probs = torch.log_softmax(logits, dim=-1)
+    scores = {}
+    for name in required:
+        target = candidate_token_ids[name][disagreement].long()
+        scores[name] = float(
+            log_probs.gather(-1, target[:, None]).mean().item()
+        )
+    return scores, disagreement_count, 1
+
+
+@torch.no_grad()
 def generate_trajectory_likelihood_selection(
     model,
     prompt,
@@ -1071,6 +1116,8 @@ def generate_trajectory_likelihood_selection(
     candidate_ids = {"fast": fast_x, "accuracy": accuracy_x}
     baseline_nfe = None
     baseline_consensus = None
+    shared_skeleton_scores = None
+    shared_skeleton_nfe = 0
     disagreement_count_for_coverage = None
     extra_invalidations_for_coverage = None
     revision_coverage = None
@@ -1126,12 +1173,28 @@ def generate_trajectory_likelihood_selection(
             )
             candidate_ids["baseline"] = baseline_x
             baseline_consensus = score_baseline_consensus(candidate_ids)
-    selected_name = select_likelihood_trajectory(
-        candidate_summaries,
-        block_length=block_length,
-        selection_mode=selection_mode,
-        candidate_token_ids=candidate_ids,
-    )
+    if selection_mode == "shared_skeleton":
+        (
+            shared_skeleton_scores,
+            shared_skeleton_disagreements,
+            shared_skeleton_nfe,
+        ) = score_shared_skeleton_candidates(
+            model,
+            candidate_ids,
+            prompt_length=prompt.shape[1],
+            mask_id=mask_id,
+        )
+        selected_name = max(
+            ("fast", "accuracy"),
+            key=lambda name: shared_skeleton_scores[name],
+        )
+    else:
+        selected_name = select_likelihood_trajectory(
+            candidate_summaries,
+            block_length=block_length,
+            selection_mode=selection_mode,
+            candidate_token_ids=candidate_ids,
+        )
     disagreement_scores = None
     disagreement_count = 0
     scored_disagreement_count = 0
@@ -1141,6 +1204,9 @@ def generate_trajectory_likelihood_selection(
             disagreement_count,
             scored_disagreement_count,
         ) = score_disagreement_evidence(candidate_ids, candidate_summaries)
+    elif selection_mode == "shared_skeleton":
+        disagreement_count = shared_skeleton_disagreements
+        scored_disagreement_count = shared_skeleton_disagreements
     for value in candidate_summaries.values():
         value.pop("_commit_logprob_by_position", None)
     selected_summary = candidate_summaries[selected_name]
@@ -1152,13 +1218,17 @@ def generate_trajectory_likelihood_selection(
         for name, value in candidate_summaries.items()
     }
     selection_candidate_scores = (
-        disagreement_scores
+        shared_skeleton_scores
+        if shared_skeleton_scores is not None
+        else disagreement_scores
         if disagreement_scores is not None
         else mean_candidate_scores
     )
     summary = {
         "decoder": (
-            "trajectory_disagreement_evidence_v2"
+            "trajectory_shared_skeleton_verification_v7"
+            if selection_mode == "shared_skeleton"
+            else "trajectory_disagreement_evidence_v2"
             if selection_mode == "disagreement_evidence"
             else (
                 (
@@ -1180,7 +1250,9 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "one_nat_per_block_evidence"
+            "shared_skeleton_counterfactual_mean_log_evidence"
+            if selection_mode == "shared_skeleton"
+            else "one_nat_per_block_evidence"
             if selection_mode == "block_evidence"
             else (
                 "max_disagreement_committed_token_log_evidence"
@@ -1220,6 +1292,13 @@ def generate_trajectory_likelihood_selection(
         "disagreement_token_count": disagreement_count,
         "scored_disagreement_token_count": scored_disagreement_count,
         "disagreement_candidate_scores": disagreement_scores,
+        "shared_skeleton_verification": {
+            "candidate_scores": shared_skeleton_scores,
+            "disagreement_token_count": disagreement_count,
+            "selector_nfe": int(shared_skeleton_nfe),
+        }
+        if selection_mode == "shared_skeleton"
+        else None,
         "baseline_consensus": baseline_consensus,
         "revision_coverage": {
             "disagreement_token_count": disagreement_count_for_coverage,
@@ -1235,6 +1314,11 @@ def generate_trajectory_likelihood_selection(
             "fast": int(fast_nfe),
             "accuracy": int(accuracy_nfe),
             **(
+                {"shared_skeleton_selector": int(shared_skeleton_nfe)}
+                if selection_mode == "shared_skeleton"
+                else {}
+            ),
+            **(
                 {"baseline": int(baseline_nfe)}
                 if baseline_nfe is not None
                 else {}
@@ -1247,7 +1331,10 @@ def generate_trajectory_likelihood_selection(
         summary["_step_records"] = selected_steps
     return (
         candidate_ids[selected_name],
-        fast_nfe + accuracy_nfe + (baseline_nfe or 0),
+        fast_nfe
+        + accuracy_nfe
+        + (baseline_nfe or 0)
+        + shared_skeleton_nfe,
         summary,
     )
 

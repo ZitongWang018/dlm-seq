@@ -6,9 +6,56 @@ from generate import (
     score_committed_tokens,
     score_disagreement_evidence,
     score_baseline_consensus,
+    score_shared_skeleton_candidates,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
 )
+
+
+class SharedSkeletonModel:
+    def __init__(self):
+        self.inputs = []
+
+    def __call__(self, input_ids):
+        self.inputs.append(input_ids.clone())
+        logits = torch.zeros((*input_ids.shape, 10))
+        logits[0, 2, 4] = 4.0
+        logits[0, 3, 5] = 4.0
+        return type("Output", (), {"logits": logits})()
+
+
+def test_shared_skeleton_scores_both_paths_from_identical_context():
+    model = SharedSkeletonModel()
+    scores, disagreements, nfe = score_shared_skeleton_candidates(
+        model,
+        {
+            "fast": torch.tensor([[9, 1, 2, 3]]),
+            "accuracy": torch.tensor([[9, 1, 4, 5]]),
+        },
+        prompt_length=1,
+        mask_id=7,
+    )
+    assert model.inputs[0].tolist() == [[9, 1, 7, 7]]
+    assert scores["accuracy"] > scores["fast"]
+    assert disagreements == 2
+    assert nfe == 1
+
+
+def test_shared_skeleton_tie_preserves_fast_without_extra_forward():
+    model = SharedSkeletonModel()
+    scores, disagreements, nfe = score_shared_skeleton_candidates(
+        model,
+        {
+            "fast": torch.tensor([[9, 1, 2]]),
+            "accuracy": torch.tensor([[9, 1, 2]]),
+        },
+        prompt_length=1,
+        mask_id=7,
+    )
+    assert scores == {"fast": 0.0, "accuracy": 0.0}
+    assert disagreements == 0
+    assert nfe == 0
+    assert model.inputs == []
 
 
 def make_logits(top_ids, confidences, vocab_size=8):
@@ -798,6 +845,8 @@ def test_revision_margin_prioritizes_decisive_conditioned_change():
 
 
 if __name__ == "__main__":
+    test_shared_skeleton_scores_both_paths_from_identical_context()
+    test_shared_skeleton_tie_preserves_fast_without_extra_forward()
     test_high_dependency_positions_are_not_committed_together()
     test_changed_dependent_candidate_is_ranked_after_mature_candidate()
     test_all_immature_candidates_fall_back_to_confidence()
@@ -831,4 +880,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("33 selector tests passed")
+    print("35 selector tests passed")

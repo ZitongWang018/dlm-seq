@@ -1,0 +1,30 @@
+{
+  "version": "shared_skeleton_counterfactual_verification_v7",
+  "registered_at": "2026-07-19T05:43:00+08:00",
+  "formal_baseline": "original LLaDA low-confidence, 128 steps, generation length 256, block length 32",
+  "parent": "symmetric_fast tau=0.004",
+  "method": {
+    "horizontal": "Generate the fixed-budget symmetric_fast trajectory and the conservative accuracy-first symmetric trajectory; tokens on which they agree form a shared full-draft skeleton.",
+    "vertical": "Re-mask every generated position on which the two final trajectories disagree, run one normal model forward from that identical counterfactual context, and compare the mean log-probability of each trajectory's alternative tokens only at those positions.",
+    "selection": "Choose the trajectory with higher common-context disagreement score; ties preserve symmetric_fast.",
+    "extra_hyperparameters": "none",
+    "extra_nfe": "one when trajectories disagree, zero when identical",
+    "token_splicing": false,
+    "task_execution_selection": false,
+    "gold_or_hidden_tests": false
+  },
+  "development": {
+    "human_eval": "HumanEval/0-31; score gate only, already considered development in earlier work",
+    "gate": "method > symmetric_fast, method >= original LLaDA, and at least one method-only recovery"
+  },
+  "formal_unseen": {
+    "human_eval": "HumanEval/96-163",
+    "note": "No correctness labels, candidate outputs, selector scores, or task-specific features from this range were inspected before registration.",
+    "gate": "method > symmetric_fast, method > original LLaDA, and at least one method-only recovery"
+  },
+  "promotion": {
+    "math500": "paired first 50, Prism-aligned evaluator; require no loss against both comparators",
+    "later": "only after MATH non-loss, sample MBPP-50 and GSM8K-64"
+  },
+  "diagnostic_fix": "Commit 6ff8285 preserves full HumanEval candidate trace text; frozen v3 candidate-text oracle artifacts are explicitly invalid and not used for this rule."
+}
