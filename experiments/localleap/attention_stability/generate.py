@@ -480,6 +480,28 @@ def select_attention_stability_tokens(
     return x0, transfer_index, diagnostics, current_topk_full
 
 
+def score_committed_tokens(candidate_state):
+    """Return log-confidence sum and count for positions committed this step."""
+    candidate_positions = candidate_state["masked_positions_global"].to(torch.long)
+    selected_positions = candidate_state["selected_positions_global"].to(torch.long)
+    position_to_candidate = {
+        int(position): index
+        for index, position in enumerate(candidate_positions.tolist())
+    }
+    selected_confidences = torch.stack(
+        [
+            candidate_state["top1_confidences"][
+                position_to_candidate[int(position)]
+            ]
+            for position in selected_positions.tolist()
+        ]
+    )
+    return (
+        float(selected_confidences.clamp_min(1e-12).log().sum().item()),
+        int(selected_confidences.numel()),
+    )
+
+
 @torch.no_grad()
 def generate_attention_stability(
     model,
@@ -557,6 +579,8 @@ def generate_attention_stability(
         "dependency_observations": 0,
         "attention_asymmetry_max": 0.0,
         "attention_asymmetry_mean_sum": 0.0,
+        "commit_logprob_sum": 0.0,
+        "commit_token_count": 0,
     }
     step_records = []
     position_risk = None
@@ -672,8 +696,11 @@ def generate_attention_stability(
             summary["forced_budget_fills"] += step_diagnostics["forced_budget_fills"]
             summary["underfilled_steps"] += int(step_diagnostics["underfilled"])
             summary["all_immature_fallback_steps"] += int(step_diagnostics["all_immature_fallback"])
+            candidate_state = step_diagnostics["candidate_state"][0]
+            step_logprob, step_token_count = score_committed_tokens(candidate_state)
+            summary["commit_logprob_sum"] += step_logprob
+            summary["commit_token_count"] += step_token_count
             if collect_position_risk:
-                candidate_state = step_diagnostics["candidate_state"][0]
                 candidate_positions = candidate_state[
                     "masked_positions_global"
                 ].to(torch.long)
@@ -798,6 +825,12 @@ def generate_attention_stability(
         )
     else:
         summary["revision_margin_mean"] = 0.0
+    if summary["commit_token_count"]:
+        summary["commit_logprob_mean"] = (
+            summary["commit_logprob_sum"] / summary["commit_token_count"]
+        )
+    else:
+        summary["commit_logprob_mean"] = float("-inf")
     if collect_step_diagnostics:
         summary["_step_records"] = step_records
     if collect_position_risk:
@@ -806,6 +839,103 @@ def generate_attention_stability(
         )
         summary["_position_risk_state"] = position_risk
     return x, nfe, summary
+
+
+def select_likelihood_trajectory(candidate_summaries):
+    """Select the path with the best mean committed-token log confidence.
+
+    Ties preserve the fixed-budget fast parent, making the selection deterministic
+    and avoiding an extra threshold or task-specific preference.
+    """
+    ordered_names = ("fast", "accuracy")
+    missing = [name for name in ordered_names if name not in candidate_summaries]
+    if missing:
+        raise ValueError(f"missing trajectory summaries: {missing}")
+    return max(
+        ordered_names,
+        key=lambda name: float(candidate_summaries[name]["commit_logprob_mean"]),
+    )
+
+
+@torch.no_grad()
+def generate_trajectory_likelihood_selection(
+    model,
+    prompt,
+    dependency_threshold,
+    steps=128,
+    gen_length=128,
+    block_length=128,
+    temperature=0.0,
+    remasking="low_confidence",
+    mask_id=126336,
+    eos_id=126081,
+    early_stop=False,
+    collect_step_diagnostics=False,
+    dependency_mode="symmetric",
+    temporal_mode="top1",
+    temporal_topk=4,
+):
+    """Generate fast and accuracy-first parents, then select by path evidence.
+
+    Horizontal evidence differs through their treatment of strong within-step
+    conflicts.  Vertical evidence is the mean log confidence of tokens at the
+    exact denoising step where each token becomes an explicit condition.
+    """
+    shared = dict(
+        model=model,
+        prompt=prompt,
+        dependency_threshold=dependency_threshold,
+        steps=steps,
+        gen_length=gen_length,
+        block_length=block_length,
+        temperature=temperature,
+        remasking=remasking,
+        mask_id=mask_id,
+        eos_id=eos_id,
+        early_stop=early_stop,
+        collect_step_diagnostics=collect_step_diagnostics,
+        dependency_mode=dependency_mode,
+        temporal_mode=temporal_mode,
+        temporal_topk=temporal_topk,
+    )
+    fast_x, fast_nfe, fast_summary = generate_attention_stability(
+        **shared,
+        prune_stable_conflicts=True,
+        fill_budget=True,
+    )
+    accuracy_x, accuracy_nfe, accuracy_summary = generate_attention_stability(
+        **shared,
+        prune_stable_conflicts=False,
+        fill_budget=False,
+    )
+    candidate_summaries = {
+        "fast": fast_summary,
+        "accuracy": accuracy_summary,
+    }
+    selected_name = select_likelihood_trajectory(candidate_summaries)
+    candidate_ids = {"fast": fast_x, "accuracy": accuracy_x}
+    selected_summary = candidate_summaries[selected_name]
+    selected_steps = selected_summary.pop("_step_records", None)
+    fast_summary.pop("_step_records", None)
+    accuracy_summary.pop("_step_records", None)
+    summary = {
+        "decoder": "trajectory_likelihood_selection_v1",
+        "selection_rule": "max_mean_committed_token_log_confidence",
+        "selected_name": selected_name,
+        "selected_score": float(
+            candidate_summaries[selected_name]["commit_logprob_mean"]
+        ),
+        "candidate_scores": {
+            name: float(value["commit_logprob_mean"])
+            for name, value in candidate_summaries.items()
+        },
+        "candidate_nfe": {"fast": int(fast_nfe), "accuracy": int(accuracy_nfe)},
+        "candidate_summaries": candidate_summaries,
+        "_trajectory_candidate_token_ids": candidate_ids,
+    }
+    if selected_steps is not None:
+        summary["_step_records"] = selected_steps
+    return candidate_ids[selected_name], fast_nfe + accuracy_nfe, summary
 
 
 @torch.no_grad()

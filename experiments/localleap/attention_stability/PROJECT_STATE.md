@@ -1,6 +1,6 @@
 # Project State
 
-Date: 2026-07-18
+Date: 2026-07-19
 
 Remote worktrees:
 
@@ -19,17 +19,26 @@ or damaged correct outputs.  In particular, the last cross-conditioned core
 matched its parent exactly on HumanEval-32 and MATH-50 while costing about 3%
 more NFE; its execution selector fell to 1/32 HumanEval.
 
-The active method is **Confidence-Switched Stability Decoding**.  It uses an
-already-tested selector composition rather than adding another generation
-path: prune strong conflicts only when both endpoints retained their top-1
-after the new explicit condition, and do not force-fill a conflict involving a
-conditioned rewrite.  This interpolates between accuracy-first symmetric and
-`symmetric_fast` without a new threshold or score.  Horizontal attention
-decides whether two positions conflict; longitudinal candidate change decides
-whether that edge still carries information.  The two-GPU queue
-`confidence_switched_stability_20260718_v1` uses matched-source HumanEval and
-MATH-500 discovery/expansion/full gates, then sampled MBPP and GSM8K only after
-promotion.  See `docs/confidence_switched_stability.md`.
+Confidence-switched stability was formally rejected on its matched discovery
+slices: HumanEval 12/32 versus fast 13/32 and MATH-500 12/50 versus fast 15/50,
+with zero method-only recoveries on either task.  Candidate instability is a
+difficulty signal, but delaying commits was not a useful intervention.
+
+The active method is **Two-parent trajectory-likelihood selection**.  It keeps
+the verified `symmetric_fast` and accuracy-first symmetric tau 0.004 paths.
+Their oracle unions are 16/32 HumanEval and 18/50 MATH-500, three examples
+above the best individual parent on each slice.  Horizontal thought is the
+parents' distinct treatment of strong same-step conflicts; vertical thought
+is the mean committed-token log confidence accumulated along each actual
+denoising path.  The higher-scoring complete candidate is selected without a
+new threshold, weight, task execution, or token splice.  The two-GPU queue is
+`trajectory_likelihood_20260719_v1`; see
+`docs/trajectory_likelihood_selection.md`.
+
+The HumanEval evaluator is versioned as
+`humaneval_spawn_official_checker_v3`.  It retains the official code_eval
+sandbox, reliability guard, and timeout, but uses spawn plus shared status in
+place of Manager/fork, which deadlocked on the Python 3.12 dual-GPU host.
 
 Reproduce and extend **LocalLeap** on LLaDA-Instruct (local weights), with correct HumanEval scoring via `postprocess_code.py`.
 

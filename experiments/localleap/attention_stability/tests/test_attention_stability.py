@@ -1,6 +1,10 @@
 import torch
 
-from generate import select_attention_stability_tokens
+from generate import (
+    score_committed_tokens,
+    select_attention_stability_tokens,
+    select_likelihood_trajectory,
+)
 
 
 def make_logits(top_ids, confidences, vocab_size=8):
@@ -195,6 +199,33 @@ def test_risk_switch_fills_stable_pairs_but_waits_after_conditioned_rewrite():
     assert risky_diagnostics["forced_budget_fills"] == 0
 
 
+def test_likelihood_trajectory_selection_uses_vertical_path_score():
+    summaries = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.12},
+    }
+    assert select_likelihood_trajectory(summaries) == "accuracy"
+
+
+def test_committed_token_score_uses_selected_positions_only():
+    candidate_state = {
+        "masked_positions_global": torch.tensor([3, 5, 8]),
+        "selected_positions_global": torch.tensor([8, 3]),
+        "top1_confidences": torch.tensor([0.8, 0.1, 0.5]),
+    }
+    score, count = score_committed_tokens(candidate_state)
+    assert count == 2
+    assert torch.isclose(torch.tensor(score), torch.log(torch.tensor(0.4)))
+
+
+def test_likelihood_trajectory_selection_tie_preserves_fast_parent():
+    summaries = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.20},
+    }
+    assert select_likelihood_trajectory(summaries) == "fast"
+
+
 def test_topk_overlap_creates_intermediate_temporal_tier():
     logits = make_logits([1, 2, 3], [0.70, 0.80, 0.95])
     dependency = torch.zeros((1, 3, 3))
@@ -354,6 +385,9 @@ if __name__ == "__main__":
     test_stable_dense_conflict_can_be_pruned_without_new_threshold()
     test_fixed_budget_fill_guarantees_parallel_commit_count()
     test_risk_switch_fills_stable_pairs_but_waits_after_conditioned_rewrite()
+    test_likelihood_trajectory_selection_uses_vertical_path_score()
+    test_committed_token_score_uses_selected_positions_only()
+    test_likelihood_trajectory_selection_tie_preserves_fast_parent()
     test_topk_overlap_creates_intermediate_temporal_tier()
     test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates()
     test_topk_overlap_rejects_invalid_k()
@@ -361,4 +395,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("16 selector tests passed")
+    print("19 selector tests passed")

@@ -1,5 +1,4 @@
-import evaluate as hf_evaluate
-
+from humaneval_execution import check_correctness
 from sanitize import sanitize
 
 
@@ -8,9 +7,6 @@ def check(candidate):
     assert candidate(-1.5) == 1.25
 check(solve)
 """
-
-METRIC = hf_evaluate.load("code_eval")
-
 
 def main():
     fenced = """```python
@@ -38,12 +34,23 @@ def solve(x):
         "def solve(x):\n    raise RuntimeError('synthetic')",
         "def solve(x):\n    while True:\n        pass",
     ]
-    result = METRIC.compute(
-        references=[REFERENCE] * len(candidates),
-        predictions=[[candidate] for candidate in candidates],
-        k=[1],
-    )[0]["pass@1"]
-    assert result == 0.4, result
+    # Match the formal HumanEval postprocessor by invoking the official
+    # sandbox checker from the main thread.  Its metric wrapper starts a
+    # multiprocessing.Manager from a ThreadPool and can deadlock after torch
+    # initializes runtime threads on Python 3.12.
+    outcomes = [
+        float(
+            check_correctness(
+                candidate + "\n" + REFERENCE,
+                3.0,
+                task_id=index,
+                completion_id=0,
+            )["passed"]
+        )
+        for index, candidate in enumerate(candidates)
+    ]
+    assert outcomes == [1.0, 1.0, 0.0, 0.0, 0.0], outcomes
+    assert sum(outcomes) / len(outcomes) == 0.4
     print("synthetic evaluator cases passed")
 
 

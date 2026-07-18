@@ -46,6 +46,11 @@ case "${profile}" in
     # force-filled, so only risky steps spend additional denoising iterations.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_prune_stable_conflicts=True,dependency_fill_budget=False"
     ;;
+  trajectory_likelihood)
+    # Two verified parent paths expose complementary horizontal schedules.
+    # Select with vertical evidence accumulated exactly when tokens commit.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;
@@ -165,7 +170,7 @@ model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_le
   git -C /root/autodl-tmp/dlm-seq-flow rev-parse HEAD
   sha256sum generate.py eval_llada.py differential_selector.py model/modeling_llada.py validate_step_diagnostics.py \
     audit_attention_stability.py audit_lm_eval_task.py compare_paired_task_runs.py \
-    postprocess_code.py sanitize.py
+    postprocess_code.py humaneval_execution.py sanitize.py
 } > "${run_root}/run_config.txt"
 
 include_args=()

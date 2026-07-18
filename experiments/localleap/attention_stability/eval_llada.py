@@ -96,6 +96,7 @@ class LLaDAEvalHarness(LM):
         dependency_temporal_topk=4,
         dependency_prune_stable_conflicts=False,
         dependency_fill_budget=False,
+        dependency_likelihood_selection=False,
         dependency_draft_exchange=False,
         dependency_differential_selection=False,
         dependency_response_refine=False,
@@ -204,6 +205,11 @@ class LLaDAEvalHarness(LM):
             dependency_fill_budget.lower() == "true"
             if isinstance(dependency_fill_budget, str)
             else bool(dependency_fill_budget)
+        )
+        self.dependency_likelihood_selection = (
+            dependency_likelihood_selection.lower() == "true"
+            if isinstance(dependency_likelihood_selection, str)
+            else bool(dependency_likelihood_selection)
         )
         self.dependency_draft_exchange = (
             dependency_draft_exchange.lower() == "true"
@@ -498,7 +504,32 @@ class LLaDAEvalHarness(LM):
                 step_diagnostics_schema = "candidate_memory_steps_v2"
                 trace_evaluator_version = "candidate_memory_trace_v2"
             elif self.dependency_threshold is not None:
-                if self.dependency_response_refine:
+                if self.dependency_likelihood_selection:
+                    generated_answer, nfe, decode_diagnostics = (
+                        generate_trajectory_likelihood_selection(
+                            self.model,
+                            input_ids,
+                            steps=self.steps,
+                            gen_length=self.gen_length,
+                            block_length=self.block_length,
+                            temperature=0,
+                            remasking=self.remasking,
+                            mask_id=self.mask_id,
+                            early_stop=self.early_stop,
+                            dependency_threshold=self.dependency_threshold,
+                            collect_step_diagnostics=(
+                                self.dependency_diagnostics_dir is not None
+                            ),
+                            dependency_mode=self.dependency_mode,
+                            temporal_mode=self.dependency_temporal_mode,
+                            temporal_topk=self.dependency_temporal_topk,
+                        )
+                    )
+                    draft_candidate_token_ids = decode_diagnostics.pop(
+                        "_trajectory_candidate_token_ids"
+                    )
+                    step_records = decode_diagnostics.pop("_step_records", None)
+                elif self.dependency_response_refine:
                     generated_answer, nfe, decode_diagnostics = generate_response_refine(
                         self.model,
                         input_ids,
@@ -560,6 +591,7 @@ class LLaDAEvalHarness(LM):
                     or self.dependency_temporal_mode != "top1"
                     or self.dependency_prune_stable_conflicts
                     or self.dependency_fill_budget
+                    or self.dependency_likelihood_selection
                     or self.dependency_draft_exchange
                     or self.dependency_response_refine
                 )
@@ -705,6 +737,7 @@ class LLaDAEvalHarness(LM):
                         "dependency_temporal_topk": self.dependency_temporal_topk,
                         "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
                         "dependency_fill_budget": self.dependency_fill_budget,
+                        "dependency_likelihood_selection": self.dependency_likelihood_selection,
                         "dependency_draft_exchange": self.dependency_draft_exchange,
                         "dependency_differential_selection": self.dependency_differential_selection,
                         "dependency_response_refine": self.dependency_response_refine,
@@ -757,6 +790,7 @@ class LLaDAEvalHarness(LM):
                         "dependency_temporal_topk": self.dependency_temporal_topk,
                         "dependency_prune_stable_conflicts": self.dependency_prune_stable_conflicts,
                         "dependency_fill_budget": self.dependency_fill_budget,
+                        "dependency_likelihood_selection": self.dependency_likelihood_selection,
                         "dependency_draft_exchange": self.dependency_draft_exchange,
                         "dependency_differential_selection": self.dependency_differential_selection,
                         "dependency_response_refine": self.dependency_response_refine,

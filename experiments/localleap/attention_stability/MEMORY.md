@@ -1,5 +1,27 @@
 # Memory
 
+## 2026-07-19 — Trajectory-likelihood selection
+
+- Formally rejected confidence-switched stability after matched discovery:
+  HumanEval 12/32 versus `symmetric_fast` 13/32 and MATH-500 12/50 versus
+  15/50.  It changed 17/32 and 29/50 generations respectively but recovered
+  zero fast-parent errors, so no larger run was launched.
+- The fast/accuracy-first oracle unions remain 16/32 HumanEval and 18/50
+  MATH-500, three above the best individual path on each slice.  This supports
+  complete-trajectory selection rather than more single-path waiting logic.
+- Added a two-parent selector that accumulates the mean log top-1 confidence
+  at each token's actual commit step and selects the higher-likelihood complete
+  path.  It introduces no threshold, blending weight, execution feedback, or
+  token-level crossover.  Added 19 selector tests, two queue-order/gate tests,
+  a method note, and a dual-GPU HumanEval/MATH discovery queue.
+- Fixed a new-host HumanEval evaluator deadlock.  Hugging Face code_eval's
+  ThreadPool/Manager/default-fork wrapper stalled after runtime thread
+  initialization on Python 3.12.  Versioned the same official execution guard
+  and timeout with spawn plus shared status as
+  `humaneval_spawn_official_checker_v3`; five synthetic correct/error/timeout
+  cases now pass in 11 seconds.  Formal scoring semantics remain one candidate
+  pass@1 per task.
+
 ## 2026-07-18 — Confidence-switched stability retrospective
 
 - Re-audited the method lineage before starting another experiment.  The only
