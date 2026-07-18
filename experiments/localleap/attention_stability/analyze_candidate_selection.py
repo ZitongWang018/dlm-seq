@@ -19,6 +19,11 @@ def main():
     parser.add_argument("--output")
     parser.add_argument("--records-output")
     parser.add_argument("--status", default="PRELIMINARY_DEV_ONLY")
+    parser.add_argument(
+        "--selection-policy",
+        choices=("trace_selected", "confirmed_bidirectional"),
+        default="trace_selected",
+    )
     args = parser.parse_args()
 
     trace = {row["task_id"]: row for row in rows(args.trace)}
@@ -32,10 +37,26 @@ def main():
     if set(trace) != set(fast) or set(trace) != set(accuracy):
         raise SystemExit("task IDs do not align")
 
-    selected_names = {
-        task_id: row["decode_diagnostics"]["selected_name"]
-        for task_id, row in trace.items()
-    }
+    if args.selection_policy == "confirmed_bidirectional":
+        selected_names = {}
+        for task_id, row in trace.items():
+            diagnostics = row["decode_diagnostics"]
+            verification = diagnostics["bidirectional_block_verification"]
+            supports_accuracy = (
+                verification["candidate_scores"]["accuracy"]
+                > verification["candidate_scores"]["fast"]
+            )
+            selected_names[task_id] = (
+                "accuracy"
+                if diagnostics["block_evidence_margin"] > 1.0
+                and supports_accuracy
+                else "fast"
+            )
+    else:
+        selected_names = {
+            task_id: row["decode_diagnostics"]["selected_name"]
+            for task_id, row in trace.items()
+        }
     if any(name not in {"fast", "accuracy"} for name in selected_names.values()):
         raise SystemExit("unexpected selected trajectory")
     selected = {
@@ -76,6 +97,7 @@ def main():
         })
     summary = {
         "status": args.status,
+        "selection_policy": args.selection_policy,
         "total": len(trace),
         "fast_correct": sum(fast.values()),
         "accuracy_correct": sum(accuracy.values()),

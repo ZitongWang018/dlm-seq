@@ -1,0 +1,30 @@
+{
+  "version": "confirmed_bidirectional_block_verification_v9",
+  "registered_at": "2026-07-19T06:18:00+08:00",
+  "formal_baseline": "original LLaDA low-confidence, 128 steps, generation length 256, block length 32",
+  "parent": "symmetric_fast tau=0.004",
+  "development_evidence": {
+    "v8_humaneval_0_9": "bidirectional block 3/10, symmetric_fast 4/10, original LLaDA 4/10; one recovery and two losses",
+    "insight": "All observed harmful conservative switches had less than one cumulative nat of actual commit-path evidence per existing generation block, while the sole recovery exceeded that already-established structural gate. Final block verification alone is not sufficient."
+  },
+  "method": {
+    "horizontal": "The same fixed fast and conservative attention schedules create two complete trajectories.",
+    "longitudinal_path": "The conservative trajectory must exceed fast by more than one cumulative nat per existing 32-token block in committed-token evidence along its actual denoising path.",
+    "longitudinal_counterfactual": "The bidirectional block full-draft verifier must independently assign higher common alternative likelihood to the conservative trajectory.",
+    "selection": "Switch only when both longitudinal tests agree; otherwise retain symmetric_fast. Whole trajectories only, with fast tie-break.",
+    "new_hyperparameters": "none; the one-nat-per-existing-block gate is inherited unchanged from the prior block-evidence parent",
+    "extra_nfe": "at most one batched two-direction forward per active generation block",
+    "execution_or_gold_selection": false,
+    "token_splicing": false
+  },
+  "development": {
+    "deterministic_replay": "HumanEval/0-9 candidates and block scores from the completed v8 run, followed by same official execution path",
+    "next_gpu_gate": "Fresh HumanEval/0-31; require method > symmetric_fast, method >= original LLaDA, and at least one method-only recovery"
+  },
+  "formal_unseen": {
+    "slice": "HumanEval/96-163",
+    "status": "No correctness labels, outputs, selector scores, or candidate evidence inspected",
+    "gate": "strictly beat symmetric_fast and original LLaDA with at least one method-only recovery"
+  },
+  "promotion": "Only unseen HumanEval success reaches Prism-aligned MATH-50, then sampled MBPP/GSM."
+}

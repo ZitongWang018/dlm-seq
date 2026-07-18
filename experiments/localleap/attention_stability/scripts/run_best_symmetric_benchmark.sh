@@ -93,6 +93,12 @@ case "${profile}" in
     # external drafts. The two directions share one batched model forward.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=bidirectional_block"
     ;;
+  trajectory_confirmed_bidirectional_block)
+    # Switch from fast only when actual commit-path evidence exceeds the
+    # existing one-nat-per-block structural gate and the final bidirectional
+    # block verification independently favors the same conservative draft.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_block"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

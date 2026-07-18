@@ -8,6 +8,7 @@ from generate import (
     score_baseline_consensus,
     score_shared_skeleton_candidates,
     score_bidirectional_block_candidates,
+    select_confirmed_bidirectional_block,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
 )
@@ -116,6 +117,28 @@ def test_bidirectional_block_identical_paths_need_no_selector_forward():
     assert nfe == 0
     assert blocks == []
     assert model.inputs == []
+
+
+def test_confirmed_block_requires_path_and_counterfactual_agreement():
+    strong = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.10},
+    }
+    weak = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.18},
+    }
+    supports_accuracy = {"fast": -3.0, "accuracy": -2.0}
+    supports_fast = {"fast": -2.0, "accuracy": -3.0}
+    assert select_confirmed_bidirectional_block(
+        supports_accuracy, strong, block_length=32
+    ) == "accuracy"
+    assert select_confirmed_bidirectional_block(
+        supports_accuracy, weak, block_length=32
+    ) == "fast"
+    assert select_confirmed_bidirectional_block(
+        supports_fast, strong, block_length=32
+    ) == "fast"
 
 
 def make_logits(top_ids, confidences, vocab_size=8):
@@ -905,6 +928,7 @@ def test_revision_margin_prioritizes_decisive_conditioned_change():
 
 
 if __name__ == "__main__":
+    test_confirmed_block_requires_path_and_counterfactual_agreement()
     test_bidirectional_block_masks_one_block_under_both_external_drafts()
     test_bidirectional_block_identical_paths_need_no_selector_forward()
     test_shared_skeleton_scores_both_paths_from_identical_context()
@@ -942,4 +966,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("37 selector tests passed")
+    print("38 selector tests passed")

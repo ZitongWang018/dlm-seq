@@ -1134,6 +1134,27 @@ def score_bidirectional_block_candidates(
     return scores, total_disagreements, selector_nfe, block_records
 
 
+def select_confirmed_bidirectional_block(
+    verification_scores,
+    candidate_summaries,
+    block_length,
+):
+    """Switch only when path-time and final counterfactual evidence agree."""
+    evidence_per_block = (
+        float(candidate_summaries["accuracy"]["commit_logprob_mean"])
+        - float(candidate_summaries["fast"]["commit_logprob_mean"])
+    ) * int(block_length)
+    counterfactual_support = (
+        float(verification_scores["accuracy"])
+        > float(verification_scores["fast"])
+    )
+    return (
+        "accuracy"
+        if evidence_per_block > 1.0 and counterfactual_support
+        else "fast"
+    )
+
+
 @torch.no_grad()
 def generate_trajectory_likelihood_selection(
     model,
@@ -1269,7 +1290,10 @@ def generate_trajectory_likelihood_selection(
             ("fast", "accuracy"),
             key=lambda name: shared_skeleton_scores[name],
         )
-    elif selection_mode == "bidirectional_block":
+    elif selection_mode in {
+        "bidirectional_block",
+        "confirmed_bidirectional_block",
+    }:
         (
             bidirectional_block_scores,
             bidirectional_block_disagreements,
@@ -1282,10 +1306,17 @@ def generate_trajectory_likelihood_selection(
             block_length=block_length,
             mask_id=mask_id,
         )
-        selected_name = max(
-            ("fast", "accuracy"),
-            key=lambda name: bidirectional_block_scores[name],
-        )
+        if selection_mode == "confirmed_bidirectional_block":
+            selected_name = select_confirmed_bidirectional_block(
+                bidirectional_block_scores,
+                candidate_summaries,
+                block_length,
+            )
+        else:
+            selected_name = max(
+                ("fast", "accuracy"),
+                key=lambda name: bidirectional_block_scores[name],
+            )
     else:
         selected_name = select_likelihood_trajectory(
             candidate_summaries,
@@ -1305,7 +1336,10 @@ def generate_trajectory_likelihood_selection(
     elif selection_mode == "shared_skeleton":
         disagreement_count = shared_skeleton_disagreements
         scored_disagreement_count = shared_skeleton_disagreements
-    elif selection_mode == "bidirectional_block":
+    elif selection_mode in {
+        "bidirectional_block",
+        "confirmed_bidirectional_block",
+    }:
         disagreement_count = bidirectional_block_disagreements
         scored_disagreement_count = bidirectional_block_disagreements
     for value in candidate_summaries.values():
@@ -1329,7 +1363,9 @@ def generate_trajectory_likelihood_selection(
     )
     summary = {
         "decoder": (
-            "trajectory_bidirectional_block_verification_v8"
+            "trajectory_confirmed_bidirectional_block_verification_v9"
+            if selection_mode == "confirmed_bidirectional_block"
+            else "trajectory_bidirectional_block_verification_v8"
             if selection_mode == "bidirectional_block"
             else "trajectory_shared_skeleton_verification_v7"
             if selection_mode == "shared_skeleton"
@@ -1355,7 +1391,9 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "bidirectional_block_full_draft_mean_log_evidence"
+            "one_nat_path_evidence_confirmed_by_bidirectional_block_verification"
+            if selection_mode == "confirmed_bidirectional_block"
+            else "bidirectional_block_full_draft_mean_log_evidence"
             if selection_mode == "bidirectional_block"
             else "shared_skeleton_counterfactual_mean_log_evidence"
             if selection_mode == "shared_skeleton"
@@ -1412,7 +1450,10 @@ def generate_trajectory_likelihood_selection(
             "selector_nfe": int(bidirectional_block_nfe),
             "blocks": bidirectional_block_records,
         }
-        if selection_mode == "bidirectional_block"
+        if selection_mode in {
+            "bidirectional_block",
+            "confirmed_bidirectional_block",
+        }
         else None,
         "baseline_consensus": baseline_consensus,
         "revision_coverage": {
@@ -1435,7 +1476,10 @@ def generate_trajectory_likelihood_selection(
             ),
             **(
                 {"bidirectional_block_selector": int(bidirectional_block_nfe)}
-                if selection_mode == "bidirectional_block"
+                if selection_mode in {
+                    "bidirectional_block",
+                    "confirmed_bidirectional_block",
+                }
                 else {}
             ),
             **(
