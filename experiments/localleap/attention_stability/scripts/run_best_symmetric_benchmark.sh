@@ -61,6 +61,17 @@ case "${profile}" in
     # produce different final tokens; shared tokens cannot justify a path swap.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=disagreement_evidence"
     ;;
+  trajectory_consensus_block)
+    # A slow path may override fast only when its one-nat block evidence is
+    # independently supported by the original LLaDA schedule on positions
+    # where the two attention schedules disagree.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=consensus_block"
+    ;;
+  trajectory_lazy_consensus_block)
+    # Preserve consensus_block outputs, but launch the baseline vote only when
+    # vertical evidence is already strong enough to permit a parent switch.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=lazy_consensus_block"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;
@@ -121,7 +132,7 @@ if [[ "${limit}" != "full" ]]; then
 fi
 
 queue_id=${ATTENTION_QUEUE_ID:-best_symmetric_long_20260716_v2}
-llada_root=/root/autodl-tmp/LocalLeap/llada
+llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada}
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
 run_root=${llada_root}/results/best_symmetric_benchmarks/${queue_id}/${task}/${run_tag}
 trace_dir=${run_root}/trace

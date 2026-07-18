@@ -219,10 +219,13 @@ class LLaDAEvalHarness(LM):
             "mean",
             "block_evidence",
             "disagreement_evidence",
+            "consensus_block",
+            "lazy_consensus_block",
         }:
             raise ValueError(
                 "dependency_likelihood_selection_mode must be mean, "
-                "block_evidence, or disagreement_evidence"
+                "block_evidence, disagreement_evidence, consensus_block, "
+                "or lazy_consensus_block"
             )
         self.dependency_draft_exchange = (
             dependency_draft_exchange.lower() == "true"

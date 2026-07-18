@@ -895,6 +895,29 @@ def select_likelihood_trajectory(
             candidate_token_ids, candidate_summaries
         )
         return max(ordered_names, key=lambda name: scores[name])
+    if selection_mode in {"consensus_block", "lazy_consensus_block"}:
+        if block_length is None or int(block_length) <= 0:
+            raise ValueError(
+                f"{selection_mode} requires a positive block_length"
+            )
+        fast_score = float(candidate_summaries["fast"]["commit_logprob_mean"])
+        accuracy_score = float(
+            candidate_summaries["accuracy"]["commit_logprob_mean"]
+        )
+        evidence_per_block = (accuracy_score - fast_score) * int(block_length)
+        # The baseline trajectory cannot affect the result until the vertical
+        # evidence is strong enough to permit an accuracy-parent override.  In
+        # lazy mode, preserve fast immediately and avoid a zero-information
+        # third trajectory.
+        if evidence_per_block <= 1.0:
+            return "fast"
+        consensus = score_baseline_consensus(candidate_token_ids)
+        return (
+            "accuracy"
+            if consensus["baseline_accuracy_matches"]
+            > consensus["baseline_fast_matches"]
+            else "fast"
+        )
     raise ValueError(f"unsupported trajectory selection mode: {selection_mode}")
 
 
@@ -930,6 +953,36 @@ def score_disagreement_evidence(candidate_token_ids, candidate_summaries):
         name: float(logprobs[name][valid].sum().item()) for name in ordered_names
     }
     return scores, int(disagreement.sum().item()), int(valid.sum().item())
+
+
+def score_baseline_consensus(candidate_token_ids):
+    """Count baseline votes only where fast and accuracy schedules disagree."""
+    required = ("fast", "accuracy", "baseline")
+    if candidate_token_ids is None:
+        raise ValueError("consensus_block requires candidate token ids")
+    missing = [name for name in required if name not in candidate_token_ids]
+    if missing:
+        raise ValueError(f"missing consensus candidate token ids: {missing}")
+    token_ids = {
+        name: candidate_token_ids[name].detach().to("cpu").reshape(-1)
+        for name in required
+    }
+    if len({tuple(value.shape) for value in token_ids.values()}) != 1:
+        raise ValueError("consensus candidate token ids must share a shape")
+    disagreement = token_ids["fast"] != token_ids["accuracy"]
+    return {
+        "disagreement_token_count": int(disagreement.sum().item()),
+        "baseline_fast_matches": int(
+            (disagreement & (token_ids["baseline"] == token_ids["fast"]))
+            .sum()
+            .item()
+        ),
+        "baseline_accuracy_matches": int(
+            (disagreement & (token_ids["baseline"] == token_ids["accuracy"]))
+            .sum()
+            .item()
+        ),
+    }
 
 
 @torch.no_grad()
@@ -990,6 +1043,33 @@ def generate_trajectory_likelihood_selection(
         "accuracy": accuracy_summary,
     }
     candidate_ids = {"fast": fast_x, "accuracy": accuracy_x}
+    baseline_nfe = None
+    baseline_consensus = None
+    if selection_mode in {"consensus_block", "lazy_consensus_block"}:
+        needs_baseline = (
+            selection_mode == "consensus_block"
+            or (
+                float(accuracy_summary["commit_logprob_mean"])
+                - float(fast_summary["commit_logprob_mean"])
+            )
+            * int(block_length)
+            > 1.0
+        )
+        if needs_baseline:
+            baseline_x, baseline_nfe = generate(
+                model=model,
+                prompt=prompt,
+                steps=steps,
+                gen_length=gen_length,
+                block_length=block_length,
+                temperature=temperature,
+                remasking=remasking,
+                mask_id=mask_id,
+                eos_id=eos_id,
+                early_stop=early_stop,
+            )
+            candidate_ids["baseline"] = baseline_x
+            baseline_consensus = score_baseline_consensus(candidate_ids)
     selected_name = select_likelihood_trajectory(
         candidate_summaries,
         block_length=block_length,
@@ -1024,7 +1104,15 @@ def generate_trajectory_likelihood_selection(
         "decoder": (
             "trajectory_disagreement_evidence_v2"
             if selection_mode == "disagreement_evidence"
-            else "trajectory_likelihood_selection_v1"
+            else (
+                (
+                    "trajectory_lazy_consensus_block_v4"
+                    if selection_mode == "lazy_consensus_block"
+                    else "trajectory_consensus_block_v3"
+                )
+                if selection_mode in {"consensus_block", "lazy_consensus_block"}
+                else "trajectory_likelihood_selection_v1"
+            )
         ),
         "selection_rule": (
             "one_nat_per_block_evidence"
@@ -1032,7 +1120,15 @@ def generate_trajectory_likelihood_selection(
             else (
                 "max_disagreement_committed_token_log_evidence"
                 if selection_mode == "disagreement_evidence"
-                else "max_mean_committed_token_log_confidence"
+                else (
+                    (
+                        "lazy_one_nat_block_evidence_then_baseline_consensus"
+                        if selection_mode == "lazy_consensus_block"
+                        else "one_nat_block_evidence_confirmed_by_baseline_consensus"
+                    )
+                    if selection_mode in {"consensus_block", "lazy_consensus_block"}
+                    else "max_mean_committed_token_log_confidence"
+                )
             )
         ),
         "selection_mode": selection_mode,
@@ -1050,13 +1146,26 @@ def generate_trajectory_likelihood_selection(
         "disagreement_token_count": disagreement_count,
         "scored_disagreement_token_count": scored_disagreement_count,
         "disagreement_candidate_scores": disagreement_scores,
-        "candidate_nfe": {"fast": int(fast_nfe), "accuracy": int(accuracy_nfe)},
+        "baseline_consensus": baseline_consensus,
+        "candidate_nfe": {
+            "fast": int(fast_nfe),
+            "accuracy": int(accuracy_nfe),
+            **(
+                {"baseline": int(baseline_nfe)}
+                if baseline_nfe is not None
+                else {}
+            ),
+        },
         "candidate_summaries": candidate_summaries,
         "_trajectory_candidate_token_ids": candidate_ids,
     }
     if selected_steps is not None:
         summary["_step_records"] = selected_steps
-    return candidate_ids[selected_name], fast_nfe + accuracy_nfe, summary
+    return (
+        candidate_ids[selected_name],
+        fast_nfe + accuracy_nfe + (baseline_nfe or 0),
+        summary,
+    )
 
 
 @torch.no_grad()

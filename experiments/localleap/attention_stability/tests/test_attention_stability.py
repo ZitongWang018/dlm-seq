@@ -1,8 +1,11 @@
 import torch
+import generate as generate_module
 
 from generate import (
+    generate_trajectory_likelihood_selection,
     score_committed_tokens,
     score_disagreement_evidence,
+    score_baseline_consensus,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
 )
@@ -294,6 +297,145 @@ def test_disagreement_evidence_tie_preserves_fast_parent():
     ) == "fast"
 
 
+def test_consensus_block_requires_vertical_evidence_and_horizontal_vote():
+    token_ids = {
+        "fast": torch.tensor([[1, 2, 3, 4]]),
+        "accuracy": torch.tensor([[1, 8, 3, 9]]),
+        "baseline": torch.tensor([[1, 8, 3, 9]]),
+    }
+    strong = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.15},
+    }
+    weak = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.18},
+    }
+    consensus = score_baseline_consensus(token_ids)
+    assert consensus == {
+        "disagreement_token_count": 2,
+        "baseline_fast_matches": 0,
+        "baseline_accuracy_matches": 2,
+    }
+    assert select_likelihood_trajectory(
+        strong,
+        block_length=32,
+        selection_mode="consensus_block",
+        candidate_token_ids=token_ids,
+    ) == "accuracy"
+    assert select_likelihood_trajectory(
+        weak,
+        block_length=32,
+        selection_mode="consensus_block",
+        candidate_token_ids=token_ids,
+    ) == "fast"
+
+
+def test_consensus_block_preserves_fast_when_baseline_votes_fast():
+    token_ids = {
+        "fast": torch.tensor([[1, 2, 3, 4]]),
+        "accuracy": torch.tensor([[1, 8, 3, 9]]),
+        "baseline": torch.tensor([[1, 2, 3, 4]]),
+    }
+    summaries = {
+        "fast": {"commit_logprob_mean": -0.20},
+        "accuracy": {"commit_logprob_mean": -0.10},
+    }
+    assert select_likelihood_trajectory(
+        summaries,
+        block_length=32,
+        selection_mode="consensus_block",
+        candidate_token_ids=token_ids,
+    ) == "fast"
+
+
+def test_lazy_consensus_skips_baseline_until_vertical_override_is_possible():
+    original_attention = generate_module.generate_attention_stability
+    original_baseline = generate_module.generate
+    baseline_calls = []
+
+    def fake_attention(**kwargs):
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2]]), 128, {
+                "commit_logprob_mean": -0.20,
+            }
+        return torch.tensor([[1, 8]]), 144, {
+            "commit_logprob_mean": -0.18,
+        }
+
+    def fake_baseline(**kwargs):
+        baseline_calls.append(True)
+        return torch.tensor([[1, 8]]), 128
+
+    generate_module.generate_attention_stability = fake_attention
+    generate_module.generate = fake_baseline
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=2,
+            block_length=32,
+            selection_mode="lazy_consensus_block",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+        generate_module.generate = original_baseline
+
+    assert baseline_calls == []
+    assert output.tolist() == [[1, 2]]
+    assert nfe == 272
+    assert summary["selected_name"] == "fast"
+    assert summary["baseline_consensus"] is None
+    assert summary["candidate_nfe"] == {"fast": 128, "accuracy": 144}
+
+
+def test_lazy_consensus_matches_full_consensus_when_vertical_evidence_is_strong():
+    original_attention = generate_module.generate_attention_stability
+    original_baseline = generate_module.generate
+    baseline_calls = []
+
+    def fake_attention(**kwargs):
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2]]), 128, {
+                "commit_logprob_mean": -0.20,
+            }
+        return torch.tensor([[1, 8]]), 144, {
+            "commit_logprob_mean": -0.10,
+        }
+
+    def fake_baseline(**kwargs):
+        baseline_calls.append(True)
+        return torch.tensor([[1, 8]]), 128
+
+    generate_module.generate_attention_stability = fake_attention
+    generate_module.generate = fake_baseline
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=2,
+            block_length=32,
+            selection_mode="lazy_consensus_block",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+        generate_module.generate = original_baseline
+
+    assert baseline_calls == [True]
+    assert output.tolist() == [[1, 8]]
+    assert nfe == 400
+    assert summary["selected_name"] == "accuracy"
+    assert summary["baseline_consensus"] == {
+        "disagreement_token_count": 1,
+        "baseline_fast_matches": 0,
+        "baseline_accuracy_matches": 1,
+    }
+
+
 def test_topk_overlap_creates_intermediate_temporal_tier():
     logits = make_logits([1, 2, 3], [0.70, 0.80, 0.95])
     dependency = torch.zeros((1, 3, 3))
@@ -459,6 +601,10 @@ if __name__ == "__main__":
     test_block_evidence_requires_one_nat_per_existing_block()
     test_disagreement_evidence_ignores_shared_tokens()
     test_disagreement_evidence_tie_preserves_fast_parent()
+    test_consensus_block_requires_vertical_evidence_and_horizontal_vote()
+    test_consensus_block_preserves_fast_when_baseline_votes_fast()
+    test_lazy_consensus_skips_baseline_until_vertical_override_is_possible()
+    test_lazy_consensus_matches_full_consensus_when_vertical_evidence_is_strong()
     test_topk_overlap_creates_intermediate_temporal_tier()
     test_topk_overlap_preserves_parent_confidence_order_for_mature_candidates()
     test_topk_overlap_rejects_invalid_k()
@@ -466,4 +612,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("22 selector tests passed")
+    print("26 selector tests passed")
