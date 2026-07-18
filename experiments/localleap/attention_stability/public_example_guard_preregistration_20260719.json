@@ -1,0 +1,32 @@
+{
+  "version": "confirmed_bidirectional_public_guard_v11",
+  "registered_at": "2026-07-19T07:10:00+08:00",
+  "formal_baseline": "original LLaDA low-confidence, 128 steps, generation length 256, block length 32",
+  "accuracy_parent": "confirmed bidirectional v9 over symmetric_fast tau=0.004 and conservative symmetric tau=0.004 trajectories",
+  "development_evidence": {
+    "slice": "HumanEval/0-31 only",
+    "two_trajectory_oracle": "16/32; v9 selected exactly 16/32, with three fast-to-accuracy recoveries and zero losses",
+    "third_trajectory_oracle": "v9 union original LLaDA is 18/32",
+    "fixed_rule_replay": "18/32; two recoveries and zero losses versus v9"
+  },
+  "method": {
+    "horizontal": "Generate the original LLaDA low-confidence trajectory as a third complete candidate in addition to v9's two attention-conditioned trajectories.",
+    "longitudinal": "Retain v9's one-nat commit-path evidence and bidirectional block verification for choosing between fast and conservative attention trajectories.",
+    "public_guard": "Original LLaDA may replace the v9-selected candidate only when it passes strictly more function examples already visible verbatim in the user prompt.",
+    "tie_or_no_examples": "Always retain v9; do not generate the third trajectory when no parseable public example exists.",
+    "generated_probes": false,
+    "hidden_tests": false,
+    "reference_solution": false,
+    "token_splicing": false,
+    "new_hyperparameters": "none"
+  },
+  "formal_unseen": {
+    "slice": "HumanEval/96-163",
+    "status_at_registration": "No correctness labels, outputs, selector scores, or candidate evidence inspected.",
+    "gate": "Strictly exceed v9 and original LLaDA with at least one v11-only recovery and no more v9-only losses than recoveries."
+  },
+  "cross_domain": {
+    "MATH_500": "No parseable public function examples implies exact v9 fallback with no third-trajectory NFE.",
+    "promotion": "A formal HumanEval win reaches the same Prism-aligned MATH and sampled MBPP/GSM audit path; code gains and task-generic results are reported separately."
+  }
+}

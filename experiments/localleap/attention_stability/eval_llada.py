@@ -39,7 +39,11 @@ from transformers import AutoTokenizer, AutoModel, AutoConfig
 from model.modeling_llada import LLaDAModelLM
 from generate import *
 from stcc_generate import generate_stcc
-from differential_selector import select_differential_candidate
+from differential_selector import (
+    prompt_examples,
+    select_differential_candidate,
+    select_public_example_guard,
+)
 
 import json
 import hashlib
@@ -255,6 +259,7 @@ class LLaDAEvalHarness(LM):
             "bidirectional_block",
             "confirmed_bidirectional_block",
             "early_confirmed_bidirectional_block",
+            "confirmed_bidirectional_public_guard",
         }:
             raise ValueError(
                 "dependency_likelihood_selection_mode must be mean, "
@@ -262,7 +267,8 @@ class LLaDAEvalHarness(LM):
                 "lazy_consensus_block, coverage_consensus_block, or "
                 "convergent_coverage_consensus_block, shared_skeleton, or "
                 "bidirectional_block, confirmed_bidirectional_block, or "
-                "early_confirmed_bidirectional_block"
+                "early_confirmed_bidirectional_block, or "
+                "confirmed_bidirectional_public_guard"
             )
         self.dependency_draft_exchange = (
             dependency_draft_exchange.lower() == "true"
@@ -510,6 +516,8 @@ class LLaDAEvalHarness(LM):
             active_diagnostics_dir = None
             step_diagnostics_schema = None
             trace_evaluator_version = None
+            public_guard_requested = False
+            public_guard_active = False
             if self.stcc_mode is not None:
                 generated_answer, nfe, decode_diagnostics = generate_stcc(
                     self.model,
@@ -558,6 +566,21 @@ class LLaDAEvalHarness(LM):
                 trace_evaluator_version = "candidate_memory_trace_v2"
             elif self.dependency_threshold is not None:
                 if self.dependency_likelihood_selection:
+                    requested_selection_mode = (
+                        self.dependency_likelihood_selection_mode
+                    )
+                    public_guard_requested = (
+                        requested_selection_mode
+                        == "confirmed_bidirectional_public_guard"
+                    )
+                    public_guard_active = public_guard_requested and bool(
+                        prompt_examples(question, req.doc.get("entry_point"))
+                    )
+                    effective_selection_mode = (
+                        requested_selection_mode
+                        if not public_guard_requested or public_guard_active
+                        else "confirmed_bidirectional_block"
+                    )
                     generated_answer, nfe, decode_diagnostics = (
                         generate_trajectory_likelihood_selection(
                             self.model,
@@ -576,9 +599,7 @@ class LLaDAEvalHarness(LM):
                             dependency_mode=self.dependency_mode,
                             temporal_mode=self.dependency_temporal_mode,
                             temporal_topk=self.dependency_temporal_topk,
-                            selection_mode=(
-                                self.dependency_likelihood_selection_mode
-                            ),
+                            selection_mode=effective_selection_mode,
                         )
                     )
                     draft_candidate_token_ids = decode_diagnostics.pop(
@@ -718,6 +739,51 @@ class LLaDAEvalHarness(LM):
                     stop_tokens,
                     preserve_full_humaneval_response=is_humaneval_request,
                 )
+                if public_guard_requested:
+                    if public_guard_active:
+                        parent_name = decode_diagnostics["selected_name"]
+                        guard_name, public_guard_diagnostics = (
+                            select_public_example_guard(
+                                candidate_generations["baseline"],
+                                candidate_generations[parent_name],
+                                question,
+                                req.doc.get("entry_point"),
+                            )
+                        )
+                        final_name = (
+                            "baseline" if guard_name == "baseline" else parent_name
+                        )
+                        old_token_count = int(
+                            (generated_answer_ids != 126081).sum().item()
+                        )
+                        generated_answer = candidate_generations[final_name]
+                        generated_token_ids_for_diagnostics = (
+                            draft_candidate_token_ids[final_name]
+                            .detach()
+                            .to(torch.int32)
+                            .cpu()
+                        )
+                        generated_answer_ids = torch.tensor(
+                            self.tokenizer(generated_answer)["input_ids"]
+                        )
+                        if self.show_speed:
+                            num_tokens += int(
+                                (generated_answer_ids != 126081).sum().item()
+                            ) - old_token_count
+                        public_guard_diagnostics["parent_name"] = parent_name
+                        public_guard_diagnostics["final_selected_name"] = final_name
+                        decode_diagnostics["pre_guard_selected_name"] = parent_name
+                        decode_diagnostics["selected_name"] = final_name
+                        decode_diagnostics["public_example_guard"] = (
+                            public_guard_diagnostics
+                        )
+                    else:
+                        decode_diagnostics["public_example_guard"] = {
+                            "selector": "strict_public_example_guard_v1",
+                            "status": "skipped_no_public_examples",
+                            "uses_hidden_tests": False,
+                            "uses_reference_solution": False,
+                        }
                 if self.dependency_differential_selection:
                     candidate_names = [
                         name

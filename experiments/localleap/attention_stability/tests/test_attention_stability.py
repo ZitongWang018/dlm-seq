@@ -200,6 +200,56 @@ def test_early_confirmed_mode_returns_fast_without_final_verifier():
     }
 
 
+def test_public_guard_mode_retains_baseline_candidate_for_external_guard():
+    original_attention = generate_module.generate_attention_stability
+    original_generate = generate_module.generate
+    original_score = generate_module.score_bidirectional_block_candidates
+
+    def fake_attention(**kwargs):
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2]]), 128, {"commit_logprob_mean": -0.10}
+        return torch.tensor([[1, 7]]), 140, {"commit_logprob_mean": -0.09}
+
+    def fake_generate(**kwargs):
+        return torch.tensor([[1, 9]]), 128
+
+    def fake_score(*args, **kwargs):
+        return {"fast": -0.2, "accuracy": -0.1}, 1, 1, []
+
+    generate_module.generate_attention_stability = fake_attention
+    generate_module.generate = fake_generate
+    generate_module.score_bidirectional_block_candidates = fake_score
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=2,
+            block_length=32,
+            selection_mode="confirmed_bidirectional_public_guard",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+        generate_module.generate = original_generate
+        generate_module.score_bidirectional_block_candidates = original_score
+
+    assert output.tolist() == [[1, 2]]
+    assert nfe == 397
+    assert summary["selected_name"] == "fast"
+    assert set(summary["_trajectory_candidate_token_ids"]) == {
+        "fast",
+        "accuracy",
+        "baseline",
+    }
+    assert summary["candidate_nfe"] == {
+        "fast": 128,
+        "accuracy": 140,
+        "bidirectional_block_selector": 1,
+        "baseline": 128,
+    }
+
+
 def make_logits(top_ids, confidences, vocab_size=8):
     logits = torch.full((1, len(top_ids), vocab_size), -20.0)
     for position, (token_id, confidence) in enumerate(zip(top_ids, confidences)):
@@ -987,6 +1037,7 @@ def test_revision_margin_prioritizes_decisive_conditioned_change():
 
 
 if __name__ == "__main__":
+    test_public_guard_mode_retains_baseline_candidate_for_external_guard()
     test_early_confirmed_mode_returns_fast_without_final_verifier()
     test_commit_mean_abort_uses_an_optimistic_zero_logprob_bound()
     test_confirmed_block_requires_path_and_counterfactual_agreement()
@@ -1027,4 +1078,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("40 selector tests passed")
+    print("41 selector tests passed")

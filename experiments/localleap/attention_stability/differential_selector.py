@@ -214,3 +214,54 @@ def select_differential_candidate(
         "uses_reference_solution": False,
     }
     return selected, diagnostics
+
+
+def select_public_example_guard(
+    baseline_candidate: str,
+    parent_candidate: str,
+    prompt: str,
+    entry_point: Optional[str] = None,
+) -> Tuple[str, Dict[str, Any]]:
+    """Let baseline replace the parent only on strict public-example evidence.
+
+    This is intentionally narrower than differential candidate selection: it
+    executes only examples already visible in the model prompt, creates no
+    synthetic probes, and keeps the parent on every tie or missing-example
+    case.  Reference solutions and hidden tests are not accepted as inputs.
+    """
+    examples = prompt_examples(prompt, entry_point)
+    expressions = [expression for expression, _ in examples]
+    codes = [
+        extract_python_code(baseline_candidate),
+        extract_python_code(parent_candidate),
+    ]
+    executions = [execute_expressions(code, expressions) for code in codes]
+    visible_passes = []
+    for execution in executions:
+        outputs = execution.get("outputs", [])
+        passed = 0
+        for index, (_, expected) in enumerate(examples):
+            if index < len(outputs) and outputs[index].get("ok"):
+                passed += outputs[index].get("value") == _normalize_expected(expected)
+        visible_passes.append(int(passed))
+    selected_name = (
+        "baseline"
+        if examples and visible_passes[0] > visible_passes[1]
+        else "parent"
+    )
+    return selected_name, {
+        "selector": "strict_public_example_guard_v1",
+        "selected_name": selected_name,
+        "visible_example_count": len(examples),
+        "visible_examples_passed": {
+            "baseline": visible_passes[0],
+            "parent": visible_passes[1],
+        },
+        "compile_valid": {
+            "baseline": bool(executions[0].get("compile")),
+            "parent": bool(executions[1].get("compile")),
+        },
+        "uses_generated_probes": False,
+        "uses_hidden_tests": False,
+        "uses_reference_solution": False,
+    }

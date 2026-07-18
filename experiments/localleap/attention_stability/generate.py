@@ -1332,6 +1332,20 @@ def generate_trajectory_likelihood_selection(
             )
             candidate_ids["baseline"] = baseline_x
             baseline_consensus = score_baseline_consensus(candidate_ids)
+    if selection_mode == "confirmed_bidirectional_public_guard":
+        baseline_x, baseline_nfe = generate(
+            model=model,
+            prompt=prompt,
+            steps=steps,
+            gen_length=gen_length,
+            block_length=block_length,
+            temperature=temperature,
+            remasking=remasking,
+            mask_id=mask_id,
+            eos_id=eos_id,
+            early_stop=early_stop,
+        )
+        candidate_ids["baseline"] = baseline_x
     if selection_mode == "shared_skeleton":
         (
             shared_skeleton_scores,
@@ -1351,6 +1365,7 @@ def generate_trajectory_likelihood_selection(
         "bidirectional_block",
         "confirmed_bidirectional_block",
         "early_confirmed_bidirectional_block",
+        "confirmed_bidirectional_public_guard",
     }:
         if accuracy_early_aborted:
             selected_name = "fast"
@@ -1371,6 +1386,7 @@ def generate_trajectory_likelihood_selection(
         if selection_mode in {
             "confirmed_bidirectional_block",
             "early_confirmed_bidirectional_block",
+            "confirmed_bidirectional_public_guard",
         } and not accuracy_early_aborted:
             selected_name = select_confirmed_bidirectional_block(
                 bidirectional_block_scores,
@@ -1405,6 +1421,7 @@ def generate_trajectory_likelihood_selection(
         "bidirectional_block",
         "confirmed_bidirectional_block",
         "early_confirmed_bidirectional_block",
+        "confirmed_bidirectional_public_guard",
     }:
         disagreement_count = bidirectional_block_disagreements
         scored_disagreement_count = bidirectional_block_disagreements
@@ -1429,7 +1446,9 @@ def generate_trajectory_likelihood_selection(
     )
     summary = {
         "decoder": (
-            "trajectory_early_confirmed_bidirectional_block_v10"
+            "trajectory_confirmed_bidirectional_public_guard_v11"
+            if selection_mode == "confirmed_bidirectional_public_guard"
+            else "trajectory_early_confirmed_bidirectional_block_v10"
             if selection_mode == "early_confirmed_bidirectional_block"
             else "trajectory_confirmed_bidirectional_block_verification_v9"
             if selection_mode == "confirmed_bidirectional_block"
@@ -1459,7 +1478,9 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "optimistic_path_bound_then_confirmed_bidirectional_block"
+            "confirmed_bidirectional_then_strict_public_example_baseline_guard"
+            if selection_mode == "confirmed_bidirectional_public_guard"
+            else "optimistic_path_bound_then_confirmed_bidirectional_block"
             if selection_mode == "early_confirmed_bidirectional_block"
             else "one_nat_path_evidence_confirmed_by_bidirectional_block_verification"
             if selection_mode == "confirmed_bidirectional_block"
@@ -1524,6 +1545,7 @@ def generate_trajectory_likelihood_selection(
             "bidirectional_block",
             "confirmed_bidirectional_block",
             "early_confirmed_bidirectional_block",
+            "confirmed_bidirectional_public_guard",
         }
         else None,
         "accuracy_early_abort": {
@@ -1561,6 +1583,7 @@ def generate_trajectory_likelihood_selection(
                     "bidirectional_block",
                     "confirmed_bidirectional_block",
                     "early_confirmed_bidirectional_block",
+                    "confirmed_bidirectional_public_guard",
                 }
                 else {}
             ),
