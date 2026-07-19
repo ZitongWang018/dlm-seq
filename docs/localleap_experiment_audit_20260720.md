@@ -187,6 +187,25 @@ results are retained because they constrain the next design.
 | Localized evidence conflict repair v18 | On evidence/verifier disagreement, preserve common tokens, re-denoise one strongest opposing block, then require the same verifier/public guard | preregistered, waiting for full4 |
 | Sparse context repair v19 | Keep v18's single block but preserve every parent token supported under both complete draft contexts; re-denoise only the non-unanimous frontier | frozen before v18 results; runs only if v18 is rejected |
 
+### 5.1 Current error-structure insight
+
+On full HumanEval, v15/v11 has 24 method-only wins and 8 original-baseline-only
+losses (58 versus 42). All eight losses occur where the public guard did not
+generate the original trajectory: seven tasks contain no prompt-visible
+examples and one task had already exhausted its visible checks. Seven of the
+eight also take the admissible early abort and select the fast path. However,
+the same signatures occur much more often among wins and shared failures, so
+they are not a defensible correctness oracle.
+
+This rules out another label-fitted threshold or unconditional third-trajectory
+fallback. The already tested full-draft mean/Pareto verifier produced no
+HumanEval development gain (18/32, equal to v11). The current iteration
+therefore changes the *repair support*, not the selection threshold: v18
+localizes one conflict block; v19 further freezes tokens unanimously supported
+by both external draft contexts. This is the simplest remaining vertical plus
+horizontal hypothesis that addresses error accumulation without reopening all
+tokens or adding a task-specific ensemble.
+
 ### Explicitly rejected or invalid branches
 
 - Public-frontier guard v3: HumanEval development 17/32 versus v11 18/32,
