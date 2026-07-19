@@ -17,8 +17,6 @@ REQUIRED = {
     "task_id",
     "prompt_hash",
     "target_hash",
-    "prompt_text",
-    "entry_point",
     "decoded_generation",
     "nfe",
 }
@@ -61,6 +59,9 @@ def selected_name(record):
 
 def select_one(v9, baseline, v11):
     task_id = v11["task_id"]
+    for field in ("prompt_text", "entry_point"):
+        if field not in v9:
+            raise ValueError(f"v9 record is missing {field} for {task_id}")
     for field in ("absolute_index", "task_id", "prompt_hash", "target_hash"):
         if v9[field] != baseline[field] or v9[field] != v11[field]:
             raise ValueError(f"{field} mismatch for {task_id}")

@@ -41,6 +41,8 @@ def test_unique_public_winner_reopens_unselected_sibling():
         "def square(x):\n    return x * x",
         "def square(x):\n    return 0",
     )
+    baseline[0].pop("prompt_text")
+    baseline[0].pop("entry_point")
     output = select_records(v9, baseline, v11)[0]
     assert output["decode_diagnostics"]["selected_name"] == "accuracy"
     assert output["decode_diagnostics"]["public_frontier_guard"]["status"] == (
