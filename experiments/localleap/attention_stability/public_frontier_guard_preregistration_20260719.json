@@ -1,0 +1,28 @@
+{
+  "method": "public_frontier_guard_v1",
+  "parent": "v11_strict_public_example_guard",
+  "motivation": "Retain v11's vertically verified choice, but reopen the already-generated horizontal fast/accuracy/baseline frontier only when one draft is the unique strict winner on prompt-visible checks.",
+  "selection_rule": {
+    "candidates": ["fast", "accuracy", "original_llada"],
+    "evidence": "only doctests and assertions already present in the prompt",
+    "switch": "switch away from v11 only when exactly one candidate passes strictly more visible checks than the v11 candidate",
+    "tie": "preserve v11",
+    "no_visible_checks": "preserve v11",
+    "generated_probes": false,
+    "hidden_tests_for_selection": false,
+    "reference_solution_for_selection": false,
+    "new_model_nfe": 0
+  },
+  "development": {
+    "benchmark": "HumanEval",
+    "absolute_indices": "0-31",
+    "promotion_gate": "method_correct > v11_correct and method_only_vs_v11 > v11_only_vs_method"
+  },
+  "holdout": {
+    "benchmark": "HumanEval",
+    "absolute_indices": "96-163",
+    "access": "only after development promotion gate passes"
+  },
+  "cross_task_promotion": "Only after the HumanEval development gate; then test MATH-50 and MBPP with their aligned evaluators.",
+  "formal_baseline": "original LLaDA low-confidence, steps=128, gen_length=256, block_length=32, seed=0,1234,1234,1234"
+}
