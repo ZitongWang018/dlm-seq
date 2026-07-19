@@ -1,0 +1,59 @@
+{
+  "schema": "threshold_diversity_public_guard_preregistration_v1",
+  "registered_at": "2026-07-19T11:02:00+08:00",
+  "status": "registered_before_any_tau_0p002_holdout_generation",
+  "development_scope": {
+    "benchmark": "HumanEval",
+    "absolute_indices": "0-31",
+    "observed_parent_correct": 18,
+    "observed_candidate_correct": 17,
+    "observed_guarded_correct": 20,
+    "guarded_method_only_vs_parent": 3,
+    "parent_only_vs_guarded_method": 1
+  },
+  "method": {
+    "name": "threshold_diversity_public_guard_v16",
+    "parent": "v11_confirmed_bidirectional_public_guard_tau_0p004",
+    "candidate": "confirmed_bidirectional_public_guard_tau_0p002",
+    "selection": "candidate_replaces_parent_only_when_it_passes_strictly_more_prompt_visible_checks",
+    "tie_break": "parent",
+    "uses_hidden_tests": false,
+    "uses_reference_solution": false,
+    "uses_generated_probes": false,
+    "model_parameters_modified": false,
+    "history_kv_injected": false,
+    "candidate_graph_added": false
+  },
+  "interpretation": {
+    "longitudinal": "two denoising trajectories expose threshold-sensitive cross-step commitments",
+    "horizontal": "symmetric within-step dependency exclusion is retained inside both trajectories",
+    "cross_trajectory": "only prompt-visible executable evidence may replace the stronger tau-0.004 parent"
+  },
+  "locked_generation": {
+    "model": "LLaDA-Instruct-8B",
+    "gen_length": 256,
+    "steps": 128,
+    "block_length": 32,
+    "remasking": "low_confidence",
+    "dependency_mode": "symmetric",
+    "candidate_tau": 0.002,
+    "parent_tau": 0.004,
+    "num_fewshot": 0,
+    "seeds": [0, 1234, 1234, 1234]
+  },
+  "formal_holdout": {
+    "benchmark": "HumanEval",
+    "absolute_indices": "96-163",
+    "gate": "method_correct > parent_correct and method_only > parent_only",
+    "full_164_reporting": "allowed only after the holdout gate is evaluated",
+    "failure_action": "reject_without_MBPP_or_MATH_promotion"
+  },
+  "promotion": {
+    "if_pass": [
+      "independent official HumanEval execution crosscheck",
+      "MBPP visible-assertion evaluation against v11 and original LLaDA",
+      "exact lazy and admissible early-abort speed child"
+    ],
+    "tasks_without_public_checks": "return the frozen v11/v9 parent exactly and do not generate the tau-0.002 candidate"
+  }
+}
