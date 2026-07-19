@@ -44,7 +44,17 @@ def test_visible_overfit_candidate_fails_hidden_challenge():
     assert row["challenge_diagnostics"]["crosscheck_match"] is True
 
 
+def test_record_without_challenge_tests_is_not_counted_in_accuracy():
+    generation = "def square(x):\n    return x*x"
+    sample = make_sample(generation)
+    sample["doc"]["challenge_test_list"] = []
+    row = audit_record(sample, task(generation))
+    assert row["challenge_eligible"] is False
+    assert row["correct"] is None
+
+
 if __name__ == "__main__":
     test_correct_candidate_passes_both_challenge_paths()
     test_visible_overfit_candidate_fails_hidden_challenge()
-    print("2 MBPP challenge-audit tests passed")
+    test_record_without_challenge_tests_is_not_counted_in_accuracy()
+    print("3 MBPP challenge-audit tests passed")

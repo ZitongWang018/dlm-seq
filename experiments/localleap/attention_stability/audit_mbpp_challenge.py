@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from humaneval_execution import check_correctness
 
 
-VERSION = "mbpp_hidden_challenge_posthoc_v1"
+VERSION = "mbpp_hidden_challenge_posthoc_v2"
 
 
 def independent_challenge_execution(generation, doc, task_id, timeout):
@@ -46,10 +46,39 @@ def audit_record(sample, task_record, timeout=2.0):
     if generation != task_record.get("decoded_generation"):
         raise ValueError(f"generation mismatch for {task_id}")
     challenge_tests = list(doc.get("challenge_test_list") or [])
+    if not challenge_tests:
+        return {
+            "absolute_index": int(task_record["absolute_index"]),
+            "stable_task_id": task_id,
+            "task_id": task_id,
+            "prompt_hash": sample["prompt_hash"],
+            "target_hash": sample["target_hash"],
+            "raw_gold": task_record.get("raw_gold"),
+            "normalized_gold": task_record.get("raw_gold"),
+            "decoded_generation": generation,
+            "extracted_prediction": extract_python_code(generation),
+            "correct": None,
+            "challenge_eligible": False,
+            "nfe": int(task_record["nfe"]),
+            "evaluator_version": VERSION,
+            "challenge_diagnostics": {
+                "challenge_test_count": 0,
+                "challenge_tests_passed": 0,
+                "compile_valid": None,
+                "independent_passed": None,
+                "independent_result": "not_run_no_challenge_tests",
+                "crosscheck_match": True,
+                "selection_used_challenge_tests": False,
+                "posthoc_robustness_only": True,
+            },
+            "residual_mask_count": generation.count("[MASK]")
+            + generation.count("<|mask|>"),
+        }
     challenge_prompt = "\n".join(challenge_tests)
     primary_generation = extract_python_code(generation)
     if doc.get("test_setup_code"):
         primary_generation += "\n" + str(doc["test_setup_code"])
+    primary_generation = f"```python\n{primary_generation}\n```"
     primary = evaluate_public_candidate(
         primary_generation, challenge_prompt, None
     )
@@ -77,6 +106,7 @@ def audit_record(sample, task_record, timeout=2.0):
         "decoded_generation": generation,
         "extracted_prediction": extract_python_code(generation),
         "correct": primary_correct,
+        "challenge_eligible": True,
         "nfe": int(task_record["nfe"]),
         "evaluator_version": VERSION,
         "challenge_diagnostics": {
@@ -109,12 +139,17 @@ def audit_files(samples_path, task_path, timeout):
         for row in records
         if not row["challenge_diagnostics"]["crosscheck_match"]
     ]
+    eligible = [row for row in records if row["challenge_eligible"]]
+    if not eligible:
+        raise ValueError("no records contain challenge tests")
     summary = {
         "evaluator_version": VERSION,
         "metric_role": "posthoc_hidden_challenge_robustness_not_formal_mbpp",
-        "total": len(records),
-        "correct": sum(row["correct"] for row in records),
-        "accuracy": sum(row["correct"] for row in records) / len(records),
+        "total_records": len(records),
+        "eligible_total": len(eligible),
+        "records_without_challenge_tests": len(records) - len(eligible),
+        "correct": sum(bool(row["correct"]) for row in eligible),
+        "accuracy": sum(bool(row["correct"]) for row in eligible) / len(eligible),
         "crosscheck_mismatch_ids": mismatch,
         "all_crosschecks_pass": not mismatch,
         "selection_used_challenge_tests": False,
