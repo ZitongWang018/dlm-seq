@@ -46,6 +46,12 @@ from differential_selector import (
     select_differential_candidate,
     select_public_example_guard,
 )
+from outcome_arbiter import (
+    build_outcome_arbiter_prompt,
+    infer_outcome_family,
+    normalize_outcome,
+    select_arbitrated_candidate,
+)
 
 import json
 import hashlib
@@ -265,6 +271,7 @@ class LLaDAEvalHarness(LM):
             "confirmed_bidirectional_lazy_public_guard",
             "confirmed_bidirectional_public_verifier",
             "confirmed_bidirectional_public_pareto_verifier",
+            "confirmed_bidirectional_outcome_arbiter",
         }:
             raise ValueError(
                 "dependency_likelihood_selection_mode must be mean, "
@@ -276,7 +283,8 @@ class LLaDAEvalHarness(LM):
                 "confirmed_bidirectional_public_guard, or "
                 "confirmed_bidirectional_lazy_public_guard, "
                 "confirmed_bidirectional_public_verifier, or "
-                "confirmed_bidirectional_public_pareto_verifier"
+                "confirmed_bidirectional_public_pareto_verifier, or "
+                "confirmed_bidirectional_outcome_arbiter"
             )
         self.dependency_draft_exchange = (
             dependency_draft_exchange.lower() == "true"
@@ -528,6 +536,7 @@ class LLaDAEvalHarness(LM):
             public_guard_active = False
             lazy_public_guard_requested = False
             public_verifier_mode = None
+            outcome_arbiter_requested = False
             if self.stcc_mode is not None:
                 generated_answer, nfe, decode_diagnostics = generate_stcc(
                     self.model,
@@ -579,6 +588,10 @@ class LLaDAEvalHarness(LM):
                     requested_selection_mode = (
                         self.dependency_likelihood_selection_mode
                     )
+                    outcome_arbiter_requested = (
+                        requested_selection_mode
+                        == "confirmed_bidirectional_outcome_arbiter"
+                    )
                     public_guard_requested = requested_selection_mode in {
                         "confirmed_bidirectional_public_guard",
                         "confirmed_bidirectional_lazy_public_guard",
@@ -601,7 +614,8 @@ class LLaDAEvalHarness(LM):
                     )
                     effective_selection_mode = (
                         "confirmed_bidirectional_block"
-                        if lazy_public_guard_requested
+                        if outcome_arbiter_requested
+                        or lazy_public_guard_requested
                         or (public_guard_requested and not public_guard_active)
                         else requested_selection_mode
                     )
@@ -943,6 +957,147 @@ class LLaDAEvalHarness(LM):
                             "uses_hidden_tests": False,
                             "uses_reference_solution": False,
                         }
+                if outcome_arbiter_requested:
+                    outcome_family = infer_outcome_family(req.doc)
+                    parent_name = decode_diagnostics["selected_name"]
+                    outcome_diagnostics = {
+                        "selector": "explicit_outcome_set_arbiter_v1",
+                        "family": outcome_family,
+                        "parent_name": parent_name,
+                        "selected_name": parent_name,
+                        "baseline_generated": False,
+                        "arbiter_generated": False,
+                        "uses_hidden_tests": False,
+                        "uses_reference_solution": False,
+                    }
+                    if outcome_family is None:
+                        outcome_diagnostics["status"] = "unsupported_task_family"
+                    else:
+                        candidate_outcomes = {
+                            name: normalize_outcome(
+                                candidate_generations[name], outcome_family
+                            )
+                            for name in ("fast", "accuracy")
+                        }
+                        unique_parent_outcomes = {
+                            value for value in candidate_outcomes.values() if value
+                        }
+                        if len(unique_parent_outcomes) <= 1:
+                            outcome_diagnostics.update(
+                                {
+                                    "status": "attention_trajectories_agree",
+                                    "candidate_outcomes": candidate_outcomes,
+                                }
+                            )
+                        else:
+                            baseline_token_ids, baseline_nfe = generate(
+                                self.model,
+                                input_ids,
+                                steps=self.steps,
+                                gen_length=self.gen_length,
+                                block_length=self.block_length,
+                                temperature=0,
+                                remasking=self.remasking,
+                                mask_id=self.mask_id,
+                                early_stop=self.early_stop,
+                                threshold=self.threshold,
+                            )
+                            nfe += baseline_nfe
+                            if self.show_speed:
+                                num_nfe += baseline_nfe
+                            draft_candidate_token_ids["baseline"] = baseline_token_ids
+                            baseline_generation = decode_candidate_generations(
+                                self.tokenizer,
+                                {"baseline": baseline_token_ids},
+                                input_ids.shape[1],
+                                stop_tokens,
+                                preserve_full_humaneval_response=(
+                                    is_humaneval_request
+                                ),
+                            )["baseline"]
+                            candidate_generations["baseline"] = baseline_generation
+                            candidate_outcomes["baseline"] = normalize_outcome(
+                                baseline_generation, outcome_family
+                            )
+                            arbiter_question = build_outcome_arbiter_prompt(
+                                question, candidate_outcomes
+                            )
+                            arbiter_messages = [
+                                {"role": "user", "content": arbiter_question}
+                            ]
+                            arbiter_user_input = self.tokenizer.apply_chat_template(
+                                arbiter_messages,
+                                add_generation_prompt=True,
+                                tokenize=False,
+                            )
+                            arbiter_input_ids = torch.tensor(
+                                self.tokenizer(arbiter_user_input)["input_ids"]
+                            ).to(self.device).unsqueeze(0)
+                            arbiter_token_ids, arbiter_nfe = generate(
+                                self.model,
+                                arbiter_input_ids,
+                                steps=self.steps,
+                                gen_length=self.gen_length,
+                                block_length=self.block_length,
+                                temperature=0,
+                                remasking=self.remasking,
+                                mask_id=self.mask_id,
+                                early_stop=self.early_stop,
+                                threshold=self.threshold,
+                            )
+                            nfe += arbiter_nfe
+                            if self.show_speed:
+                                num_nfe += arbiter_nfe
+                            arbiter_generation = self.tokenizer.decode(
+                                arbiter_token_ids[0][arbiter_input_ids.shape[1] :],
+                                skip_special_tokens=True,
+                            )
+                            candidate_generations["arbiter"] = arbiter_generation
+                            arbiter_outcome = normalize_outcome(
+                                arbiter_generation, outcome_family
+                            )
+                            selected_name, arbiter_diagnostics = (
+                                select_arbitrated_candidate(
+                                    parent_name,
+                                    candidate_outcomes,
+                                    arbiter_outcome,
+                                )
+                            )
+                            old_token_count = int(
+                                (generated_answer_ids != 126081).sum().item()
+                            )
+                            generated_answer = candidate_generations[selected_name]
+                            generated_token_ids_for_diagnostics = (
+                                draft_candidate_token_ids[selected_name]
+                                .detach()
+                                .to(torch.int32)
+                                .cpu()
+                            )
+                            generated_answer_ids = torch.tensor(
+                                self.tokenizer(generated_answer)["input_ids"]
+                            )
+                            if self.show_speed:
+                                num_tokens += int(
+                                    (generated_answer_ids != 126081).sum().item()
+                                ) - old_token_count
+                            outcome_diagnostics.update(arbiter_diagnostics)
+                            outcome_diagnostics.update(
+                                {
+                                    "family": outcome_family,
+                                    "baseline_generated": True,
+                                    "arbiter_generated": True,
+                                    "baseline_nfe": int(baseline_nfe),
+                                    "arbiter_nfe": int(arbiter_nfe),
+                                    "arbiter_prompt_hash": hashlib.sha256(
+                                        arbiter_question.encode("utf-8")
+                                    ).hexdigest(),
+                                }
+                            )
+                            decode_diagnostics["pre_arbiter_selected_name"] = (
+                                parent_name
+                            )
+                            decode_diagnostics["selected_name"] = selected_name
+                    decode_diagnostics["outcome_arbiter"] = outcome_diagnostics
                 if self.dependency_differential_selection:
                     candidate_names = [
                         name

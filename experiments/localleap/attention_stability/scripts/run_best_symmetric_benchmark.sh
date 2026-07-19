@@ -125,6 +125,12 @@ case "${profile}" in
     # in the aggregate and in every active generation block.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_public_pareto_verifier"
     ;;
+  trajectory_outcome_arbiter)
+    # When complete attention trajectories disagree on the final outcome,
+    # expose the de-duplicated answer set to one normal dLLM arbitration pass.
+    # The arbiter may select only an existing complete trajectory.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_outcome_arbiter"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;
