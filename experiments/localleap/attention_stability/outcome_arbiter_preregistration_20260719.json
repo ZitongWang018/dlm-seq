@@ -1,0 +1,43 @@
+{
+  "registration_version": "outcome_arbiter_preregistration_v1",
+  "registered_at": "2026-07-19T08:35:00+08:00",
+  "method": "confirmed_bidirectional_outcome_arbiter",
+  "accuracy_parent": "confirmed_bidirectional_block_v9",
+  "formal_baseline": "original_llada_low_confidence_128",
+  "fixed_parameters": {
+    "steps": 128,
+    "gen_length": 256,
+    "block_length": 32,
+    "dependency_threshold": 0.004
+  },
+  "rule": "when fast and accuracy trajectories disagree on the normalized final outcome, generate original LLaDA and one normal dLLM arbitration response over the de-duplicated candidate-answer set; the arbiter may select only an existing complete trajectory and ties preserve v9",
+  "new_thresholds": [],
+  "new_learned_parameters": [],
+  "token_splicing": false,
+  "uses_hidden_tests": false,
+  "uses_reference_solution": false,
+  "development": [
+    {
+      "benchmark": "MATH-500",
+      "absolute_indices": "0-15"
+    },
+    {
+      "benchmark": "GSM8K",
+      "absolute_indices": "0-15"
+    }
+  ],
+  "development_gate": "strictly more correct than v9 and method-only greater than parent-only",
+  "formal_holdouts": [
+    {
+      "benchmark": "MATH-500",
+      "absolute_indices": "25-49",
+      "inspection_status": "not inspected per record before registration"
+    },
+    {
+      "benchmark": "GSM8K",
+      "absolute_indices": "32-63",
+      "inspection_status": "not inspected per record before registration"
+    }
+  ],
+  "formal_gate": "strictly more correct than v9, at least one recovery, and parent-only no greater than method-only"
+}
