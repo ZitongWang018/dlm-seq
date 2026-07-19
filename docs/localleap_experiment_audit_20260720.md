@@ -185,6 +185,7 @@ results are retained because they constrain the next design.
 | Lazy public guard v12 | Skip original trajectory when the public-check decision is already fixed | MBPP exact to v11, NFE 41,475 to 37,763, wall 1.083x |
 | Admissible early abort v15 | Stop the accuracy path when even zero-loss future commits cannot clear the evidence gate | exact-output speed descendant; current full4 method |
 | Localized evidence conflict repair v18 | On evidence/verifier disagreement, preserve common tokens, re-denoise one strongest opposing block, then require the same verifier/public guard | preregistered, waiting for full4 |
+| Sparse context repair v19 | Keep v18's single block but preserve every parent token supported under both complete draft contexts; re-denoise only the non-unanimous frontier | frozen before v18 results; runs only if v18 is rejected |
 
 ### Explicitly rejected or invalid branches
 
@@ -212,7 +213,10 @@ selector. The Instruct wrapper constructs the model input only from
 
 Legacy leakage auditor v1 had a schema error: it rejected `raw_gold`,
 `normalized_gold`, and `correct=None` even when the evaluation wrapper appended
-them only after the decoder returned. Version 2 now:
+them only after the decoder returned. It could also serialize `pass=false` yet
+exit with status zero, so a controller that checked only process status could
+mislabel the audit stage as successful. This is an evaluator failure, not
+evidence that the decoder read gold data. Version 2 now:
 
 - audits the generation/selector AST and the actual `generate` call inputs;
 - permits those three fields only at trace top level;
@@ -221,9 +225,16 @@ them only after the decoder returned. Version 2 now:
 - requires `uses_hidden_tests=false` and `uses_reference_solution=false`;
 - separately freezes actual chat-rendered text and token-ID hashes.
 
-The original v1 failure artifact will be preserved. A versioned recovery may
+The original v1 artifact will be preserved. A versioned recovery may
 add `RECOVERED_BY_LEAKAGE_V2` and `DONE` only if all seven generation stages are
 complete and every failure stage is exclusively `leakage_*`.
+
+The old fair-three-arm summary is likewise provisional even if its controller
+finishes. `fair_three_arm_leakage_recovery_20260720_v2` must independently
+obtain `pass=true` for static sources and all four accuracy plus all four fast
+traces, and re-check paired/model-input equality, before its recovered summary
+is treated as formal. Baseline has no selector trace and is covered by the same
+static source audit plus exact rendered-input/token equality.
 
 ### 6.1 Append-safe runtime metric supervision
 
@@ -324,6 +335,12 @@ dominate.
    non-regression plus aggregate gain.
 4. `fair_three_arm_reproduction_20260719_v1`: current-runtime baseline,
    globally selected accuracy method, and symmetric-fast confirmatory arm.
+5. `fair_three_arm_leakage_recovery_20260720_v2`: preserve the original fair
+   summary, reject the v1 auditor status, and issue a recovered summary only
+   after eight algorithm-trace v2 audits and all input/pair invariants pass.
+6. `sparse_context_repair_rapid_20260720_v1`: after the recovered fair result,
+   skip when v18 is accepted; otherwise run the frozen one-change v19 gates,
+   first HumanEval/MBPP in parallel and then MATH/GSM in parallel.
 
 The fair queue is fully offline. It hashes the six model shards, tokenizer and
 configuration files, runtime sources, exact dataset view, raw prompt, rendered
