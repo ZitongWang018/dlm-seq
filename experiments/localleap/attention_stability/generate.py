@@ -1109,6 +1109,7 @@ def score_bidirectional_block_candidates(
     prompt_length,
     block_length,
     mask_id=126336,
+    candidate_names=("fast", "accuracy"),
 ):
     """Cross-verify one disagreement block while preserving both full drafts.
 
@@ -1119,29 +1120,31 @@ def score_bidirectional_block_candidates(
     accuracy-first external draft, then averages the directional scores.  The
     two contexts are batched, so the cost is one forward per active block.
     """
-    required = ("fast", "accuracy")
+    required = tuple(candidate_names)
+    if len(required) != 2 or len(set(required)) != 2:
+        raise ValueError("bidirectional_block requires two distinct candidate names")
     if candidate_token_ids is None:
         raise ValueError("bidirectional_block requires candidate token ids")
     missing = [name for name in required if name not in candidate_token_ids]
     if missing:
         raise ValueError(f"missing bidirectional-block candidate ids: {missing}")
-    fast = candidate_token_ids["fast"]
-    accuracy = candidate_token_ids["accuracy"]
-    if fast.shape != accuracy.shape or fast.ndim != 2 or fast.shape[0] != 1:
+    first = candidate_token_ids[required[0]]
+    second = candidate_token_ids[required[1]]
+    if first.shape != second.shape or first.ndim != 2 or first.shape[0] != 1:
         raise ValueError("bidirectional-block candidates must be aligned batch-one tensors")
     if int(block_length) <= 0:
         raise ValueError("bidirectional_block requires a positive block_length")
 
-    disagreement = fast != accuracy
+    disagreement = first != second
     disagreement[:, : int(prompt_length)] = False
     total_disagreements = int(disagreement.sum().item())
     if total_disagreements == 0:
-        return {"fast": 0.0, "accuracy": 0.0}, 0, 0, []
+        return {name: 0.0 for name in required}, 0, 0, []
 
-    score_sums = {"fast": 0.0, "accuracy": 0.0}
+    score_sums = {name: 0.0 for name in required}
     selector_nfe = 0
     block_records = []
-    sequence_length = fast.shape[1]
+    sequence_length = first.shape[1]
     for block_start in range(int(prompt_length), sequence_length, int(block_length)):
         block_end = min(block_start + int(block_length), sequence_length)
         block_disagreement = disagreement.clone()
@@ -1152,19 +1155,25 @@ def score_bidirectional_block_candidates(
         if count == 0:
             continue
 
-        fast_context = fast.clone()
-        accuracy_context = accuracy.clone()
-        fast_context[block_disagreement] = int(mask_id)
-        accuracy_context[block_disagreement] = int(mask_id)
-        contexts = torch.cat((fast_context, accuracy_context), dim=0)
+        directional_contexts = []
+        for name in required:
+            context = candidate_token_ids[name].clone()
+            context[block_disagreement] = int(mask_id)
+            directional_contexts.append(context)
+        contexts = torch.cat(directional_contexts, dim=0)
         logits = model(contexts).logits[:, local_positions, :].float()
         log_probs = torch.log_softmax(logits, dim=-1)
         local_scores = {}
+        directional_scores = {}
         for name in required:
             target = candidate_token_ids[name][0, local_positions].long()
             target = target[None, :, None].expand(2, -1, 1)
             directional = log_probs.gather(-1, target).squeeze(-1)
             local_scores[name] = float(directional.mean(dim=0).mean().item())
+            directional_scores[name] = {
+                context_name: float(directional[index].mean().item())
+                for index, context_name in enumerate(required)
+            }
             score_sums[name] += float(directional.mean(dim=0).sum().item())
         selector_nfe += 1
         block_records.append({
@@ -1172,6 +1181,7 @@ def score_bidirectional_block_candidates(
             "block_end": int(block_end - int(prompt_length)),
             "disagreement_token_count": count,
             "candidate_scores": local_scores,
+            "directional_candidate_scores": directional_scores,
         })
 
     scores = {

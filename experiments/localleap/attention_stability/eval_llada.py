@@ -263,6 +263,8 @@ class LLaDAEvalHarness(LM):
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
             "confirmed_bidirectional_lazy_public_guard",
+            "confirmed_bidirectional_public_verifier",
+            "confirmed_bidirectional_public_pareto_verifier",
         }:
             raise ValueError(
                 "dependency_likelihood_selection_mode must be mean, "
@@ -272,7 +274,9 @@ class LLaDAEvalHarness(LM):
                 "bidirectional_block, confirmed_bidirectional_block, or "
                 "early_confirmed_bidirectional_block, or "
                 "confirmed_bidirectional_public_guard, or "
-                "confirmed_bidirectional_lazy_public_guard"
+                "confirmed_bidirectional_lazy_public_guard, "
+                "confirmed_bidirectional_public_verifier, or "
+                "confirmed_bidirectional_public_pareto_verifier"
             )
         self.dependency_draft_exchange = (
             dependency_draft_exchange.lower() == "true"
@@ -523,6 +527,7 @@ class LLaDAEvalHarness(LM):
             public_guard_requested = False
             public_guard_active = False
             lazy_public_guard_requested = False
+            public_verifier_mode = None
             if self.stcc_mode is not None:
                 generated_answer, nfe, decode_diagnostics = generate_stcc(
                     self.model,
@@ -577,11 +582,20 @@ class LLaDAEvalHarness(LM):
                     public_guard_requested = requested_selection_mode in {
                         "confirmed_bidirectional_public_guard",
                         "confirmed_bidirectional_lazy_public_guard",
+                        "confirmed_bidirectional_public_verifier",
+                        "confirmed_bidirectional_public_pareto_verifier",
                     }
                     lazy_public_guard_requested = (
-                        requested_selection_mode
-                        == "confirmed_bidirectional_lazy_public_guard"
+                        requested_selection_mode != "confirmed_bidirectional_public_guard"
+                        and public_guard_requested
                     )
+                    if requested_selection_mode == "confirmed_bidirectional_public_verifier":
+                        public_verifier_mode = "mean"
+                    elif (
+                        requested_selection_mode
+                        == "confirmed_bidirectional_public_pareto_verifier"
+                    ):
+                        public_verifier_mode = "block_pareto"
                     public_guard_active = public_guard_requested and bool(
                         has_public_checks(question, req.doc.get("entry_point"))
                     )
@@ -807,6 +821,78 @@ class LLaDAEvalHarness(LM):
                                         baseline_evidence, parent_evidence
                                     )
                                 )
+                                tied_incomplete_public_evidence = (
+                                    guard_name == "parent"
+                                    and baseline_evidence["visible_checks_passed"]
+                                    == parent_evidence["visible_checks_passed"]
+                                    and parent_evidence["visible_checks_passed"]
+                                    < parent_evidence["visible_check_count"]
+                                    and baseline_evidence["compile_valid"]
+                                    and parent_evidence["compile_valid"]
+                                )
+                                if (
+                                    public_verifier_mode is not None
+                                    and tied_incomplete_public_evidence
+                                ):
+                                    (
+                                        verifier_scores,
+                                        verifier_disagreements,
+                                        verifier_nfe,
+                                        verifier_blocks,
+                                    ) = score_bidirectional_block_candidates(
+                                        self.model,
+                                        {
+                                            "parent": draft_candidate_token_ids[
+                                                parent_name
+                                            ],
+                                            "baseline": baseline_token_ids,
+                                        },
+                                        prompt_length=input_ids.shape[1],
+                                        block_length=self.block_length,
+                                        mask_id=self.mask_id,
+                                        candidate_names=("parent", "baseline"),
+                                    )
+                                    nfe += verifier_nfe
+                                    if self.show_speed:
+                                        num_nfe += verifier_nfe
+                                    mean_support = (
+                                        verifier_scores["baseline"]
+                                        > verifier_scores["parent"]
+                                    )
+                                    block_pareto_support = bool(verifier_blocks) and all(
+                                        block["candidate_scores"]["baseline"]
+                                        > block["candidate_scores"]["parent"]
+                                        for block in verifier_blocks
+                                    )
+                                    verifier_support = (
+                                        mean_support
+                                        if public_verifier_mode == "mean"
+                                        else mean_support and block_pareto_support
+                                    )
+                                    if verifier_support:
+                                        guard_name = "baseline"
+                                        public_guard_diagnostics["selected_name"] = (
+                                            "baseline"
+                                        )
+                                        public_guard_diagnostics["status"] = (
+                                            "public_tie_resolved_by_bidirectional_full_draft"
+                                        )
+                                    public_guard_diagnostics[
+                                        "full_draft_verifier"
+                                    ] = {
+                                        "version": "bidirectional_public_tie_v1",
+                                        "mode": public_verifier_mode,
+                                        "candidate_scores": verifier_scores,
+                                        "disagreement_token_count": verifier_disagreements,
+                                        "selector_nfe": verifier_nfe,
+                                        "block_count": len(verifier_blocks),
+                                        "mean_support": mean_support,
+                                        "block_pareto_support": block_pareto_support,
+                                        "selected_baseline": verifier_support,
+                                        "blocks": verifier_blocks,
+                                        "uses_hidden_tests": False,
+                                        "uses_reference_solution": False,
+                                    }
                         else:
                             guard_name, public_guard_diagnostics = (
                                 select_public_example_guard(
@@ -846,7 +932,9 @@ class LLaDAEvalHarness(LM):
                     else:
                         decode_diagnostics["public_example_guard"] = {
                             "selector": (
-                                "strict_public_example_guard_v3_lazy_exact"
+                                "strict_public_example_guard_plus_bidirectional_full_draft_v1"
+                                if public_verifier_mode is not None
+                                else "strict_public_example_guard_v3_lazy_exact"
                                 if lazy_public_guard_requested
                                 else "strict_public_example_guard_v2"
                             ),

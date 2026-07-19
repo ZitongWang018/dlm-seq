@@ -115,6 +115,16 @@ case "${profile}" in
     # identical strict public-check guard.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_lazy_public_guard"
     ;;
+  trajectory_public_full_draft_verifier)
+    # On an incomplete public-check tie, compare the two complete drafts by
+    # masking each disagreement block under both external draft contexts.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_public_verifier"
+    ;;
+  trajectory_public_pareto_verifier)
+    # Conservative ablation: the same full-draft verifier must favor baseline
+    # in the aggregate and in every active generation block.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_public_pareto_verifier"
+    ;;
   response_credit)
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_temporal_mode=response_credit,dependency_prune_stable_conflicts=False,dependency_fill_budget=False"
     ;;

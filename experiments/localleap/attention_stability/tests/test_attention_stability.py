@@ -120,6 +120,30 @@ def test_bidirectional_block_identical_paths_need_no_selector_forward():
     assert model.inputs == []
 
 
+def test_bidirectional_block_supports_named_public_guard_pair():
+    model = BidirectionalBlockModel()
+    scores, disagreements, nfe, blocks = score_bidirectional_block_candidates(
+        model,
+        {
+            "parent": torch.tensor([[9, 1, 2, 3, 4]]),
+            "baseline": torch.tensor([[9, 1, 4, 3, 6]]),
+        },
+        prompt_length=1,
+        block_length=2,
+        mask_id=7,
+        candidate_names=("parent", "baseline"),
+    )
+    assert set(scores) == {"parent", "baseline"}
+    assert scores["baseline"] > scores["parent"]
+    assert disagreements == 2
+    assert nfe == 2
+    assert all(
+        set(block["directional_candidate_scores"])
+        == {"parent", "baseline"}
+        for block in blocks
+    )
+
+
 def test_confirmed_block_requires_path_and_counterfactual_agreement():
     strong = {
         "fast": {"commit_logprob_mean": -0.20},
@@ -1043,6 +1067,7 @@ if __name__ == "__main__":
     test_confirmed_block_requires_path_and_counterfactual_agreement()
     test_bidirectional_block_masks_one_block_under_both_external_drafts()
     test_bidirectional_block_identical_paths_need_no_selector_forward()
+    test_bidirectional_block_supports_named_public_guard_pair()
     test_shared_skeleton_scores_both_paths_from_identical_context()
     test_shared_skeleton_tie_preserves_fast_without_extra_forward()
     test_high_dependency_positions_are_not_committed_together()
@@ -1078,4 +1103,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("41 selector tests passed")
+    print("42 selector tests passed")
