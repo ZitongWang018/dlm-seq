@@ -115,6 +115,11 @@ case "${profile}" in
     # identical strict public-check guard.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=confirmed_bidirectional_lazy_public_guard"
     ;;
+  trajectory_early_lazy_confirmed_public_guard)
+    [[ "${steps}" == "128" && "${block_length}" == "32" ]] || {
+      echo "trajectory_early_lazy_confirmed_public_guard requires steps=128 block_length=32" >&2; exit 2; }
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=early_confirmed_bidirectional_lazy_public_guard"
+    ;;
   trajectory_public_full_draft_verifier)
     # On an incomplete public-check tie, compare the two complete drafts by
     # masking each disagreement block under both external draft contexts.

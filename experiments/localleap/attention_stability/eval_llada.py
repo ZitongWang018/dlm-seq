@@ -269,6 +269,7 @@ class LLaDAEvalHarness(LM):
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
             "confirmed_bidirectional_lazy_public_guard",
+            "early_confirmed_bidirectional_lazy_public_guard",
             "confirmed_bidirectional_public_verifier",
             "confirmed_bidirectional_public_pareto_verifier",
             "confirmed_bidirectional_outcome_arbiter",
@@ -282,6 +283,7 @@ class LLaDAEvalHarness(LM):
                 "early_confirmed_bidirectional_block, or "
                 "confirmed_bidirectional_public_guard, or "
                 "confirmed_bidirectional_lazy_public_guard, "
+                "early_confirmed_bidirectional_lazy_public_guard, "
                 "confirmed_bidirectional_public_verifier, or "
                 "confirmed_bidirectional_public_pareto_verifier, or "
                 "confirmed_bidirectional_outcome_arbiter"
@@ -595,6 +597,7 @@ class LLaDAEvalHarness(LM):
                     public_guard_requested = requested_selection_mode in {
                         "confirmed_bidirectional_public_guard",
                         "confirmed_bidirectional_lazy_public_guard",
+                        "early_confirmed_bidirectional_lazy_public_guard",
                         "confirmed_bidirectional_public_verifier",
                         "confirmed_bidirectional_public_pareto_verifier",
                     }
@@ -612,13 +615,19 @@ class LLaDAEvalHarness(LM):
                     public_guard_active = public_guard_requested and bool(
                         has_public_checks(question, req.doc.get("entry_point"))
                     )
-                    effective_selection_mode = (
-                        "confirmed_bidirectional_block"
-                        if outcome_arbiter_requested
-                        or lazy_public_guard_requested
-                        or (public_guard_requested and not public_guard_active)
-                        else requested_selection_mode
-                    )
+                    if (
+                        requested_selection_mode
+                        == "early_confirmed_bidirectional_lazy_public_guard"
+                    ):
+                        effective_selection_mode = (
+                            "early_confirmed_bidirectional_block"
+                        )
+                    elif outcome_arbiter_requested or lazy_public_guard_requested or (
+                        public_guard_requested and not public_guard_active
+                    ):
+                        effective_selection_mode = "confirmed_bidirectional_block"
+                    else:
+                        effective_selection_mode = requested_selection_mode
                     generated_answer, nfe, decode_diagnostics = (
                         generate_trajectory_likelihood_selection(
                             self.model,
@@ -948,6 +957,9 @@ class LLaDAEvalHarness(LM):
                             "selector": (
                                 "strict_public_example_guard_plus_bidirectional_full_draft_v1"
                                 if public_verifier_mode is not None
+                                else "strict_public_example_guard_v4_admissible_lazy_exact"
+                                if requested_selection_mode
+                                == "early_confirmed_bidirectional_lazy_public_guard"
                                 else "strict_public_example_guard_v3_lazy_exact"
                                 if lazy_public_guard_requested
                                 else "strict_public_example_guard_v2"

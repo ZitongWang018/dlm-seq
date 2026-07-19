@@ -1,0 +1,32 @@
+{
+  "version": "admissible_lazy_guard_preregistration_v1",
+  "method": "early_confirmed_bidirectional_lazy_public_guard",
+  "formal_parent": "v11 strict public-example guard over v9 confirmed bidirectional block",
+  "claim": "exact parent outputs with reduced NFE",
+  "new_hyperparameters": [],
+  "early_abort_rule": "During the accuracy trajectory, assume every uncommitted token can attain log-probability 0. Abort only when that optimistic final mean still cannot exceed fast_mean + 1/block_length, making the existing strict one-nat selector condition impossible.",
+  "public_guard_rule": "Retain v12 exact lazy behavior: generate original LLaDA only when the selected v9 parent does not pass every prompt-visible check.",
+  "quick_gate": {
+    "humaneval_indices": [0, 32],
+    "gsm8k_indices": [0, 64],
+    "requirements": [
+      "exact decoded generations",
+      "matching prompt and target hashes",
+      "no residual masks or identity defects",
+      "strictly lower aggregate NFE"
+    ]
+  },
+  "formal_if_gate_passes": {
+    "humaneval_indices": [0, 164],
+    "math500_indices": [0, 50],
+    "mbpp_indices": [0, 100],
+    "gsm8k_reuses_quick_full_64": true
+  },
+  "prohibitions": [
+    "no hidden tests or reference solutions in selection",
+    "no token-level trajectory splicing",
+    "no fitted confidence or task-specific threshold",
+    "no output repair",
+    "no overwrite of parent results"
+  ]
+}
