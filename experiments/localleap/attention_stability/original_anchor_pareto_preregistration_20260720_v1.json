@@ -1,0 +1,59 @@
+{
+  "preregistration_version": "original_anchor_pareto_v20_20260720_v1",
+  "registered_at": "2026-07-20T04:05:00+08:00",
+  "method_profile": "trajectory_original_anchor_pareto",
+  "single_algorithm": true,
+  "task_specific_routing": false,
+  "parentage": {
+    "anchor": "original LLaDA low-confidence, steps=128, gen_length=256, block_length=32",
+    "explorer": "one conservative symmetric-attention accuracy trajectory, tau=0.004, no forced budget fill",
+    "why_not_v15_only": "fresh same-host GSM8K showed that fast/accuracy-only selection lacks the original trajectory and regresses despite substantial candidate-oracle headroom"
+  },
+  "one_rule": {
+    "horizontal": "generate exactly one original anchor and one symmetric accuracy explorer",
+    "vertical": "for every block containing final-token disagreements, mask only those disagreements and score both complete alternatives once under the anchor external context and once under the explorer external context",
+    "selection": "select the explorer only if its aggregate disagreement log-probability is strictly higher in both external contexts; otherwise return the complete original anchor",
+    "tie_break": "original anchor",
+    "new_tuned_thresholds": "none",
+    "token_splicing": false,
+    "task_execution_selection": false,
+    "answer_extraction_selection": false
+  },
+  "information_contract": {
+    "allowed": [
+      "prompt token ids",
+      "model logits",
+      "attention-derived symmetric dependency",
+      "the two generated draft token sequences"
+    ],
+    "forbidden": [
+      "raw or normalized gold answers",
+      "reference solutions",
+      "correctness labels",
+      "hidden tests",
+      "prompt-visible test execution",
+      "task name or benchmark-specific routing",
+      "post-generation benchmark outcomes"
+    ]
+  },
+  "development_status": {
+    "all_public_benchmarks": "repeated-use development data; no slice is claimed as an independent clean holdout",
+    "gsm8k_full1319": "already consumed by the v15 failure and post-hoc candidate-coverage audit before this registration",
+    "human_eval_0_31": "rapid development gate",
+    "gsm8k_0_63": "rapid development gate",
+    "math500_0_49": "rapid development gate",
+    "mbpp_0_99": "rapid development gate"
+  },
+  "rapid_gate": {
+    "stage_one": "HumanEval-32 must strictly beat a freshly generated original baseline with positive paired balance; GSM8K-64 must not regress against the fresh same-host original baseline",
+    "stage_two": "MATH-50 and MBPP-100 must each not regress against fresh same-host original baselines",
+    "aggregate": "the four development slices must have a strict aggregate correct-count gain, clean stable ids, prompt/target hashes, zero residual masks, and total NFE no more than 2.50x original",
+    "failure": "reject without inspecting any additional candidate outputs or changing this registered rule"
+  },
+  "strict_confirmation": {
+    "trigger": "only after every rapid gate passes",
+    "protocol": "fresh simultaneous baseline and exactly this one candidate on HumanEval-164, MATH-500, GSM8K-1319, and MBPP-500; alternating GPU assignment; separate fixed-NFE fast comparator",
+    "acceptance": "per-task accuracy non-regression and strict aggregate correct-count gain with runtime token-input, source, evaluator, prompt, target, id, mask, NFE, offline-artifact, model-weight, and leakage audits",
+    "interpretation": "confirmatory reuse of public benchmarks, not a clean hidden holdout"
+  }
+}

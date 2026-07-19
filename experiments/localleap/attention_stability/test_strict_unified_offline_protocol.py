@@ -19,9 +19,13 @@ class StrictUnifiedOfflineProtocolTests(unittest.TestCase):
         ).read_text()
         v19_check = 'if [[ -e "${v19_queue}/ACCEPTED" ]]'
         v18_check = 'elif [[ -e "${v18_queue}/ACCEPTED" ]]'
+        v20_check = 'elif [[ -e "${v20_queue}/ACCEPTED" ]]'
         self.assertIn(v19_check, controller)
         self.assertIn(v18_check, controller)
+        self.assertIn(v20_check, controller)
         self.assertLess(controller.index(v19_check), controller.index(v18_check))
+        self.assertLess(controller.index(v18_check), controller.index(v20_check))
+        self.assertNotIn("no_new_repair_passed_retain_v15_v11_family", controller)
 
     def test_runtime_capture_hashes_exact_token_ids_and_chat_text(self):
         from eval_llada import build_runtime_input_record

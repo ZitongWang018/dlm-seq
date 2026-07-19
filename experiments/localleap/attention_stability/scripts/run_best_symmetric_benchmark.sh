@@ -88,6 +88,12 @@ case "${profile}" in
     # horizontal skeleton, and verify both alternatives in one common forward.
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=shared_skeleton"
     ;;
+  trajectory_original_anchor_pareto)
+    # One original low-confidence anchor plus one symmetric accuracy explorer.
+    # Replace the anchor only when the explorer strictly wins under both full
+    # external draft contexts; ties and incomparable evidence keep original.
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=original_anchor_pareto"
+    ;;
   trajectory_bidirectional_block)
     # Preserve each complete draft outside one existing generation block,
     # mask only that block's disagreements, and average scores under both

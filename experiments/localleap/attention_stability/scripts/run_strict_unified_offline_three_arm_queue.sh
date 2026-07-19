@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-strict_root=${STRICT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v5}
+strict_root=${STRICT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v6}
 v15_root=${V15_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
 v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v2}
 v19_root=${V19_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v3}
+v20_root=${V20_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_original_anchor_pareto_v20}
 v18_id=${V18_ID:-early_localized_evidence_conflict_repair_20260719_v2}
 v19_id=${V19_ID:-sparse_context_repair_direct_20260720_v3}
-queue_id=${ATTENTION_QUEUE_ID:-strict_unified_offline_three_arm_20260720_v5}
+v20_id=${V20_ID:-original_anchor_pareto_rapid_20260720_v1}
+queue_id=${ATTENTION_QUEUE_ID:-strict_unified_offline_three_arm_20260720_v6}
 queue_root=${strict_root}/results/experiment_queues/${queue_id}
 run_base=${strict_root}/results/best_symmetric_benchmarks/${queue_id}
 v18_queue=${v18_root}/results/experiment_queues/${v18_id}
 v19_queue=${v19_root}/results/experiment_queues/${v19_id}
+v20_queue=${v20_root}/results/experiment_queues/${v20_id}
 model_path=${MODEL_PATH:-/root/autodl-tmp/model/LLaDA/instruct}
 
 controller=${strict_root}/scripts/run_strict_unified_offline_three_arm_queue.sh
@@ -24,7 +27,7 @@ offline_preflight=${strict_root}/offline_dataset_preflight.py
 leakage_auditor=${strict_root}/audit_generation_leakage_v2.py
 mbpp_auditor=${strict_root}/audit_mbpp_assertions.py
 finalizer=${strict_root}/finalize_unified_offline_protocol.py
-preregistration=${strict_root}/strict_unified_preregistration_20260720_v1.json
+preregistration=${strict_root}/strict_unified_preregistration_20260720_v2.json
 manifest=${queue_root}/formal_manifest.tsv
 source_manifest=${queue_root}/frozen_sources.sha256
 offline_manifest=${queue_root}/protocol/offline_artifacts.json
@@ -55,7 +58,7 @@ if [[ ! -s "${source_manifest}" ]]; then
       scripts/run_best_symmetric_benchmark.sh \
       scripts/run_strict_unified_offline_three_arm_queue.sh \
       test_strict_unified_offline_protocol.py \
-      strict_unified_preregistration_20260720_v1.json ) >"${source_manifest}"
+      strict_unified_preregistration_20260720_v2.json ) >"${source_manifest}"
 fi
 verify_sources() { ( cd "${strict_root}" && sha256sum -c "${source_manifest}" >/dev/null ); }
 append_manifest() { printf '%s\n' "$1" >>"${manifest}"; }
@@ -168,10 +171,10 @@ run_stage model_weight_manifest bash -c \
 run_stage leakage_static /root/miniconda3/bin/python "${leakage_auditor}" \
   --source-root "${strict_root}" --output "${queue_root}/protocol/leakage_static.json"
 
-echo "waiting_for_v19_terminal=${v19_queue}"
-wait_terminal "${v19_queue}"
-[[ -e "${v19_queue}/DONE" && ! -e "${v19_queue}/FAILED" ]] || {
-  touch "${queue_root}/BLOCKED_V19_PIPELINE_FAILURE"; exit 22; }
+echo "waiting_for_v20_handoff_terminal=${v20_queue}"
+wait_terminal "${v20_queue}"
+[[ -e "${v20_queue}/DONE" && ! -e "${v20_queue}/FAILED" ]] || {
+  touch "${queue_root}/BLOCKED_V20_PIPELINE_FAILURE"; exit 22; }
 
 if [[ -e "${v19_queue}/ACCEPTED" ]]; then
   candidate_profile=trajectory_early_sparse_context_repair
@@ -181,10 +184,15 @@ elif [[ -e "${v18_queue}/ACCEPTED" ]]; then
   candidate_profile=trajectory_early_localized_evidence_conflict_repair
   candidate_family=v18_early_localized_evidence_conflict_repair
   selection_reason=v18_passed_preregistered_unified_full4_gate
+elif [[ -e "${v20_queue}/ACCEPTED" ]]; then
+  candidate_profile=trajectory_original_anchor_pareto
+  candidate_family=v20_original_anchor_pareto
+  selection_reason=v20_passed_preregistered_four_task_rapid_gate
 else
-  candidate_profile=trajectory_early_lazy_confirmed_public_guard
-  candidate_family=v15_admissible_exact_speed_v11_family
-  selection_reason=no_new_repair_passed_retain_v15_v11_family
+  printf 'reason=no_candidate_passed_cross_task_gate\nfinished=%s\n' \
+    "$(date --iso-8601=seconds)" >"${queue_root}/NO_UNIFIED_CANDIDATE"
+  touch "${queue_root}/DONE"
+  exit 0
 fi
 printf 'candidate_profile\t%s\ncandidate_family\t%s\nselection_reason\t%s\nselected_at\t%s\n' \
   "${candidate_profile}" "${candidate_family}" "${selection_reason}" \

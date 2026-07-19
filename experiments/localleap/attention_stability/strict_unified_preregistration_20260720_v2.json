@@ -1,0 +1,52 @@
+{
+  "schema": "strict_unified_three_arm_preregistration_v2",
+  "registered_at": "2026-07-20T04:10:00+08:00",
+  "objective": "Fresh, offline, same-freeze evaluation of exactly one globally selected algorithm against original low-confidence and a separate symmetric_fast comparator on all four benchmarks.",
+  "candidate_selection_order": [
+    "trajectory_early_sparse_context_repair if v19 passes its preregistered cross-task gate",
+    "trajectory_early_localized_evidence_conflict_repair if v18 passes its preregistered cross-task gate",
+    "trajectory_original_anchor_pareto if v20 passes its preregistered four-task rapid gate",
+    "no strict candidate run when every registered candidate is rejected"
+  ],
+  "removed_fallback": "v15 is not eligible because its fresh same-host GSM8K full result regressed from 915/1319 to 887/1319; a known rejected family must not consume a new strict four-task run",
+  "single_algorithm": true,
+  "task_specific_routing": false,
+  "protocol": {
+    "model": "LLaDA-8B-Instruct local frozen checkpoint",
+    "steps": 128,
+    "gen_length": 256,
+    "block_length": 32,
+    "temperature": 0.0,
+    "fewshot": {
+      "humaneval": 0,
+      "math500": 0,
+      "gsm8k": 0,
+      "mbpp": 0
+    },
+    "seeds": [0, 1234, 1234, 1234],
+    "offline_only": true
+  },
+  "arms": {
+    "baseline": "fresh original low-confidence",
+    "candidate": "one selected task-unified profile",
+    "fast_comparator": "fresh symmetric_fast tau=0.004; comparator only and never a routing component"
+  },
+  "acceptance": {
+    "candidate": "no benchmark regression and strict aggregate correct-count gain across HumanEval-164, MATH-500, GSM8K-1319, and MBPP-500",
+    "integrity": "zero prompt/target/runtime-token/id/evaluator mismatches, clean residual masks and NFE, leakage-v2 pass, offline artifact and complete model-weight hashes unchanged",
+    "failure": "preserve all outputs, label algorithm and evaluator/infrastructure failures separately, and do not substitute another algorithm after seeing strict results"
+  },
+  "fairness": {
+    "all_arms_fresh_after_one_pre_run_artifact_manifest": true,
+    "runtime_model_input_ids_are_hashed_inside_generate_until": true,
+    "baseline_and_candidate_run_simultaneously_per_task": true,
+    "candidate_gpu_assignment_is_balanced_across_tasks": true,
+    "fast_wall_time_is_diagnostic_only": true,
+    "paper_values_are_separate_from_local_arms": true
+  },
+  "leakage_scope": {
+    "hidden_answers_or_hidden_tests_may_not_enter_generation_or_selection": true,
+    "benchmark_reuse_is_reported_as_selection_bias_not_clean_holdout": true,
+    "candidate_profile_is_frozen_before_strict_generation": true
+  }
+}

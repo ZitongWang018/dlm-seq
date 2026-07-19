@@ -1287,6 +1287,187 @@ def select_context_ambiguous_positions(block_record, parent_name):
     return frontier
 
 
+def select_original_anchor_pareto(block_records):
+    """Leave the original anchor only under two-context Pareto dominance.
+
+    Each disagreement token has already been scored under the complete anchor
+    draft and the complete explorer draft by ``score_bidirectional_block_candidates``.
+    The explorer may replace the original low-confidence trajectory only when
+    its aggregate log-probability is strictly larger in both external contexts.
+    This is deliberately threshold-free and ties preserve the original decoder.
+    """
+    if not block_records:
+        return "anchor", {
+            "directional_score_deltas": None,
+            "pareto_dominates_anchor": False,
+            "disagreement_token_count": 0,
+        }
+
+    names = ("anchor", "explorer")
+    weighted_scores = {
+        candidate: {context: 0.0 for context in names}
+        for candidate in names
+    }
+    total = 0
+    for record in block_records:
+        count = int(record["disagreement_token_count"])
+        if count <= 0:
+            raise ValueError("anchor Pareto records require positive disagreement counts")
+        directional = record.get("directional_candidate_scores")
+        if not isinstance(directional, dict):
+            raise ValueError("anchor Pareto records require directional scores")
+        for candidate in names:
+            if set(directional.get(candidate, {})) != set(names):
+                raise ValueError("anchor Pareto candidate/context names do not align")
+            for context in names:
+                weighted_scores[candidate][context] += (
+                    count * float(directional[candidate][context])
+                )
+        total += count
+
+    directional_means = {
+        candidate: {
+            context: weighted_scores[candidate][context] / total
+            for context in names
+        }
+        for candidate in names
+    }
+    deltas = {
+        context: (
+            directional_means["explorer"][context]
+            - directional_means["anchor"][context]
+        )
+        for context in names
+    }
+    dominates = all(delta > 0.0 for delta in deltas.values())
+    return ("explorer" if dominates else "anchor"), {
+        "directional_candidate_scores": directional_means,
+        "directional_score_deltas": deltas,
+        "pareto_dominates_anchor": bool(dominates),
+        "disagreement_token_count": int(total),
+    }
+
+
+@torch.no_grad()
+def generate_original_anchor_pareto(
+    model,
+    prompt,
+    dependency_threshold,
+    steps=128,
+    gen_length=128,
+    block_length=128,
+    temperature=0.0,
+    remasking="low_confidence",
+    mask_id=126336,
+    eos_id=126081,
+    early_stop=False,
+    collect_step_diagnostics=False,
+    dependency_mode="symmetric",
+    temporal_mode="top1",
+    temporal_topk=4,
+):
+    """Cross-verify one symmetric explorer against original LLaDA.
+
+    The horizontal axis contains exactly two complete trajectories: the
+    original low-confidence decoder and the conservative symmetric-attention
+    accuracy decoder.  The vertical axis masks only their disagreements one
+    block at a time and scores both alternatives under both complete external
+    drafts.  No task metadata, answer extraction, test execution, or token
+    splicing participates in selection.
+    """
+    anchor_x, anchor_nfe = generate(
+        model=model,
+        prompt=prompt,
+        steps=steps,
+        gen_length=gen_length,
+        block_length=block_length,
+        temperature=temperature,
+        remasking=remasking,
+        mask_id=mask_id,
+        eos_id=eos_id,
+        early_stop=early_stop,
+    )
+    explorer_x, explorer_nfe, explorer_summary = generate_attention_stability(
+        model=model,
+        prompt=prompt,
+        dependency_threshold=dependency_threshold,
+        steps=steps,
+        gen_length=gen_length,
+        block_length=block_length,
+        temperature=temperature,
+        remasking=remasking,
+        mask_id=mask_id,
+        eos_id=eos_id,
+        early_stop=early_stop,
+        collect_step_diagnostics=collect_step_diagnostics,
+        dependency_mode=dependency_mode,
+        temporal_mode=temporal_mode,
+        temporal_topk=temporal_topk,
+        prune_stable_conflicts=False,
+        fill_budget=False,
+    )
+    candidate_ids = {"anchor": anchor_x, "explorer": explorer_x}
+    scores, disagreements, selector_nfe, block_records = (
+        score_bidirectional_block_candidates(
+            model,
+            candidate_ids,
+            prompt_length=prompt.shape[1],
+            block_length=block_length,
+            mask_id=mask_id,
+            candidate_names=("anchor", "explorer"),
+        )
+    )
+    selected_name, pareto = select_original_anchor_pareto(block_records)
+    selected_steps = (
+        explorer_summary.pop("_step_records", None)
+        if selected_name == "explorer"
+        else None
+    )
+    summary = {
+        "decoder": "trajectory_original_anchor_pareto_v20",
+        "selection_rule": "strict_two_context_pareto_or_original_anchor",
+        "selection_mode": "original_anchor_pareto",
+        "selected_name": selected_name,
+        "selected_score": (
+            min(pareto["directional_score_deltas"].values())
+            if pareto["directional_score_deltas"] is not None
+            else 0.0
+        ),
+        "candidate_scores": scores,
+        "disagreement_token_count": int(disagreements),
+        "scored_disagreement_token_count": int(disagreements),
+        "original_anchor_pareto": {
+            **pareto,
+            "selector_nfe": int(selector_nfe),
+            "blocks": block_records,
+            "uses_hidden_tests": False,
+            "uses_reference_solution": False,
+            "uses_task_routing": False,
+            "token_splicing": False,
+        },
+        "candidate_nfe": {
+            "anchor": int(anchor_nfe),
+            "explorer": int(explorer_nfe),
+            "bidirectional_block_selector": int(selector_nfe),
+        },
+        "candidate_summaries": {
+            "anchor": {
+                "decoder": "original_llada_low_confidence",
+                "nfe": int(anchor_nfe),
+            },
+            "explorer": explorer_summary,
+        },
+        "_trajectory_candidate_token_ids": candidate_ids,
+    }
+    if selected_steps is not None:
+        summary["_step_records"] = selected_steps
+    return (
+        candidate_ids[selected_name],
+        int(anchor_nfe + explorer_nfe + selector_nfe),
+        summary,
+    )
+
+
 @torch.no_grad()
 def generate_trajectory_likelihood_selection(
     model,
@@ -1312,6 +1493,24 @@ def generate_trajectory_likelihood_selection(
     conflicts.  Vertical evidence is the mean log confidence of tokens at the
     exact denoising step where each token becomes an explicit condition.
     """
+    if selection_mode == "original_anchor_pareto":
+        return generate_original_anchor_pareto(
+            model=model,
+            prompt=prompt,
+            dependency_threshold=dependency_threshold,
+            steps=steps,
+            gen_length=gen_length,
+            block_length=block_length,
+            temperature=temperature,
+            remasking=remasking,
+            mask_id=mask_id,
+            eos_id=eos_id,
+            early_stop=early_stop,
+            collect_step_diagnostics=collect_step_diagnostics,
+            dependency_mode=dependency_mode,
+            temporal_mode=temporal_mode,
+            temporal_topk=temporal_topk,
+        )
     shared = dict(
         model=model,
         prompt=prompt,

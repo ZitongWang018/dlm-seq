@@ -329,6 +329,7 @@ class LLaDAEvalHarness(LM):
             "localized_evidence_conflict_repair_lazy_public_guard",
             "early_localized_evidence_conflict_repair_lazy_public_guard",
             "early_sparse_context_repair_lazy_public_guard",
+            "original_anchor_pareto",
             "confirmed_bidirectional_public_verifier",
             "confirmed_bidirectional_public_pareto_verifier",
             "confirmed_bidirectional_outcome_arbiter",
@@ -346,6 +347,7 @@ class LLaDAEvalHarness(LM):
                 "localized_evidence_conflict_repair_lazy_public_guard, "
                 "early_localized_evidence_conflict_repair_lazy_public_guard, "
                 "early_sparse_context_repair_lazy_public_guard, "
+                "original_anchor_pareto, "
                 "confirmed_bidirectional_public_verifier, or "
                 "confirmed_bidirectional_public_pareto_verifier, or "
                 "confirmed_bidirectional_outcome_arbiter"

@@ -11,6 +11,7 @@ from generate import (
     select_confirmed_bidirectional_block,
     select_localized_conflict_block,
     select_context_ambiguous_positions,
+    select_original_anchor_pareto,
     commit_mean_cannot_reach_threshold,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
@@ -27,6 +28,112 @@ class SharedSkeletonModel:
         logits[0, 2, 4] = 4.0
         logits[0, 3, 5] = 4.0
         return type("Output", (), {"logits": logits})()
+
+
+def test_original_anchor_pareto_requires_both_external_contexts():
+    selected, diagnostics = select_original_anchor_pareto([
+        {
+            "disagreement_token_count": 2,
+            "directional_candidate_scores": {
+                "anchor": {"anchor": -2.0, "explorer": -2.5},
+                "explorer": {"anchor": -1.0, "explorer": -1.5},
+            },
+        },
+        {
+            "disagreement_token_count": 1,
+            "directional_candidate_scores": {
+                "anchor": {"anchor": -4.0, "explorer": -3.0},
+                "explorer": {"anchor": -3.0, "explorer": -2.0},
+            },
+        },
+    ])
+    assert selected == "explorer"
+    assert diagnostics["pareto_dominates_anchor"] is True
+    assert diagnostics["disagreement_token_count"] == 3
+    assert diagnostics["directional_score_deltas"]["anchor"] > 0
+    assert diagnostics["directional_score_deltas"]["explorer"] > 0
+
+    selected, diagnostics = select_original_anchor_pareto([
+        {
+            "disagreement_token_count": 1,
+            "directional_candidate_scores": {
+                "anchor": {"anchor": -1.0, "explorer": -3.0},
+                "explorer": {"anchor": -2.0, "explorer": -2.0},
+            },
+        }
+    ])
+    assert selected == "anchor"
+    assert diagnostics["pareto_dominates_anchor"] is False
+
+
+def test_original_anchor_pareto_tie_and_identity_keep_anchor():
+    selected, diagnostics = select_original_anchor_pareto([])
+    assert selected == "anchor"
+    assert diagnostics["directional_score_deltas"] is None
+    selected, diagnostics = select_original_anchor_pareto([
+        {
+            "disagreement_token_count": 1,
+            "directional_candidate_scores": {
+                "anchor": {"anchor": -1.0, "explorer": -1.0},
+                "explorer": {"anchor": -1.0, "explorer": -1.0},
+            },
+        }
+    ])
+    assert selected == "anchor"
+    assert diagnostics["pareto_dominates_anchor"] is False
+
+
+def test_original_anchor_pareto_mode_uses_only_anchor_and_one_explorer():
+    original_attention = generate_module.generate_attention_stability
+    original_generate = generate_module.generate
+    original_score = generate_module.score_bidirectional_block_candidates
+
+    def fake_anchor(**kwargs):
+        return torch.tensor([[9, 1, 2]]), 128
+
+    def fake_explorer(**kwargs):
+        assert kwargs["prune_stable_conflicts"] is False
+        assert kwargs["fill_budget"] is False
+        return torch.tensor([[9, 1, 4]]), 140, {
+            "decoder": "attention_stability_v1",
+            "residual_mask_count": 0,
+        }
+
+    def fake_score(model, candidate_ids, **kwargs):
+        assert set(candidate_ids) == {"anchor", "explorer"}
+        return {"anchor": -2.0, "explorer": -1.0}, 1, 1, [
+            {
+                "disagreement_token_count": 1,
+                "directional_candidate_scores": {
+                    "anchor": {"anchor": -2.0, "explorer": -3.0},
+                    "explorer": {"anchor": -1.0, "explorer": -2.0},
+                },
+            }
+        ]
+
+    generate_module.generate = fake_anchor
+    generate_module.generate_attention_stability = fake_explorer
+    generate_module.score_bidirectional_block_candidates = fake_score
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[9]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=2,
+            block_length=2,
+            selection_mode="original_anchor_pareto",
+        )
+    finally:
+        generate_module.generate = original_generate
+        generate_module.generate_attention_stability = original_attention
+        generate_module.score_bidirectional_block_candidates = original_score
+
+    assert output.tolist() == [[9, 1, 4]]
+    assert nfe == 269
+    assert summary["selected_name"] == "explorer"
+    assert summary["original_anchor_pareto"]["pareto_dominates_anchor"] is True
+    assert set(summary["_trajectory_candidate_token_ids"]) == {"anchor", "explorer"}
 
 
 def test_shared_skeleton_scores_both_paths_from_identical_context():
@@ -1386,6 +1493,9 @@ def test_revision_margin_prioritizes_decisive_conditioned_change():
 
 
 if __name__ == "__main__":
+    test_original_anchor_pareto_requires_both_external_contexts()
+    test_original_anchor_pareto_tie_and_identity_keep_anchor()
+    test_original_anchor_pareto_mode_uses_only_anchor_and_one_explorer()
     test_public_guard_mode_retains_baseline_candidate_for_external_guard()
     test_early_confirmed_mode_returns_fast_without_final_verifier()
     test_early_localized_repair_preserves_admissible_abort_exactly()
@@ -1433,4 +1543,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("47 selector tests passed")
+    print("50 selector tests passed")
