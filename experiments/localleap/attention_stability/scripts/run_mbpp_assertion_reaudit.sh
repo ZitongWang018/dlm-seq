@@ -63,7 +63,6 @@ if [[ ! -d "${output_root}/paired_vs_fast" ]]; then
     "${output_root}/method_n50/audit_records.jsonl" \
     --baseline-config "${fast_root}/run_config.txt" \
     --method-config "${method_root}/run_config.txt" \
-    --baseline-log "${fast_root}/run.log" --method-log "${method_root}/run.log" \
     --output-dir "${output_root}/paired_vs_fast"
 fi
 if [[ ! -d "${output_root}/paired_vs_base" ]]; then
@@ -72,7 +71,6 @@ if [[ ! -d "${output_root}/paired_vs_base" ]]; then
     "${output_root}/method_n50/audit_records.jsonl" \
     --baseline-config "${base_root}/run_config.txt" \
     --method-config "${method_root}/run_config.txt" \
-    --baseline-log "${base_root}/run.log" --method-log "${method_root}/run.log" \
     --output-dir "${output_root}/paired_vs_base"
 fi
 printf 'paired\tDONE\n' >>"${manifest}"
