@@ -195,6 +195,28 @@ HumanEval-32 and GSM8K-64 on both GPUs before HumanEval-164, MATH-50 and
 MBPP-100. The preregistered queue root is
 `/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard/results/experiment_queues/admissible_lazy_guard_20260719_v1`.
 
+V11's integrated MBPP-100 run is now formally audited with the versioned
+visible-assertion execution evaluator: 40/100. On the first 50 stable IDs,
+v11 is 22/50 versus v9 at 16/50 (six method-only, zero v9-only,
+`p=0.03125`) and original LLaDA at 18/50 (four method-only, zero
+baseline-only). Both execution implementations agree, and all ID,
+prompt/target hash, generation, NFE and residual-mask checks pass.
+
+Both v13 full-draft development variants finished at 18/32, exactly tied
+with v11 task by task. The Pareto variant reproduces all 32 v11 generations;
+the mean variant changes only HumanEval/19 without changing correctness.
+Their 11,254 NFE versus v11 replay's 13,266 is a 15.2% reduction, but the
+full-draft verifier adds no accuracy and is rejected before HumanEval-164.
+The formal v13 controller is stopped and will be marked skipped only after
+v12 completes, preserving the ordered queue boundary.
+
+The post-hoc MBPP hidden challenge audit was corrected in `ca9f2f1`: only
+11/50 records contain challenge tests, and v9, symmetric-fast and original
+LLaDA each pass 1/11. These hidden checks are reported separately and are
+never used for selection. Commit `d07effc` fixes v15's benchmark-runner
+contract, adds a persistent regression test, and restarts its still-unfrozen
+formal controller. V12 now owns both GPUs for exact-output speed validation.
+
 ## Deprecated (cleaned 2026-07-13)
 
 Trajectory / lateral-response / agreement / ceiling-bug evals were removed from `results/` (local + AutoDL `dlm-seq-flow`).  

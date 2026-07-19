@@ -222,3 +222,18 @@
   HumanEval-32 mean and Pareto full-draft screens sequentially on the otherwise
   idle GPU0 in a separate versioned prefill root. This does not alter the
   formal queue or reveal its registered holdout.
+- Completed the integrated v11 MBPP-100 assertion audit: 40/100. The aligned
+  first 50 are 22 for v11, 16 for v9, and 18 for original LLaDA; v11 has no
+  paired losses against either comparator. All audit health checks pass.
+- Rejected v13 as an accuracy branch. Mean and Pareto each score 18/32,
+  identical to v11 in correctness; Pareto is also generation-exact. It saves
+  2,012 NFE (15.2%) but contributes no new accuracy beyond the simpler lazy
+  guard, so its HumanEval-164 stage is skipped at the next safe boundary.
+- Corrected the hidden MBPP challenge audit to exclude 39 records with no
+  challenge tests and preserve imports through execution extraction. The 11
+  eligible records give 1/11 for v9, fast, and original; these checks remain
+  strictly post-hoc and are not tuning data.
+- Fixed v15's undefined `block_length` runner contract before model loading,
+  added an executable regression test, and committed it as `d07effc`. Its
+  optional smoke was interrupted when v12 automatically took both GPUs; the
+  formal v12 jobs were preserved to avoid same-GPU contention.
