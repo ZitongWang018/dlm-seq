@@ -1,0 +1,86 @@
+{
+  "preregistration_version": "early_localized_evidence_conflict_repair_v2",
+  "registered_at": "2026-07-19T22:36:00+08:00",
+  "method_profile": "trajectory_early_localized_evidence_conflict_repair",
+  "single_algorithm": true,
+  "parent": "v15 admissible early-confirmed bidirectional tau=0.004 plus strict prompt-visible public guard",
+  "one_change": {
+    "admissible_prefix": "retain v15's exact optimistic-bound early abort for the accuracy trajectory",
+    "trigger": "only after the accuracy trajectory completes, require exclusive disagreement between commit-path evidence and bidirectional full-draft verification",
+    "localization": "choose the single generation block with the largest verifier margin opposing path evidence",
+    "branch": "preserve the selected parent everywhere else; re-mask and top1-rediffuse only fast/accuracy disagreements inside that block",
+    "acceptance": "accept only when bidirectional parent-versus-repair verification strictly prefers the repaired draft",
+    "code_guard": "reject a repair that regresses prompt-visible checks or loses compile validity on a pass tie"
+  },
+  "early_abort_contract": {
+    "claim": "when v15 aborts the accuracy trajectory, v18 returns the same fast tokens and NFE and never invokes the verifier or repair",
+    "regression_test": "test_early_localized_repair_preserves_admissible_abort_exactly"
+  },
+  "queue_gate_audit": {
+    "superseded_gate": "HumanEval indices 0-31",
+    "reason": "only index 13 can trigger v18 in this prefix and its already-audited v15 result is correct, so a strict paired win is impossible by construction",
+    "correction": "run the complete repeated-use HumanEval-164 and MBPP-100 code-domain gate in parallel; do not choose examples by correctness",
+    "information_policy": "the correction changes scheduling only, not generation logic or its inputs, and does not inspect any candidate-frozen suffix label"
+  },
+  "offline_scope_audit": {
+    "source": "already-consumed v15 traces and their existing audited labels only; no new generation and no frozen-suffix correctness inspection",
+    "humaneval_164_repeated_use": {
+      "early_abort": "119/164",
+      "repair_trigger": "6/164",
+      "trigger_parent_correct": "3/6",
+      "localized_disagreements_mean": 30.5,
+      "localized_disagreements_max": 32
+    },
+    "math_0_49_consumed_dev": {
+      "early_abort": "34/50",
+      "repair_trigger": "3/50",
+      "trigger_parent_correct": "1/3",
+      "localized_disagreements_mean": 25.0,
+      "localized_disagreements_max": 32
+    },
+    "gsm8k_0_63_consumed_dev": {
+      "early_abort": "52/64",
+      "repair_trigger": "1/64",
+      "trigger_parent_correct": "0/1",
+      "localized_disagreements_mean": 31.0,
+      "localized_disagreements_max": 31
+    },
+    "mbpp_0_99_consumed_dev": {
+      "early_abort": "72/100",
+      "repair_trigger": "2/100",
+      "trigger_parent_correct_by_assertion_evaluator": "0/2",
+      "localized_disagreements_mean": 31.5,
+      "localized_disagreements_max": 32
+    }
+  },
+  "generation_inputs_allowed": [
+    "prompt tokens",
+    "model logits and attention-derived dependency",
+    "complete fast and non-aborted accuracy trajectory tokens",
+    "checks and examples literally present in the prompt"
+  ],
+  "generation_inputs_forbidden": [
+    "raw_gold",
+    "normalized_gold",
+    "reference solution",
+    "hidden tests",
+    "correctness labels",
+    "post-hoc benchmark outcomes"
+  ],
+  "data_lineage": {
+    "humaneval_0_163": "repeated-use exploratory evidence, not a clean holdout",
+    "math_0_49": "consumed development set",
+    "gsm8k_0_63": "consumed development set",
+    "mbpp_0_99": "consumed development set",
+    "math_50_499": "candidate-frozen suffix; no correctness inspected before freeze",
+    "gsm8k_64_1318": "candidate-frozen suffix; no correctness inspected before freeze",
+    "mbpp_100_499": "candidate-frozen suffix; no correctness inspected before freeze"
+  },
+  "rapid_gates": {
+    "code_domain_first_parallel": "HumanEval-164 must strictly win over v15; MBPP-100 must be non-regressive under the assertion evaluator; each total NFE no more than 1.05x v15",
+    "math_gsm_second_parallel": "MATH-50 and GSM8K-64 non-regressive individually, strict combined win, and each total NFE no more than 1.05x v15"
+  },
+  "formal_rule": "one unified profile on all four benchmarks; no task regression, strict aggregate accuracy gain, each task total NFE no more than 1.05x v15, clean identity/hash/mask/NFE audits",
+  "fallback": "retain the unified v15 exact-speed framework if any registered gate fails",
+  "freeze_contract": "queue records source commit and sha256 before any v18-v2 model stage starts; HumanEval is explicitly repeated-use and all suffix lineages remain frozen"
+}

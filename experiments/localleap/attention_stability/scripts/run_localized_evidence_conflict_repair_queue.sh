@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 
 source_root=${SOURCE_ROOT:-/root/autodl-tmp/dlm-seq-flow/experiments/localleap/attention_stability}
-llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair}
+llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v2}
 parent_root=${PARENT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
 parent_queue_id=${PARENT_QUEUE_ID:-best_framework_full4_20260719_v1}
-queue_id=${ATTENTION_QUEUE_ID:-early_localized_evidence_conflict_repair_20260719_v1}
+queue_id=${ATTENTION_QUEUE_ID:-early_localized_evidence_conflict_repair_20260719_v2}
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
 run_base=${llada_root}/results/best_symmetric_benchmarks/${queue_id}
 parent_queue=${parent_root}/results/experiment_queues/${parent_queue_id}
@@ -104,7 +104,7 @@ if [[ ! -s "${frozen}" ]]; then
   sha256sum generate.py eval_llada.py differential_selector.py \
     run_best_symmetric_benchmark.sh compare_paired_task_runs.py \
     audit_generation_leakage.py audit_mbpp_assertions.py slice_audit_records.py \
-    early_localized_evidence_conflict_repair_preregistration_20260719.json \
+    early_localized_evidence_conflict_repair_preregistration_20260719_v2.json \
     tests/test_attention_stability.py tests/test_differential_selector.py \
     "${controller}" >"${frozen}"
 fi
@@ -129,56 +129,11 @@ done
 
 mkdir -p "${queue_root}/parents"
 /root/miniconda3/bin/python slice_audit_records.py \
-  "$(records "${parent_he}")" "${queue_root}/parents/he_dev32.jsonl" --start 0 --end 32
-/root/miniconda3/bin/python slice_audit_records.py \
   "$(records "${parent_math}")" "${queue_root}/parents/math_dev50.jsonl" --start 0 --end 50
 /root/miniconda3/bin/python slice_audit_records.py \
   "$(records "${parent_gsm}")" "${queue_root}/parents/gsm_dev64.jsonl" --start 0 --end 64
 
 profile=trajectory_early_localized_evidence_conflict_repair
-run_gpu he_v18_dev32 0 "${runner}" humaneval 0 128 \
-  "${profile}" 0.004 trace he_v18_dev32 32 256
-he_dev=${run_base}/humaneval/he_v18_dev32
-compare_pair he_dev32 "${queue_root}/parents/he_dev32.jsonl" "$(records "${he_dev}")" \
-  "${parent_he}/run_config.txt" "${he_dev}/run_config.txt"
-if ! /root/miniconda3/bin/python - "${queue_root}/paired/he_dev32/paired_summary.json" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1]))
-assert x["method_correct"] > x["baseline_correct"], x
-assert x["method_only"] > x["baseline_only"], x
-assert x["prompt_hash_mismatches"] == 0 and x["target_hash_mismatches"] == 0, x
-assert x["duplicate_or_missing_ids"] == 0, x
-assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], x
-PY
-then reject "he_dev32_gate"; fi
-touch "${queue_root}/HE_GATE_PASS"
-
-( run_gpu math_v18_dev50 0 "${runner}" localleap_math500 0 128 \
-    "${profile}" 0.004 trace math_v18_dev50 50 256 ) & p0=$!
-( run_gpu gsm_v18_dev64 1 "${runner}" gsm8k 0 128 \
-    "${profile}" 0.004 trace gsm_v18_dev64 64 256 ) & p1=$!
-wait "${p0}"; wait "${p1}"
-math_dev=${run_base}/localleap_math500/math_v18_dev50
-gsm_dev=${run_base}/gsm8k/gsm_v18_dev64
-compare_pair math_dev50 "${queue_root}/parents/math_dev50.jsonl" "$(records "${math_dev}")" \
-  "${parent_math}/run_config.txt" "${math_dev}/run_config.txt"
-compare_pair gsm_dev64 "${queue_root}/parents/gsm_dev64.jsonl" "$(records "${gsm_dev}")" \
-  "${parent_gsm}/run_config.txt" "${gsm_dev}/run_config.txt"
-if ! /root/miniconda3/bin/python - \
-  "${queue_root}/paired/math_dev50/paired_summary.json" \
-  "${queue_root}/paired/gsm_dev64/paired_summary.json" <<'PY'
-import json,sys
-rows=[json.load(open(p)) for p in sys.argv[1:]]
-assert all(x["method_correct"] >= x["baseline_correct"] for x in rows), rows
-assert sum(x["method_correct"] for x in rows) > sum(x["baseline_correct"] for x in rows), rows
-for x in rows:
-    assert x["prompt_hash_mismatches"] == 0 and x["target_hash_mismatches"] == 0, x
-    assert x["duplicate_or_missing_ids"] == 0, x
-    assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], x
-PY
-then reject "math_gsm_development_gate"; fi
-touch "${queue_root}/CROSS_TASK_GATE_PASS"
-
 ( run_gpu he_v18_full164 0 "${runner}" humaneval 0 128 \
     "${profile}" 0.004 trace he_v18_full164 164 256 ) & p0=$!
 ( run_gpu mbpp_v18_dev100 1 "${runner}" mbpp 0 128 \
@@ -210,8 +165,34 @@ for x in (he,mbpp):
     assert x["duplicate_or_missing_ids"] == 0, x
     assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], x
 PY
-then reject "he_full_or_mbpp_gate"; fi
-touch "${queue_root}/FULL_PROMOTION_PASS"
+then reject "code_domain_gate"; fi
+touch "${queue_root}/CODE_DOMAIN_GATE_PASS"
+
+( run_gpu math_v18_dev50 0 "${runner}" localleap_math500 0 128 \
+    "${profile}" 0.004 trace math_v18_dev50 50 256 ) & p0=$!
+( run_gpu gsm_v18_dev64 1 "${runner}" gsm8k 0 128 \
+    "${profile}" 0.004 trace gsm_v18_dev64 64 256 ) & p1=$!
+wait "${p0}"; wait "${p1}"
+math_dev=${run_base}/localleap_math500/math_v18_dev50
+gsm_dev=${run_base}/gsm8k/gsm_v18_dev64
+compare_pair math_dev50 "${queue_root}/parents/math_dev50.jsonl" "$(records "${math_dev}")" \
+  "${parent_math}/run_config.txt" "${math_dev}/run_config.txt"
+compare_pair gsm_dev64 "${queue_root}/parents/gsm_dev64.jsonl" "$(records "${gsm_dev}")" \
+  "${parent_gsm}/run_config.txt" "${gsm_dev}/run_config.txt"
+if ! /root/miniconda3/bin/python - \
+  "${queue_root}/paired/math_dev50/paired_summary.json" \
+  "${queue_root}/paired/gsm_dev64/paired_summary.json" <<'PY'
+import json,sys
+rows=[json.load(open(p)) for p in sys.argv[1:]]
+assert all(x["method_correct"] >= x["baseline_correct"] for x in rows), rows
+assert sum(x["method_correct"] for x in rows) > sum(x["baseline_correct"] for x in rows), rows
+for x in rows:
+    assert x["prompt_hash_mismatches"] == 0 and x["target_hash_mismatches"] == 0, x
+    assert x["duplicate_or_missing_ids"] == 0, x
+    assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], x
+PY
+then reject "math_gsm_development_gate"; fi
+touch "${queue_root}/CROSS_TASK_GATE_PASS" "${queue_root}/FULL_PROMOTION_PASS"
 
 ( run_gpu math_v18_full500 0 "${runner}" localleap_math500 0 128 \
     "${profile}" 0.004 trace math_v18_full500
@@ -247,7 +228,7 @@ for name,x in rows.items():
     assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], (name,x)
 assert sum(x["method_correct"] for x in rows.values()) > sum(x["baseline_correct"] for x in rows.values()), rows
 summary={
-    "schema":"early_localized_evidence_conflict_repair_full4_v1",
+    "schema":"early_localized_evidence_conflict_repair_full4_v2",
     "single_algorithm":True,
     "profile":"trajectory_early_localized_evidence_conflict_repair",
     "accepted":True,
