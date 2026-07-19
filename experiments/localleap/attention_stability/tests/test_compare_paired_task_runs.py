@@ -54,6 +54,22 @@ class PairedAuditTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "source hash mismatch"):
                 MODULE.verify_matching_source_hashes(baseline, method)
 
+    def test_source_comparison_reports_cross_version_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            baseline = Path(directory) / "baseline.txt"
+            method = Path(directory) / "method.txt"
+            baseline.write_text(
+                f"{'a' * 64}  generate.py\n{'b' * 64}  eval_llada.py\n"
+            )
+            method.write_text(
+                f"{'c' * 64}  generate.py\n{'b' * 64}  eval_llada.py\n"
+            )
+            comparison = MODULE.compare_source_hashes(baseline, method)
+            self.assertEqual(comparison["mismatches"], ["generate.py"])
+            self.assertEqual(
+                comparison["common"], ["eval_llada.py", "generate.py"]
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

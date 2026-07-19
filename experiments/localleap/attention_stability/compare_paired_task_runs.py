@@ -76,14 +76,25 @@ def config_source_hashes(path):
     return hashes
 
 
-def verify_matching_source_hashes(baseline_config, method_config):
+def compare_source_hashes(baseline_config, method_config):
     baseline = config_source_hashes(baseline_config)
     method = config_source_hashes(method_config)
     common = sorted(set(baseline) & set(method))
     mismatches = [name for name in common if baseline[name] != method[name]]
+    return {
+        "common": common,
+        "mismatches": mismatches,
+        "baseline_only": sorted(set(baseline) - set(method)),
+        "method_only": sorted(set(method) - set(baseline)),
+    }
+
+
+def verify_matching_source_hashes(baseline_config, method_config):
+    comparison = compare_source_hashes(baseline_config, method_config)
+    mismatches = comparison["mismatches"]
     if mismatches:
         raise ValueError(f"source hash mismatch: {mismatches}")
-    return common
+    return comparison["common"]
 
 
 def log_metrics(path):
@@ -113,14 +124,27 @@ def main():
     parser.add_argument("--baseline-log")
     parser.add_argument("--method-log")
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--allow-source-drift",
+        action="store_true",
+        help=(
+            "permit an explicitly reported source mismatch for cross-version "
+            "algorithm comparisons; record identity and prompt/target hashes "
+            "remain strict"
+        ),
+    )
     args = parser.parse_args()
 
     try:
-        verified_source_files = verify_matching_source_hashes(
+        source_comparison = compare_source_hashes(
             args.baseline_config, args.method_config
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+    if source_comparison["mismatches"] and not args.allow_source_drift:
+        raise SystemExit(
+            f"source hash mismatch: {source_comparison['mismatches']}"
+        )
 
     baseline = index_records(read_jsonl(args.baseline_records))
     method = index_records(read_jsonl(args.method_records))
@@ -192,9 +216,13 @@ def main():
         "prompt_hash_mismatches": 0,
         "target_hash_mismatches": 0,
         "duplicate_or_missing_ids": 0,
-        "source_hashes_verified": True,
-        "source_hash_file_count": len(verified_source_files),
-        "source_hash_mismatches": 0,
+        "source_hashes_verified": not source_comparison["mismatches"],
+        "source_drift_explicitly_allowed": bool(args.allow_source_drift),
+        "source_hash_file_count": len(source_comparison["common"]),
+        "source_hash_mismatches": len(source_comparison["mismatches"]),
+        "source_hash_mismatch_files": source_comparison["mismatches"],
+        "baseline_only_source_files": source_comparison["baseline_only"],
+        "method_only_source_files": source_comparison["method_only"],
     }
 
     output = Path(args.output_dir)
