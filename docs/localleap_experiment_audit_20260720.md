@@ -85,12 +85,22 @@ per-record NFE nonincrease.
 | --- | ---: | ---: | ---: | --- |
 | HumanEval | 58/164 = 35.37% | 43,147 | fresh fair baseline queued | method complete |
 | MATH-500 | 167/500 = 33.40% | 119,799 | queued after GSM8K | method complete |
-| GSM8K | in progress | in progress | 915/1319 = 69.37%, NFE 168,832 | baseline complete; method active |
+| GSM8K | 887/1319 = 67.25% | 262,029 | 915/1319 = 69.37%, NFE 168,832 | paired full result; v15 loses |
 | MBPP | in progress | in progress | queued | method active on the second GPU |
 
 The MATH result has 500/500 records, zero duplicate IDs, zero prompt/generation
 mismatches, zero residual masks, and per-example NFE 129--303. It must not be
 called a formal gain until the current-server baseline and paired audit finish.
+
+The completed GSM8K pair has 1,319/1,319 aligned identities, zero prompt or
+target hash mismatches, and verified source hashes. V15 has 130 method-only
+wins versus 158 baseline-only wins (`p=0.11145`), loses 2.12 accuracy points,
+uses 1.552x NFE, and takes 1.684x wall time. The method leakage-v2 audit passes
+with no violation. Statistical uncertainty does not rescue it under the
+preregistered deterministic non-regression requirement: v15 is rejected as a
+single cross-task accuracy winner, while remaining a valid code-oriented and
+exact-speed parent for descendants. Any v18/v19 promotion must repair this
+cross-task regression rather than merely match v15.
 
 ## 3. Historical local baselines and why labels matter
 

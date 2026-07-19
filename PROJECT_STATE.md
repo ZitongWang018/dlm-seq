@@ -14,9 +14,12 @@ Remote worktrees:
 The trusted unified family is v11 public guard at tau 0.004, with v15
 `trajectory_early_lazy_confirmed_public_guard` as an output-exact admissible
 early-abort implementation. Full current-host HumanEval is 58/164 and
-MATH-500 is 167/500 for v15. The fresh GSM8K baseline completed at 915/1319;
-v15 GSM and MBPP-500 generation are active on separate GPUs, followed by the
-remaining fresh baseline stages.
+MATH-500 is 167/500 for v15. The fresh GSM8K pair is now terminal: v15 scores
+887/1319 versus baseline 915/1319, with 130 gains/158 losses, 1.552x NFE and
+1.684x wall time. All identities and prompt/target hashes align and the method
+leakage-v2 audit passes. V15 is therefore rejected as the final unified
+accuracy winner even though it remains a valid code/speed parent. MATH
+baseline and v15 MBPP-500 are now active on separate GPUs.
 
 The final same-freeze evaluation is
 `/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v5/results/experiment_queues/strict_unified_offline_three_arm_20260720_v5`.

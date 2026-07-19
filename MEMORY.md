@@ -284,3 +284,11 @@
 - Committed and pushed the direct scheduler and regression contract as
   `7553e99`; the five-minute monitor now points only at the v3/v18/direct-v19/
   strict-v5 chain.
+- Completed the fresh same-host GSM8K-1319 pair. V15 scored 887 versus 915 for
+  original low-confidence, with 130 method-only and 158 baseline-only records
+  (exact McNemar `p=0.11145`). It used 262,029 versus 168,832 NFE (1.552x) and
+  20,934 versus 12,424 seconds (1.684x). Stable IDs, prompt/target hashes and
+  source hashes all pass; the method leakage-v2 audit has zero violations.
+  This is an algorithm-level cross-task rejection, not an evaluator failure.
+  V15 remains a code/speed parent but cannot be the final unified winner;
+  v18/v19 must repair the GSM regression to be promoted.
