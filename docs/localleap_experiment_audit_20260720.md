@@ -223,7 +223,14 @@ evidence that the decoder read gold data. Version 2 now:
 - requires `correct` to remain `None` there;
 - recursively forbids answer/correctness keys inside selector diagnostics;
 - requires `uses_hidden_tests=false` and `uses_reference_solution=false`;
-- separately freezes actual chat-rendered text and token-ID hashes.
+- can validate the trace boundary without treating post-generation gold fields
+  as decoder inputs.
+
+The historical fair queue's `audit_model_input_hashes.py` reconstructs the
+chat-rendered text and token IDs from saved samples. That is useful lineage
+evidence, but it is **not** proof of the exact runtime tensor. The strict v20
+queue therefore records chat text, token IDs, implicit attention mask, tokenizer
+call policy and document hash inside `generate_until`, before model inference.
 
 The original v1 artifact will be preserved. A versioned recovery may
 add `RECOVERED_BY_LEAKAGE_V2` and `DONE` only if all seven generation stages are
@@ -251,7 +258,7 @@ label to a later candidate.
 |---|---|---:|
 | HumanEval v3 | Prompt-visible generation plus sandboxed hidden tests; hidden outcomes are post-generation health data only | 58/164, NFE 43,147 |
 | MATH-500 v1 | Frozen Prism-aligned answer extraction and normalization | 167/500, NFE 119,799; one extraction failure |
-| GSM8K v1 | `lm-eval` flexible numeric extraction and exact match | Latest active checkpoint: 548/820 (66.83%), clean |
+| GSM8K v1 | `lm-eval` flexible numeric extraction and exact match | Checkpoint at 997/1319: 672 correct (67.40%), clean; intermediate only |
 | MBPP v1 | Prompt-visible assertions executed by two independent paths; canonical solutions and challenge tests remain unavailable to selection | 40/100, NFE 32,731 |
 
 These monitors validate records already emitted by generation. They are not
@@ -341,13 +348,42 @@ dominate.
 6. `sparse_context_repair_rapid_20260720_v1`: after the recovered fair result,
    skip when v18 is accepted; otherwise run the frozen one-change v19 gates,
    first HumanEval/MBPP in parallel and then MATH/GSM in parallel.
+7. `sparse_context_repair_rapid_20260720_v2`: infrastructure-only recovery. It
+   waits for v19 v1 and launches only if v1 fails because its source package
+   lacks the HumanEval helper files. An algorithm/CUDA/evaluator/unknown failure
+   is never auto-reclassified.
+8. `strict_unified_offline_three_arm_20260720_v3`: after the recovered v19
+   terminal decision, freshly regenerates baseline, the one globally selected
+   candidate and symmetric-fast under one pre-run manifest. Baseline and
+   candidate run simultaneously per task, and the candidate alternates GPUs
+   across the four tasks. Fast remains a comparator only.
 
-The fair queue is fully offline. It hashes the six model shards, tokenizer and
-configuration files, runtime sources, exact dataset view, raw prompt, rendered
-chat input, token IDs, target, stable IDs, and evaluator outputs. The fast arm
-must be non-regressive on every task, strictly better in aggregate accuracy,
-non-increasing in per-task NFE, and strictly lower in aggregate NFE and wall
-time. Otherwise it is rejected, not selectively used on favorable tasks.
+The original fair queue sets offline environment variables and hashes the six
+model shards, but its accuracy arm is historical and its model-input audit is
+post-hoc reconstruction. It is therefore a useful provisional comparison, not
+the final strict fairness claim. The v20/v3 queue closes this gap by making all
+three arms fresh after the same weight/data/task/evaluator/environment freeze,
+using explicit `local_files_only=True`, blocking socket access during cache
+preflight, and capturing the runtime input directly. The fast arm is never
+selectively used on favorable tasks.
+
+### 9.1 Offline preflight already completed
+
+With socket connections disabled and
+`HF_DATASETS_OFFLINE=HF_HUB_OFFLINE=TRANSFORMERS_OFFLINE=1`, the strict slot
+loaded these exact cached views successfully:
+
+| Dataset | Records | Dataset-view SHA-256 |
+| --- | ---: | --- |
+| HumanEval | 164 | `3c3148615a7e25da87784ec03b5f3bc3d168e8b129d72dcbfe05380056182f53` |
+| MATH-500 | 500 | `06dd3b4208ad8399004c9367f194de82418e4f545319fa23c02c002665228798` |
+| GSM8K | 1,319 | `b6c9d9547ec974d3c064a2f101ebf67e74257536d8c5e22a9758f2893a9e03a4` |
+| MBPP full/test | 500 | `34a69087bcb27d250707c9e030f094fde80596e5d7a78a94f3550426d67e97e8` |
+
+The tokenizer and custom config also loaded solely from the local checkpoint.
+The offline manifest contains 40 source/data/model-metadata files, including 10
+Arrow files; the six safetensor shards are hashed in a separate large-file
+manifest and reverified after evaluation.
 
 ## 10. Cached primary sources
 
@@ -382,3 +418,21 @@ The project is not complete until all of the following exist and pass:
 
 Until then, v15/v11 remains the trusted unified family and later candidates are
 reported as pending or rejected rather than promoted by partial accuracy.
+
+## 12. Strict interpretation of reproducibility and leakage
+
+The local 0-shot `gen256 / global steps128 / block32 / temperature0` protocol
+is not a line-for-line reproduction of Prism, SOAR, OTS or the original LLaDA
+paper. In particular, Prism uses 32 steps per block, code length/NFE 512 and
+temperature 0.7; SOAR's main table uses the Base checkpoint and different
+few-shot counts; original LLaDA uses different lengths and 4-shot GSM/MBPP;
+OTS does not disclose enough prompt/evaluator/temperature-selection detail for
+a strict reproduction. Paper rows therefore stay references, never local arms.
+
+The benchmark examples have also been repeatedly used to develop v11-v19.
+Even when hidden answers/tests never enter generation or selection, the final
+full results are confirmatory on reused public benchmarks and are **not an
+independent clean holdout**. The strict queue checks direct information flow,
+stable identities, prompt/target/runtime-input equality, evaluator versions,
+source-set equality and frozen artifacts, while reporting benchmark reuse as a
+separate selection-bias limitation.
