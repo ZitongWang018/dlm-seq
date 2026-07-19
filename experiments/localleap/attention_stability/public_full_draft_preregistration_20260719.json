@@ -1,0 +1,38 @@
+{
+  "registration_version": "public_full_draft_preregistration_v1",
+  "registered_at": "2026-07-19T08:17:00+08:00",
+  "accuracy_parent": "confirmed_bidirectional_public_guard_v11",
+  "formal_baseline": "original_llada_low_confidence_128",
+  "fixed_parameters": {
+    "steps": 128,
+    "gen_length": 256,
+    "block_length": 32,
+    "dependency_threshold": 0.004
+  },
+  "variants": [
+    "public_tie_bidirectional_mean",
+    "public_tie_bidirectional_block_pareto"
+  ],
+  "rule": "after the v11 strict guard, only an incomplete prompt-visible tie between two executable drafts may be reconsidered; mask each existing disagreement block under both complete draft contexts and switch to original LLaDA only when the symmetric verifier supports it",
+  "new_thresholds": [],
+  "new_learned_parameters": [],
+  "token_splicing": false,
+  "uses_hidden_tests": false,
+  "uses_reference_solution": false,
+  "uses_generated_probes": false,
+  "development": {
+    "benchmark": "HumanEval",
+    "absolute_indices": "0-31",
+    "promotion_gate": "strictly more correct than v11 and method-only greater than parent-only"
+  },
+  "formal_holdout": {
+    "benchmark": "HumanEval",
+    "absolute_indices": "96-163",
+    "inspection_status": "no per-record verifier analysis before registration",
+    "promotion_gate": "strictly more correct than v11, at least one method-only recovery, and parent-only no greater than method-only"
+  },
+  "cross_dataset_behavior": {
+    "MATH-500": "exact v9/v11 fallback because there are no public Python checks",
+    "MBPP": "a failed public-assertion tie cannot convert an incorrect parent into an officially correct answer; the verifier is therefore not expected to alter the v11 correctness ceiling"
+  }
+}
