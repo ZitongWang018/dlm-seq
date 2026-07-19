@@ -1,3 +1,6 @@
+import inspect
+
+import audit_partial_mbpp_trace as monitor_module
 from audit_partial_mbpp_trace import audit_records
 
 
@@ -76,9 +79,21 @@ def test_missing_visible_assertions_is_anomaly():
     assert "missing_prompt_visible_checks" in summary["anomalies"]
 
 
+def test_monitor_source_never_reads_benchmark_labels_or_hidden_tests():
+    source = inspect.getsource(monitor_module)
+    for forbidden in (
+        '"raw_gold"',
+        '"normalized_gold"',
+        '"canonical_solution"',
+        '"challenge_test_list"',
+    ):
+        assert forbidden not in source
+
+
 if __name__ == "__main__":
     test_good_bad_and_compile_invalid_candidates()
     test_current_prompt_segment_excludes_fewshot_assertions()
     test_identity_nfe_mask_and_hash_anomalies()
     test_missing_visible_assertions_is_anomaly()
-    print("4 partial MBPP trace audit tests passed")
+    test_monitor_source_never_reads_benchmark_labels_or_hidden_tests()
+    print("5 partial MBPP trace audit tests passed")
