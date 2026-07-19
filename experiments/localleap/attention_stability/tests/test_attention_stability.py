@@ -10,6 +10,7 @@ from generate import (
     score_bidirectional_block_candidates,
     select_confirmed_bidirectional_block,
     select_localized_conflict_block,
+    select_context_ambiguous_positions,
     commit_mean_cannot_reach_threshold,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
@@ -281,34 +282,68 @@ def test_early_localized_repair_preserves_admissible_abort_exactly():
     generate_module.score_bidirectional_block_candidates = fail_score
     generate_module.repair_draft_disagreements = fail_repair
     try:
-        output, nfe, summary = generate_trajectory_likelihood_selection(
-            model=object(),
-            prompt=torch.tensor([[1]]),
-            dependency_threshold=0.004,
-            steps=128,
-            gen_length=2,
-            block_length=32,
-            selection_mode="early_localized_evidence_conflict_repair",
-        )
+        results = []
+        for selection_mode in (
+            "early_localized_evidence_conflict_repair",
+            "early_sparse_context_repair",
+        ):
+            calls.clear()
+            output, nfe, summary = generate_trajectory_likelihood_selection(
+                model=object(),
+                prompt=torch.tensor([[1]]),
+                dependency_threshold=0.004,
+                steps=128,
+                gen_length=2,
+                block_length=32,
+                selection_mode=selection_mode,
+            )
+            results.append((selection_mode, output, nfe, summary, list(calls)))
     finally:
         generate_module.generate_attention_stability = original_attention
         generate_module.score_bidirectional_block_candidates = original_score
         generate_module.repair_draft_disagreements = original_repair
 
-    assert calls == [None, -0.20 + 1.0 / 32]
-    assert output.tolist() == [[1, 2]]
-    assert nfe == 168
-    assert summary["decoder"] == "trajectory_early_localized_evidence_conflict_repair_v18"
-    assert summary["selected_name"] == "fast"
-    assert summary["accuracy_early_abort"]["triggered"] is True
-    assert summary["evidence_conflict_repair"]["skip_reason"] == "accuracy_early_abort"
-    assert summary["candidate_nfe"] == {
-        "fast": 128,
-        "accuracy": 40,
-        "bidirectional_block_selector": 0,
-        "repair": 0,
-        "repair_selector": 0,
+    expected_decoders = {
+        "early_localized_evidence_conflict_repair":
+            "trajectory_early_localized_evidence_conflict_repair_v18",
+        "early_sparse_context_repair":
+            "trajectory_early_sparse_context_repair_v19",
     }
+    for selection_mode, output, nfe, summary, mode_calls in results:
+        assert mode_calls == [None, -0.20 + 1.0 / 32]
+        assert output.tolist() == [[1, 2]]
+        assert nfe == 168
+        assert summary["decoder"] == expected_decoders[selection_mode]
+        assert summary["selected_name"] == "fast"
+        assert summary["accuracy_early_abort"]["triggered"] is True
+        assert summary["evidence_conflict_repair"]["skip_reason"] == (
+            "accuracy_early_abort"
+        )
+        assert summary["candidate_nfe"] == {
+            "fast": 128,
+            "accuracy": 40,
+            "bidirectional_block_selector": 0,
+            "repair": 0,
+            "repair_selector": 0,
+        }
+
+
+def test_sparse_context_repair_masks_only_nonunanimous_frontier():
+    record = {
+        "candidate_scores": {"fast": -0.1, "accuracy": -0.2},
+        "disagreement_positions": [0, 1, 2],
+        "directional_token_scores": {
+            "fast": {
+                "fast": [-0.1, -0.5, -0.1],
+                "accuracy": [-0.2, -0.6, -0.7],
+            },
+            "accuracy": {
+                "fast": [-0.4, -0.2, -0.5],
+                "accuracy": [-0.3, -0.1, -0.2],
+            },
+        },
+    }
+    assert select_context_ambiguous_positions(record, "fast") == [1, 2]
 
 
 def test_localized_evidence_conflict_repairs_only_the_opposing_block():
@@ -382,6 +417,85 @@ def test_localized_evidence_conflict_repairs_only_the_opposing_block():
         "repair": 3,
         "repair_selector": 1,
     }
+
+
+def test_sparse_context_repair_preserves_unanimous_parent_tokens():
+    original_attention = generate_module.generate_attention_stability
+    original_score = generate_module.score_bidirectional_block_candidates
+    original_repair = generate_module.repair_draft_disagreements
+    repair_calls = []
+
+    def fake_attention(**kwargs):
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2, 3, 4]]), 128, {
+                "commit_logprob_mean": -0.20,
+            }
+        return torch.tensor([[1, 8, 9, 10]]), 140, {
+            "commit_logprob_mean": -0.10,
+            "early_abort_triggered": False,
+            "commit_token_count": 3,
+            "early_abort_best_possible_final_mean": -0.10,
+        }
+
+    def fake_score(*args, **kwargs):
+        names = kwargs.get("candidate_names", ("fast", "accuracy"))
+        if names == ("parent", "repair"):
+            return {"parent": -0.20, "repair": -0.05}, 2, 1, []
+        scores = {"fast": -0.10, "accuracy": -0.20}
+        return scores, 3, 1, [{
+            "block_start": 0,
+            "block_end": 3,
+            "disagreement_token_count": 3,
+            "disagreement_positions": [0, 1, 2],
+            "candidate_scores": scores,
+            "directional_token_scores": {
+                "fast": {
+                    "fast": [-0.1, -0.5, -0.1],
+                    "accuracy": [-0.2, -0.6, -0.7],
+                },
+                "accuracy": {
+                    "fast": [-0.4, -0.2, -0.5],
+                    "accuracy": [-0.3, -0.1, -0.2],
+                },
+            },
+        }]
+
+    def fake_repair(**kwargs):
+        repair_calls.append(kwargs)
+        return torch.tensor([[1, 2, 9, 10]]), 3, {
+            "temporal_mode": kwargs["temporal_mode"],
+            "residual_mask_count": 0,
+        }
+
+    generate_module.generate_attention_stability = fake_attention
+    generate_module.score_bidirectional_block_candidates = fake_score
+    generate_module.repair_draft_disagreements = fake_repair
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=3,
+            block_length=32,
+            selection_mode="early_sparse_context_repair",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+        generate_module.score_bidirectional_block_candidates = original_score
+        generate_module.repair_draft_disagreements = original_repair
+
+    assert output.tolist() == [[1, 2, 9, 10]]
+    assert nfe == 273
+    assert len(repair_calls) == 1
+    assert repair_calls[0]["disagreement_mask"].tolist() == [
+        [False, False, True, True]
+    ]
+    repair = summary["evidence_conflict_repair"]
+    assert repair["repair_candidate_positions"] == [1, 2]
+    assert repair["repair_parent_supported_positions_preserved"] == 1
+    assert repair["repair_accepted"] is True
+    assert summary["selected_name"] == "repair"
 
 
 def test_localized_conflict_skips_repair_when_evidence_sources_agree():
@@ -1275,7 +1389,9 @@ if __name__ == "__main__":
     test_public_guard_mode_retains_baseline_candidate_for_external_guard()
     test_early_confirmed_mode_returns_fast_without_final_verifier()
     test_early_localized_repair_preserves_admissible_abort_exactly()
+    test_sparse_context_repair_masks_only_nonunanimous_frontier()
     test_localized_evidence_conflict_repairs_only_the_opposing_block()
+    test_sparse_context_repair_preserves_unanimous_parent_tokens()
     test_localized_conflict_skips_repair_when_evidence_sources_agree()
     test_commit_mean_abort_uses_an_optimistic_zero_logprob_bound()
     test_confirmed_block_requires_path_and_counterfactual_agreement()
@@ -1317,4 +1433,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("45 selector tests passed")
+    print("47 selector tests passed")

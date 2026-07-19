@@ -138,6 +138,14 @@ case "${profile}" in
       echo "trajectory_early_localized_evidence_conflict_repair requires steps=128 block_length=32" >&2; exit 2; }
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=early_localized_evidence_conflict_repair_lazy_public_guard"
     ;;
+  trajectory_early_sparse_context_repair)
+    # Preserve v15's admissible early abort and v18's single conflict block,
+    # but keep disagreements that both full-draft contexts unanimously support
+    # for the selected parent. Re-denoise only the remaining sparse frontier.
+    [[ "${steps}" == "128" && "${block_length}" == "32" ]] || {
+      echo "trajectory_early_sparse_context_repair requires steps=128 block_length=32" >&2; exit 2; }
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=early_sparse_context_repair_lazy_public_guard"
+    ;;
   trajectory_public_full_draft_verifier)
     # On an incomplete public-check tie, compare the two complete drafts by
     # masking each disagreement block under both external draft contexts.

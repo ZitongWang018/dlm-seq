@@ -1165,6 +1165,7 @@ def score_bidirectional_block_candidates(
         log_probs = torch.log_softmax(logits, dim=-1)
         local_scores = {}
         directional_scores = {}
+        directional_token_scores = {}
         for name in required:
             target = candidate_token_ids[name][0, local_positions].long()
             target = target[None, :, None].expand(2, -1, 1)
@@ -1174,14 +1175,26 @@ def score_bidirectional_block_candidates(
                 context_name: float(directional[index].mean().item())
                 for index, context_name in enumerate(required)
             }
+            directional_token_scores[name] = {
+                context_name: [
+                    float(value)
+                    for value in directional[index].detach().cpu().tolist()
+                ]
+                for index, context_name in enumerate(required)
+            }
             score_sums[name] += float(directional.mean(dim=0).sum().item())
         selector_nfe += 1
         block_records.append({
             "block_start": int(block_start - int(prompt_length)),
             "block_end": int(block_end - int(prompt_length)),
             "disagreement_token_count": count,
+            "disagreement_positions": [
+                int(position) - int(prompt_length)
+                for position in local_positions.detach().cpu().tolist()
+            ],
             "candidate_scores": local_scores,
             "directional_candidate_scores": directional_scores,
+            "directional_token_scores": directional_token_scores,
         })
 
     scores = {
@@ -1234,6 +1247,44 @@ def select_localized_conflict_block(
             -int(record["block_start"]),
         ),
     )
+
+
+def select_context_ambiguous_positions(block_record, parent_name):
+    """Keep only disagreements not unanimously supporting the parent.
+
+    The bidirectional verifier evaluates every alternative under both complete
+    external drafts.  A parent token is immutable when it has strictly larger
+    log probability in both contexts.  Every other disagreement is a sparse
+    repair frontier: either the contexts disagree or both oppose the parent.
+    """
+    candidate_names = tuple(block_record["candidate_scores"])
+    if len(candidate_names) != 2 or parent_name not in candidate_names:
+        raise ValueError("sparse repair requires two candidates including parent")
+    other_name = next(name for name in candidate_names if name != parent_name)
+    positions = list(block_record.get("disagreement_positions", ()))
+    token_scores = block_record.get("directional_token_scores")
+    if not positions or not isinstance(token_scores, dict):
+        raise ValueError("sparse repair requires per-token bidirectional scores")
+    contexts = candidate_names
+    for name in candidate_names:
+        if set(token_scores.get(name, {})) != set(contexts):
+            raise ValueError("directional token-score contexts do not align")
+        if any(
+            len(token_scores[name][context]) != len(positions)
+            for context in contexts
+        ):
+            raise ValueError("directional token scores do not align with positions")
+
+    frontier = []
+    for index, position in enumerate(positions):
+        parent_unanimous = all(
+            float(token_scores[parent_name][context][index])
+            > float(token_scores[other_name][context][index])
+            for context in contexts
+        )
+        if not parent_unanimous:
+            frontier.append(int(position))
+    return frontier
 
 
 @torch.no_grad()
@@ -1289,6 +1340,7 @@ def generate_trajectory_likelihood_selection(
         if selection_mode in {
             "early_confirmed_bidirectional_block",
             "early_localized_evidence_conflict_repair",
+            "early_sparse_context_repair",
         }
         else None
     )
@@ -1411,6 +1463,7 @@ def generate_trajectory_likelihood_selection(
         "confirmed_bidirectional_public_guard",
         "localized_evidence_conflict_repair",
         "early_localized_evidence_conflict_repair",
+        "early_sparse_context_repair",
     }:
         if accuracy_early_aborted:
             selected_name = "fast"
@@ -1434,6 +1487,7 @@ def generate_trajectory_likelihood_selection(
             "confirmed_bidirectional_public_guard",
             "localized_evidence_conflict_repair",
             "early_localized_evidence_conflict_repair",
+            "early_sparse_context_repair",
         } and not accuracy_early_aborted:
             selected_name = select_confirmed_bidirectional_block(
                 bidirectional_block_scores,
@@ -1446,7 +1500,10 @@ def generate_trajectory_likelihood_selection(
                 key=lambda name: bidirectional_block_scores[name],
             )
         if (
-            selection_mode == "early_localized_evidence_conflict_repair"
+            selection_mode in {
+                "early_localized_evidence_conflict_repair",
+                "early_sparse_context_repair",
+            }
             and accuracy_early_aborted
         ):
             pre_repair_selected_name = selected_name
@@ -1459,6 +1516,8 @@ def generate_trajectory_likelihood_selection(
                 "repair_accepted": False,
                 "repair_changed_positions": 0,
                 "repair_target_block": None,
+                "repair_candidate_positions": None,
+                "repair_parent_supported_positions_preserved": 0,
                 "repair_nfe": 0,
                 "repair_selector_nfe": 0,
                 "repair_candidate_scores": None,
@@ -1471,6 +1530,7 @@ def generate_trajectory_likelihood_selection(
         elif selection_mode in {
             "localized_evidence_conflict_repair",
             "early_localized_evidence_conflict_repair",
+            "early_sparse_context_repair",
         }:
             pre_repair_selected_name = selected_name
             path_supports_accuracy = (
@@ -1488,6 +1548,8 @@ def generate_trajectory_likelihood_selection(
             repair_changed_positions = 0
             repair_details = None
             repair_target_block = None
+            repair_candidate_positions = None
+            repair_parent_supported_positions_preserved = 0
             if evidence_conflict and bidirectional_block_disagreements > 0:
                 repair_target_block = select_localized_conflict_block(
                     bidirectional_block_records,
@@ -1503,29 +1565,55 @@ def generate_trajectory_likelihood_selection(
                 )
                 disagreement_mask[:, :block_start] = False
                 disagreement_mask[:, block_end:] = False
-                repaired_x, repair_nfe, repair_details = (
-                    repair_draft_disagreements(
-                        model=model,
-                        draft=candidate_ids[pre_repair_selected_name],
-                        disagreement_mask=disagreement_mask,
-                        prompt_length=prompt.shape[1],
-                        dependency_threshold=dependency_threshold,
-                        steps=steps,
-                        gen_length=gen_length,
-                        block_length=block_length,
-                        temperature=temperature,
-                        remasking=remasking,
-                        mask_id=mask_id,
-                        temporal_mode="top1",
+                localized_disagreement_count = int(
+                    disagreement_mask.sum().item()
+                )
+                if selection_mode == "early_sparse_context_repair":
+                    repair_candidate_positions = select_context_ambiguous_positions(
+                        repair_target_block,
+                        pre_repair_selected_name,
                     )
-                )
-                candidate_ids["repair"] = repaired_x
-                repair_changed_positions = int(
-                    (
-                        repaired_x
-                        != candidate_ids[pre_repair_selected_name]
-                    ).sum().item()
-                )
+                    sparse_mask = torch.zeros_like(
+                        disagreement_mask, dtype=torch.bool
+                    )
+                    for relative_position in repair_candidate_positions:
+                        absolute_position = int(prompt.shape[1]) + int(
+                            relative_position
+                        )
+                        if not bool(disagreement_mask[0, absolute_position]):
+                            raise ValueError(
+                                "sparse repair selected a non-disagreement position"
+                            )
+                        sparse_mask[0, absolute_position] = True
+                    disagreement_mask = sparse_mask
+                    repair_parent_supported_positions_preserved = (
+                        localized_disagreement_count
+                        - len(repair_candidate_positions)
+                    )
+                if bool(disagreement_mask.any()):
+                    repaired_x, repair_nfe, repair_details = (
+                        repair_draft_disagreements(
+                            model=model,
+                            draft=candidate_ids[pre_repair_selected_name],
+                            disagreement_mask=disagreement_mask,
+                            prompt_length=prompt.shape[1],
+                            dependency_threshold=dependency_threshold,
+                            steps=steps,
+                            gen_length=gen_length,
+                            block_length=block_length,
+                            temperature=temperature,
+                            remasking=remasking,
+                            mask_id=mask_id,
+                            temporal_mode="top1",
+                        )
+                    )
+                    candidate_ids["repair"] = repaired_x
+                    repair_changed_positions = int(
+                        (
+                            repaired_x
+                            != candidate_ids[pre_repair_selected_name]
+                        ).sum().item()
+                    )
                 if repair_changed_positions > 0:
                     (
                         repair_candidate_scores,
@@ -1562,6 +1650,10 @@ def generate_trajectory_likelihood_selection(
                 "repair_accepted": bool(repair_accepted),
                 "repair_changed_positions": int(repair_changed_positions),
                 "repair_target_block": repair_target_block,
+                "repair_candidate_positions": repair_candidate_positions,
+                "repair_parent_supported_positions_preserved": int(
+                    repair_parent_supported_positions_preserved
+                ),
                 "repair_nfe": int(repair_nfe),
                 "repair_selector_nfe": int(repair_selector_nfe),
                 "repair_candidate_scores": repair_candidate_scores,
@@ -1596,6 +1688,7 @@ def generate_trajectory_likelihood_selection(
         "confirmed_bidirectional_public_guard",
         "localized_evidence_conflict_repair",
         "early_localized_evidence_conflict_repair",
+        "early_sparse_context_repair",
     }:
         disagreement_count = bidirectional_block_disagreements
         scored_disagreement_count = bidirectional_block_disagreements
@@ -1624,7 +1717,9 @@ def generate_trajectory_likelihood_selection(
     )
     summary = {
         "decoder": (
-            "trajectory_early_localized_evidence_conflict_repair_v18"
+            "trajectory_early_sparse_context_repair_v19"
+            if selection_mode == "early_sparse_context_repair"
+            else "trajectory_early_localized_evidence_conflict_repair_v18"
             if selection_mode == "early_localized_evidence_conflict_repair"
             else "trajectory_localized_evidence_conflict_repair_v17"
             if selection_mode == "localized_evidence_conflict_repair"
@@ -1660,7 +1755,9 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "admissible_early_abort_then_repair_strongest_opposing_block"
+            "admissible_abort_then_sparse_nonunanimous_context_repair"
+            if selection_mode == "early_sparse_context_repair"
+            else "admissible_early_abort_then_repair_strongest_opposing_block"
             if selection_mode == "early_localized_evidence_conflict_repair"
             else "repair_strongest_opposing_block_only_on_evidence_conflict"
             if selection_mode == "localized_evidence_conflict_repair"
@@ -1738,6 +1835,7 @@ def generate_trajectory_likelihood_selection(
             "confirmed_bidirectional_public_guard",
             "localized_evidence_conflict_repair",
             "early_localized_evidence_conflict_repair",
+            "early_sparse_context_repair",
         }
         else None,
         "pre_repair_selected_name": pre_repair_selected_name,
@@ -1753,6 +1851,7 @@ def generate_trajectory_likelihood_selection(
         if selection_mode in {
             "early_confirmed_bidirectional_block",
             "early_localized_evidence_conflict_repair",
+            "early_sparse_context_repair",
         }
         else None,
         "baseline_consensus": baseline_consensus,
@@ -1783,6 +1882,7 @@ def generate_trajectory_likelihood_selection(
                     "confirmed_bidirectional_public_guard",
                     "localized_evidence_conflict_repair",
                     "early_localized_evidence_conflict_repair",
+                    "early_sparse_context_repair",
                 }
                 else {}
             ),
@@ -1794,6 +1894,7 @@ def generate_trajectory_likelihood_selection(
                 if selection_mode in {
                     "localized_evidence_conflict_repair",
                     "early_localized_evidence_conflict_repair",
+                    "early_sparse_context_repair",
                 }
                 else {}
             ),
