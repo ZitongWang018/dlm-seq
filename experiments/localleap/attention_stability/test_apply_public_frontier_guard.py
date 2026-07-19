@@ -1,6 +1,7 @@
 import copy
+import multiprocessing
 
-from apply_public_frontier_guard import select_records
+from apply_public_frontier_guard import configure_runtime_path, select_records
 
 
 PROMPT = "def square(x):\n    >>> square(2)\n    4\n"
@@ -83,9 +84,34 @@ def test_alignment_mismatch_rejected():
         assert "prompt_hash mismatch" in str(error)
 
 
+def spawned_selector_probe(queue):
+    import differential_selector
+
+    queue.put(
+        (
+            hasattr(differential_selector, "evaluate_public_candidate"),
+            differential_selector.__file__,
+        )
+    )
+
+
+def test_runtime_path_does_not_shadow_selector_in_spawned_executor():
+    configure_runtime_path("/root/autodl-tmp/LocalLeap/llada")
+    context = multiprocessing.get_context("spawn")
+    queue = context.Queue()
+    process = context.Process(target=spawned_selector_probe, args=(queue,))
+    process.start()
+    process.join(10)
+    assert process.exitcode == 0
+    has_evaluator, path = queue.get(timeout=1)
+    assert has_evaluator, path
+    assert "attention_stability/differential_selector.py" in path, path
+
+
 if __name__ == "__main__":
     test_unique_public_winner_reopens_unselected_sibling()
     test_tied_public_leaders_preserve_v11()
     test_no_public_checks_preserves_v11()
     test_alignment_mismatch_rejected()
-    print("4 public-frontier guard tests passed")
+    test_runtime_path_does_not_shadow_selector_in_spawned_executor()
+    print("5 public-frontier guard tests passed")

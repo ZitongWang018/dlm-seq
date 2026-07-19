@@ -225,6 +225,13 @@ def write_jsonl(path, rows):
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def configure_runtime_path(runtime_root):
+    """Expose runtime-only evaluator modules without shadowing frozen selector code."""
+    runtime_root = str(Path(runtime_root))
+    if runtime_root not in sys.path:
+        sys.path.append(runtime_root)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--v9-records", required=True)
@@ -245,7 +252,7 @@ def main():
     selected_samples = output / "selected_samples.jsonl"
     write_jsonl(selected_samples, samples)
 
-    sys.path.insert(0, str(Path(args.runtime_root)))
+    configure_runtime_path(args.runtime_root)
     import postprocess_code
 
     postprocess_code.main(str(selected_samples))
