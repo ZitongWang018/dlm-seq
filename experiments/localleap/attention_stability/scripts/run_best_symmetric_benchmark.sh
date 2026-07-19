@@ -131,6 +131,13 @@ case "${profile}" in
       echo "trajectory_localized_evidence_conflict_repair requires steps=128 block_length=32" >&2; exit 2; }
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=localized_evidence_conflict_repair_lazy_public_guard"
     ;;
+  trajectory_early_localized_evidence_conflict_repair)
+    # Preserve the admissible v15 early abort. Only completed accuracy drafts
+    # can trigger the same single-block conflict repair and public guard.
+    [[ "${steps}" == "128" && "${block_length}" == "32" ]] || {
+      echo "trajectory_early_localized_evidence_conflict_repair requires steps=128 block_length=32" >&2; exit 2; }
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=early_localized_evidence_conflict_repair_lazy_public_guard"
+    ;;
   trajectory_public_full_draft_verifier)
     # On an incomplete public-check tie, compare the two complete drafts by
     # masking each disagreement block under both external draft contexts.

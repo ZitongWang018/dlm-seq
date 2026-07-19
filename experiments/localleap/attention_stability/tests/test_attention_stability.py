@@ -251,6 +251,66 @@ def test_early_confirmed_mode_returns_fast_without_final_verifier():
     }
 
 
+def test_early_localized_repair_preserves_admissible_abort_exactly():
+    original_attention = generate_module.generate_attention_stability
+    original_score = generate_module.score_bidirectional_block_candidates
+    original_repair = generate_module.repair_draft_disagreements
+    calls = []
+
+    def fake_attention(**kwargs):
+        calls.append(kwargs.get("abort_if_final_commit_mean_at_most"))
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2]]), 128, {
+                "commit_logprob_mean": -0.20,
+                "early_abort_triggered": False,
+            }
+        return torch.tensor([[1, 7]]), 40, {
+            "commit_logprob_mean": -0.50,
+            "early_abort_triggered": True,
+            "commit_token_count": 1,
+            "early_abort_best_possible_final_mean": -0.30,
+        }
+
+    def fail_score(*args, **kwargs):
+        raise AssertionError("an aborted draft must not reach the verifier")
+
+    def fail_repair(**kwargs):
+        raise AssertionError("an aborted draft must not be repaired")
+
+    generate_module.generate_attention_stability = fake_attention
+    generate_module.score_bidirectional_block_candidates = fail_score
+    generate_module.repair_draft_disagreements = fail_repair
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=2,
+            block_length=32,
+            selection_mode="early_localized_evidence_conflict_repair",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+        generate_module.score_bidirectional_block_candidates = original_score
+        generate_module.repair_draft_disagreements = original_repair
+
+    assert calls == [None, -0.20 + 1.0 / 32]
+    assert output.tolist() == [[1, 2]]
+    assert nfe == 168
+    assert summary["decoder"] == "trajectory_early_localized_evidence_conflict_repair_v18"
+    assert summary["selected_name"] == "fast"
+    assert summary["accuracy_early_abort"]["triggered"] is True
+    assert summary["evidence_conflict_repair"]["skip_reason"] == "accuracy_early_abort"
+    assert summary["candidate_nfe"] == {
+        "fast": 128,
+        "accuracy": 40,
+        "bidirectional_block_selector": 0,
+        "repair": 0,
+        "repair_selector": 0,
+    }
+
+
 def test_localized_evidence_conflict_repairs_only_the_opposing_block():
     original_attention = generate_module.generate_attention_stability
     original_score = generate_module.score_bidirectional_block_candidates
@@ -264,6 +324,9 @@ def test_localized_evidence_conflict_repairs_only_the_opposing_block():
             }
         return torch.tensor([[1, 8]]), 140, {
             "commit_logprob_mean": -0.10,
+            "early_abort_triggered": False,
+            "commit_token_count": 1,
+            "early_abort_best_possible_final_mean": -0.10,
         }
 
     def fake_score(*args, **kwargs):
@@ -296,7 +359,7 @@ def test_localized_evidence_conflict_repairs_only_the_opposing_block():
             steps=128,
             gen_length=1,
             block_length=32,
-            selection_mode="localized_evidence_conflict_repair",
+            selection_mode="early_localized_evidence_conflict_repair",
         )
     finally:
         generate_module.generate_attention_stability = original_attention
@@ -1211,6 +1274,9 @@ def test_revision_margin_prioritizes_decisive_conditioned_change():
 if __name__ == "__main__":
     test_public_guard_mode_retains_baseline_candidate_for_external_guard()
     test_early_confirmed_mode_returns_fast_without_final_verifier()
+    test_early_localized_repair_preserves_admissible_abort_exactly()
+    test_localized_evidence_conflict_repairs_only_the_opposing_block()
+    test_localized_conflict_skips_repair_when_evidence_sources_agree()
     test_commit_mean_abort_uses_an_optimistic_zero_logprob_bound()
     test_confirmed_block_requires_path_and_counterfactual_agreement()
     test_bidirectional_block_masks_one_block_under_both_external_drafts()
@@ -1251,4 +1317,4 @@ if __name__ == "__main__":
     test_response_credit_precedes_confidence_within_mature_tier()
     test_response_credit_saturates_without_int16_wraparound()
     test_revision_margin_prioritizes_decisive_conditioned_change()
-    print("42 selector tests passed")
+    print("45 selector tests passed")

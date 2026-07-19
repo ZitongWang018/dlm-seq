@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 
 source_root=${SOURCE_ROOT:-/root/autodl-tmp/dlm-seq-flow/experiments/localleap/attention_stability}
-llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_localized_conflict_repair}
+llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair}
 parent_root=${PARENT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
 parent_queue_id=${PARENT_QUEUE_ID:-best_framework_full4_20260719_v1}
-queue_id=${ATTENTION_QUEUE_ID:-localized_evidence_conflict_repair_20260719_v1}
+queue_id=${ATTENTION_QUEUE_ID:-early_localized_evidence_conflict_repair_20260719_v1}
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
 run_base=${llada_root}/results/best_symmetric_benchmarks/${queue_id}
 parent_queue=${parent_root}/results/experiment_queues/${parent_queue_id}
@@ -104,7 +104,7 @@ if [[ ! -s "${frozen}" ]]; then
   sha256sum generate.py eval_llada.py differential_selector.py \
     run_best_symmetric_benchmark.sh compare_paired_task_runs.py \
     audit_generation_leakage.py audit_mbpp_assertions.py slice_audit_records.py \
-    localized_evidence_conflict_repair_preregistration_20260719.json \
+    early_localized_evidence_conflict_repair_preregistration_20260719.json \
     tests/test_attention_stability.py tests/test_differential_selector.py \
     "${controller}" >"${frozen}"
 fi
@@ -113,7 +113,7 @@ verify
   differential_selector.py compare_paired_task_runs.py audit_mbpp_assertions.py
 bash -n "${runner}" "${controller}"
 run_stage leakage_static /root/miniconda3/bin/python audit_generation_leakage.py \
-  --source-root "${llada_root}" --expected-profile trajectory_localized_evidence_conflict_repair \
+  --source-root "${llada_root}" --expected-profile trajectory_early_localized_evidence_conflict_repair \
   --output "${queue_root}/leakage/static.json"
 
 echo "waiting_for_parent_queue=${parent_queue}"
@@ -135,10 +135,10 @@ mkdir -p "${queue_root}/parents"
 /root/miniconda3/bin/python slice_audit_records.py \
   "$(records "${parent_gsm}")" "${queue_root}/parents/gsm_dev64.jsonl" --start 0 --end 64
 
-profile=trajectory_localized_evidence_conflict_repair
-run_gpu he_v16_dev32 0 "${runner}" humaneval 0 128 \
-  "${profile}" 0.004 trace he_v16_dev32 32 256
-he_dev=${run_base}/humaneval/he_v16_dev32
+profile=trajectory_early_localized_evidence_conflict_repair
+run_gpu he_v18_dev32 0 "${runner}" humaneval 0 128 \
+  "${profile}" 0.004 trace he_v18_dev32 32 256
+he_dev=${run_base}/humaneval/he_v18_dev32
 compare_pair he_dev32 "${queue_root}/parents/he_dev32.jsonl" "$(records "${he_dev}")" \
   "${parent_he}/run_config.txt" "${he_dev}/run_config.txt"
 if ! /root/miniconda3/bin/python - "${queue_root}/paired/he_dev32/paired_summary.json" <<'PY'
@@ -148,17 +148,18 @@ assert x["method_correct"] > x["baseline_correct"], x
 assert x["method_only"] > x["baseline_only"], x
 assert x["prompt_hash_mismatches"] == 0 and x["target_hash_mismatches"] == 0, x
 assert x["duplicate_or_missing_ids"] == 0, x
+assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], x
 PY
 then reject "he_dev32_gate"; fi
 touch "${queue_root}/HE_GATE_PASS"
 
-( run_gpu math_v16_dev50 0 "${runner}" localleap_math500 0 128 \
-    "${profile}" 0.004 trace math_v16_dev50 50 256 ) & p0=$!
-( run_gpu gsm_v16_dev64 1 "${runner}" gsm8k 0 128 \
-    "${profile}" 0.004 trace gsm_v16_dev64 64 256 ) & p1=$!
+( run_gpu math_v18_dev50 0 "${runner}" localleap_math500 0 128 \
+    "${profile}" 0.004 trace math_v18_dev50 50 256 ) & p0=$!
+( run_gpu gsm_v18_dev64 1 "${runner}" gsm8k 0 128 \
+    "${profile}" 0.004 trace gsm_v18_dev64 64 256 ) & p1=$!
 wait "${p0}"; wait "${p1}"
-math_dev=${run_base}/localleap_math500/math_v16_dev50
-gsm_dev=${run_base}/gsm8k/gsm_v16_dev64
+math_dev=${run_base}/localleap_math500/math_v18_dev50
+gsm_dev=${run_base}/gsm8k/gsm_v18_dev64
 compare_pair math_dev50 "${queue_root}/parents/math_dev50.jsonl" "$(records "${math_dev}")" \
   "${parent_math}/run_config.txt" "${math_dev}/run_config.txt"
 compare_pair gsm_dev64 "${queue_root}/parents/gsm_dev64.jsonl" "$(records "${gsm_dev}")" \
@@ -173,17 +174,18 @@ assert sum(x["method_correct"] for x in rows) > sum(x["baseline_correct"] for x 
 for x in rows:
     assert x["prompt_hash_mismatches"] == 0 and x["target_hash_mismatches"] == 0, x
     assert x["duplicate_or_missing_ids"] == 0, x
+    assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], x
 PY
 then reject "math_gsm_development_gate"; fi
 touch "${queue_root}/CROSS_TASK_GATE_PASS"
 
-( run_gpu he_v16_full164 0 "${runner}" humaneval 0 128 \
-    "${profile}" 0.004 trace he_v16_full164 164 256 ) & p0=$!
-( run_gpu mbpp_v16_dev100 1 "${runner}" mbpp 0 128 \
-    "${profile}" 0.004 trace mbpp_v16_dev100 100 256 ) & p1=$!
+( run_gpu he_v18_full164 0 "${runner}" humaneval 0 128 \
+    "${profile}" 0.004 trace he_v18_full164 164 256 ) & p0=$!
+( run_gpu mbpp_v18_dev100 1 "${runner}" mbpp 0 128 \
+    "${profile}" 0.004 trace mbpp_v18_dev100 100 256 ) & p1=$!
 wait "${p0}"; wait "${p1}"
-he_full=${run_base}/humaneval/he_v16_full164
-mbpp_dev=${run_base}/mbpp/mbpp_v16_dev100
+he_full=${run_base}/humaneval/he_v18_full164
+mbpp_dev=${run_base}/mbpp/mbpp_v18_dev100
 compare_pair he_full164 "$(records "${parent_he}")" "$(records "${he_full}")" \
   "${parent_he}/run_config.txt" "${he_full}/run_config.txt"
 run_stage mbpp_dev_assertions /root/miniconda3/bin/python audit_mbpp_assertions.py \
@@ -206,20 +208,21 @@ assert mbpp["method_correct"] >= mbpp["baseline_correct"], mbpp
 for x in (he,mbpp):
     assert x["prompt_hash_mismatches"] == 0 and x["target_hash_mismatches"] == 0, x
     assert x["duplicate_or_missing_ids"] == 0, x
+    assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], x
 PY
 then reject "he_full_or_mbpp_gate"; fi
 touch "${queue_root}/FULL_PROMOTION_PASS"
 
-( run_gpu math_v16_full500 0 "${runner}" localleap_math500 0 128 \
-    "${profile}" 0.004 trace math_v16_full500
-  run_gpu mbpp_v16_full500 0 "${runner}" mbpp 0 128 \
-    "${profile}" 0.004 trace mbpp_v16_full500 ) & p0=$!
-( run_gpu gsm_v16_full1319 1 "${runner}" gsm8k 0 128 \
-    "${profile}" 0.004 trace gsm_v16_full1319 ) & p1=$!
+( run_gpu math_v18_full500 0 "${runner}" localleap_math500 0 128 \
+    "${profile}" 0.004 trace math_v18_full500
+  run_gpu mbpp_v18_full500 0 "${runner}" mbpp 0 128 \
+    "${profile}" 0.004 trace mbpp_v18_full500 ) & p0=$!
+( run_gpu gsm_v18_full1319 1 "${runner}" gsm8k 0 128 \
+    "${profile}" 0.004 trace gsm_v18_full1319 ) & p1=$!
 wait "${p0}"; wait "${p1}"
-math_full=${run_base}/localleap_math500/math_v16_full500
-gsm_full=${run_base}/gsm8k/gsm_v16_full1319
-mbpp_full=${run_base}/mbpp/mbpp_v16_full500
+math_full=${run_base}/localleap_math500/math_v18_full500
+gsm_full=${run_base}/gsm8k/gsm_v18_full1319
+mbpp_full=${run_base}/mbpp/mbpp_v18_full500
 compare_pair math_full500 "$(records "${parent_math}")" "$(records "${math_full}")" \
   "${parent_math}/run_config.txt" "${math_full}/run_config.txt"
 compare_pair gsm_full1319 "$(records "${parent_gsm}")" "$(records "${gsm_full}")" \
@@ -241,11 +244,12 @@ for name,x in rows.items():
     assert x["method_correct"] >= x["baseline_correct"], (name,x)
     assert x["prompt_hash_mismatches"] == 0 and x["target_hash_mismatches"] == 0, (name,x)
     assert x["duplicate_or_missing_ids"] == 0, (name,x)
+    assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], (name,x)
 assert sum(x["method_correct"] for x in rows.values()) > sum(x["baseline_correct"] for x in rows.values()), rows
 summary={
-    "schema":"localized_evidence_conflict_repair_full4_v1",
+    "schema":"early_localized_evidence_conflict_repair_full4_v1",
     "single_algorithm":True,
-    "profile":"trajectory_localized_evidence_conflict_repair",
+    "profile":"trajectory_early_localized_evidence_conflict_repair",
     "accepted":True,
     "tasks":rows,
 }
@@ -261,4 +265,4 @@ for item in "humaneval:${he_full}" "math500:${math_full}" "gsm8k:${gsm_full}" "m
 done
 
 touch "${queue_root}/ACCEPTED" "${queue_root}/DONE"
-echo "localized_evidence_conflict_repair_queue_complete"
+echo "early_localized_evidence_conflict_repair_queue_complete"

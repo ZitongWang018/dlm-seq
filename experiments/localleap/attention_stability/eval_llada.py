@@ -272,6 +272,7 @@ class LLaDAEvalHarness(LM):
             "confirmed_bidirectional_lazy_public_guard",
             "early_confirmed_bidirectional_lazy_public_guard",
             "localized_evidence_conflict_repair_lazy_public_guard",
+            "early_localized_evidence_conflict_repair_lazy_public_guard",
             "confirmed_bidirectional_public_verifier",
             "confirmed_bidirectional_public_pareto_verifier",
             "confirmed_bidirectional_outcome_arbiter",
@@ -287,6 +288,7 @@ class LLaDAEvalHarness(LM):
                 "confirmed_bidirectional_lazy_public_guard, "
                 "early_confirmed_bidirectional_lazy_public_guard, "
                 "localized_evidence_conflict_repair_lazy_public_guard, "
+                "early_localized_evidence_conflict_repair_lazy_public_guard, "
                 "confirmed_bidirectional_public_verifier, or "
                 "confirmed_bidirectional_public_pareto_verifier, or "
                 "confirmed_bidirectional_outcome_arbiter"
@@ -602,6 +604,7 @@ class LLaDAEvalHarness(LM):
                         "confirmed_bidirectional_lazy_public_guard",
                         "early_confirmed_bidirectional_lazy_public_guard",
                         "localized_evidence_conflict_repair_lazy_public_guard",
+                        "early_localized_evidence_conflict_repair_lazy_public_guard",
                         "confirmed_bidirectional_public_verifier",
                         "confirmed_bidirectional_public_pareto_verifier",
                     }
@@ -620,6 +623,13 @@ class LLaDAEvalHarness(LM):
                         has_public_checks(question, req.doc.get("entry_point"))
                     )
                     if (
+                        requested_selection_mode
+                        == "early_localized_evidence_conflict_repair_lazy_public_guard"
+                    ):
+                        effective_selection_mode = (
+                            "early_localized_evidence_conflict_repair"
+                        )
+                    elif (
                         requested_selection_mode
                         == "localized_evidence_conflict_repair_lazy_public_guard"
                     ):
@@ -801,8 +811,10 @@ class LLaDAEvalHarness(LM):
                     if public_guard_active:
                         repair_retention = None
                         if (
-                            requested_selection_mode
-                            == "localized_evidence_conflict_repair_lazy_public_guard"
+                            requested_selection_mode in {
+                                "localized_evidence_conflict_repair_lazy_public_guard",
+                                "early_localized_evidence_conflict_repair_lazy_public_guard",
+                            }
                             and decode_diagnostics["selected_name"] == "repair"
                         ):
                             repair_name = decode_diagnostics["selected_name"]

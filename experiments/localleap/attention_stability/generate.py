@@ -1286,7 +1286,10 @@ def generate_trajectory_likelihood_selection(
     )
     accuracy_abort_threshold = (
         float(fast_summary["commit_logprob_mean"]) + 1.0 / int(block_length)
-        if selection_mode == "early_confirmed_bidirectional_block"
+        if selection_mode in {
+            "early_confirmed_bidirectional_block",
+            "early_localized_evidence_conflict_repair",
+        }
         else None
     )
     accuracy_x, accuracy_nfe, accuracy_summary = generate_attention_stability(
@@ -1407,6 +1410,7 @@ def generate_trajectory_likelihood_selection(
         "early_confirmed_bidirectional_block",
         "confirmed_bidirectional_public_guard",
         "localized_evidence_conflict_repair",
+        "early_localized_evidence_conflict_repair",
     }:
         if accuracy_early_aborted:
             selected_name = "fast"
@@ -1429,6 +1433,7 @@ def generate_trajectory_likelihood_selection(
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
             "localized_evidence_conflict_repair",
+            "early_localized_evidence_conflict_repair",
         } and not accuracy_early_aborted:
             selected_name = select_confirmed_bidirectional_block(
                 bidirectional_block_scores,
@@ -1440,7 +1445,33 @@ def generate_trajectory_likelihood_selection(
                 ("fast", "accuracy"),
                 key=lambda name: bidirectional_block_scores[name],
             )
-        if selection_mode == "localized_evidence_conflict_repair":
+        if (
+            selection_mode == "early_localized_evidence_conflict_repair"
+            and accuracy_early_aborted
+        ):
+            pre_repair_selected_name = selected_name
+            evidence_conflict_repair_summary = {
+                "triggered": False,
+                "path_supports_accuracy": None,
+                "verifier_supports_accuracy": None,
+                "parent_name": pre_repair_selected_name,
+                "repair_generated": False,
+                "repair_accepted": False,
+                "repair_changed_positions": 0,
+                "repair_target_block": None,
+                "repair_nfe": 0,
+                "repair_selector_nfe": 0,
+                "repair_candidate_scores": None,
+                "repair_verifier_blocks": None,
+                "repair": None,
+                "skip_reason": "accuracy_early_abort",
+                "uses_hidden_tests": False,
+                "uses_reference_solution": False,
+            }
+        elif selection_mode in {
+            "localized_evidence_conflict_repair",
+            "early_localized_evidence_conflict_repair",
+        }:
             pre_repair_selected_name = selected_name
             path_supports_accuracy = (
                 float(accuracy_summary["commit_logprob_mean"])
@@ -1564,6 +1595,7 @@ def generate_trajectory_likelihood_selection(
         "early_confirmed_bidirectional_block",
         "confirmed_bidirectional_public_guard",
         "localized_evidence_conflict_repair",
+        "early_localized_evidence_conflict_repair",
     }:
         disagreement_count = bidirectional_block_disagreements
         scored_disagreement_count = bidirectional_block_disagreements
@@ -1592,7 +1624,9 @@ def generate_trajectory_likelihood_selection(
     )
     summary = {
         "decoder": (
-            "trajectory_localized_evidence_conflict_repair_v17"
+            "trajectory_early_localized_evidence_conflict_repair_v18"
+            if selection_mode == "early_localized_evidence_conflict_repair"
+            else "trajectory_localized_evidence_conflict_repair_v17"
             if selection_mode == "localized_evidence_conflict_repair"
             else "trajectory_confirmed_bidirectional_public_guard_v11"
             if selection_mode == "confirmed_bidirectional_public_guard"
@@ -1626,7 +1660,9 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "repair_strongest_opposing_block_only_on_evidence_conflict"
+            "admissible_early_abort_then_repair_strongest_opposing_block"
+            if selection_mode == "early_localized_evidence_conflict_repair"
+            else "repair_strongest_opposing_block_only_on_evidence_conflict"
             if selection_mode == "localized_evidence_conflict_repair"
             else "confirmed_bidirectional_then_strict_public_example_baseline_guard"
             if selection_mode == "confirmed_bidirectional_public_guard"
@@ -1701,6 +1737,7 @@ def generate_trajectory_likelihood_selection(
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
             "localized_evidence_conflict_repair",
+            "early_localized_evidence_conflict_repair",
         }
         else None,
         "pre_repair_selected_name": pre_repair_selected_name,
@@ -1713,7 +1750,10 @@ def generate_trajectory_likelihood_selection(
                 "early_abort_best_possible_final_mean"
             ],
         }
-        if selection_mode == "early_confirmed_bidirectional_block"
+        if selection_mode in {
+            "early_confirmed_bidirectional_block",
+            "early_localized_evidence_conflict_repair",
+        }
         else None,
         "baseline_consensus": baseline_consensus,
         "revision_coverage": {
@@ -1742,6 +1782,7 @@ def generate_trajectory_likelihood_selection(
                     "early_confirmed_bidirectional_block",
                     "confirmed_bidirectional_public_guard",
                     "localized_evidence_conflict_repair",
+                    "early_localized_evidence_conflict_repair",
                 }
                 else {}
             ),
@@ -1750,7 +1791,10 @@ def generate_trajectory_likelihood_selection(
                     "repair": int(repair_nfe),
                     "repair_selector": int(repair_selector_nfe),
                 }
-                if selection_mode == "localized_evidence_conflict_repair"
+                if selection_mode in {
+                    "localized_evidence_conflict_repair",
+                    "early_localized_evidence_conflict_repair",
+                }
                 else {}
             ),
             **(
