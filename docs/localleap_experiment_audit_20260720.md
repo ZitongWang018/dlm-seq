@@ -85,7 +85,7 @@ per-record NFE nonincrease.
 | --- | ---: | ---: | ---: | --- |
 | HumanEval | 58/164 = 35.37% | 43,147 | fresh fair baseline queued | method complete |
 | MATH-500 | 167/500 = 33.40% | 119,799 | queued after GSM8K | method complete |
-| GSM8K | in progress | in progress | generating in parallel on GPU1 | both arms active |
+| GSM8K | in progress | in progress | fresh baseline generating in parallel | both arms active |
 | MBPP | queued | queued | queued | pending |
 
 The MATH result has 500/500 records, zero duplicate IDs, zero prompt/generation
@@ -352,16 +352,23 @@ dominate.
    waits for v19 v1 and launches only if v1 fails because its source package
    lacks the HumanEval helper files. An algorithm/CUDA/evaluator/unknown failure
    is never auto-reclassified.
-8. `strict_unified_offline_three_arm_20260720_v3`: after the recovered v19
+8. `strict_unified_offline_three_arm_20260720_v4`: after the recovered v19
    terminal decision, freshly regenerates baseline, the one globally selected
    candidate and symmetric-fast under one pre-run manifest. Baseline and
    candidate run simultaneously per task, and the candidate alternates GPUs
    across the four tasks. Fast remains a comparator only.
 
+The earlier strict v3 controller completed its preflight but was deliberately
+superseded before generation. Its preregistration listed v19 ahead of v18, but
+the delayed shell branch tested v18 first. V4 reverses the two checks, adds a
+regression test for the registered priority, and preserves v3 with a
+`SUPERSEDED_BY_V4` marker. No v3 result was overwritten and no GPU generation
+had begun when it was stopped.
+
 The original fair queue sets offline environment variables and hashes the six
 model shards, but its accuracy arm is historical and its model-input audit is
 post-hoc reconstruction. It is therefore a useful provisional comparison, not
-the final strict fairness claim. The v20/v3 queue closes this gap by making all
+the final strict fairness claim. The v20/v4 queue closes this gap by making all
 three arms fresh after the same weight/data/task/evaluator/environment freeze,
 using explicit `local_files_only=True`, blocking socket access during cache
 preflight, and capturing the runtime input directly. The fast arm is never
@@ -383,7 +390,9 @@ loaded these exact cached views successfully:
 The tokenizer and custom config also loaded solely from the local checkpoint.
 The offline manifest contains 40 source/data/model-metadata files, including 10
 Arrow files; the six safetensor shards are hashed in a separate large-file
-manifest and reverified after evaluation.
+manifest and reverified after evaluation. V4 passed all six protocol regression
+tests and is detached from the SSH session, so loss of client or Internet
+connectivity does not stop the queued chain.
 
 ## 10. Cached primary sources
 
