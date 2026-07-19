@@ -108,6 +108,7 @@ if [[ ! -s "${frozen}" ]]; then
     "${source_root}/tests/test_attention_stability.py" \
     "${source_root}/tests/test_candidate_generation_trace.py" \
     "${source_root}/test_audit_mbpp_assertions.py" \
+    "${source_root}/test_v15_runner_contract.py" \
     "${source_root}/admissible_lazy_guard_preregistration_20260719.json" >"${frozen}"
 fi
 verify
@@ -117,6 +118,7 @@ PYTHONPATH=. /root/miniconda3/bin/python "${source_root}/tests/test_attention_st
 PYTHONPATH=. /root/miniconda3/bin/python "${source_root}/tests/test_candidate_generation_trace.py"
 PYTHONPATH="${source_root}" /root/miniconda3/bin/python "${source_root}/test_audit_mbpp_assertions.py"
 bash -n "${runner}" "${controller}"
+/root/miniconda3/bin/python "${source_root}/test_v15_runner_contract.py"
 
 echo "method=trajectory_early_lazy_confirmed_public_guard_tau_0.004"
 echo "claim=exact_v11_output_with_admissible_vertical_early_abort"

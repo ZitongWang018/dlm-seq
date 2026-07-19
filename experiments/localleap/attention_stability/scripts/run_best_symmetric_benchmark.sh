@@ -15,6 +15,7 @@ diagnostics_mode=$6
 run_tag=$7
 limit=${8:-full}
 gen_length=${9:-256}
+block_length=32
 
 case "${task}" in
   humaneval) expected_full=164; primary_metric=postprocess ;;
@@ -237,7 +238,7 @@ if [[ "${profile}" != "baseline" ]]; then
   fi
 fi
 
-model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_length},steps=${steps},block_length=32,remasking=low_confidence,early_stop=False,show_speed=True,integrate_speed=False${dependency_args}${trace_args}"
+model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_length},steps=${steps},block_length=${block_length},remasking=low_confidence,early_stop=False,show_speed=True,integrate_speed=False${dependency_args}${trace_args}"
 {
   echo "schema=best_symmetric_benchmark_v2"
   echo "queue_id=${queue_id}"
