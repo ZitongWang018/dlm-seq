@@ -199,3 +199,26 @@
 - Old “recover gold from past logits / direct response timing” directions failed on math.
 - MATH/HumanEval ceiling scripts had metric bugs (see `cursorfeedback/0712grokproblem.md`).
 - top-k distance support-index bug was fixed in `src/distribution.py` (tests cover it).
+
+## 2026-07-19 continued
+
+- Completed the v9 GSM8K-64 arm: 44/64 versus symmetric-fast 43/64 and
+  original LLaDA 40/64. The paired original comparison is 8 method-only / 4
+  baseline-only at 18,295 versus 8,192 NFE; all audit alignment checks pass.
+- Diagnosed MBPP's generic zero as the wrong evaluation channel, not zero
+  executable programs. Added `mbpp_prompt_assertion_execution_v2`, which
+  accepts immutable lm-eval samples even when original LLaDA has no attention
+  trace, verifies sample/task generation and hashes, and crosschecks two
+  independent assertion executors. Formal MBPP-50 is v9 16, fast 14, original
+  18; v9 therefore loses two to the true baseline despite beating fast by two.
+- Queued frozen post-hoc v11/v12 MBPP audits and stable-ID subset pairing;
+  completed artifacts are never rewritten after evaluator changes.
+- Added and queued the no-hyperparameter admissible-lazy speed child. It stops
+  the slow trajectory only when an optimistic zero-logprob bound proves the
+  existing one-nat selector gate unreachable, then applies the unchanged v12
+  prompt-visible guard. The quick gate requires exact outputs and lower total
+  NFE on HumanEval-32 plus GSM8K-64 before any full evaluation.
+- While v11 MBPP-100 occupies GPU1, launched the preregistered v13
+  HumanEval-32 mean and Pareto full-draft screens sequentially on the otherwise
+  idle GPU0 in a separate versioned prefill root. This does not alter the
+  formal queue or reveal its registered holdout.

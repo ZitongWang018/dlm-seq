@@ -170,6 +170,31 @@ an existing complete trajectory. It is preregistered on MATH/GSM development
 subsets before separate holdouts. Frozen sources must never be edited, and
 development/formal records must remain separate.
 
+The v9 cross-task arms are now complete. GSM8K-64 is 44/64 for v9,
+43/64 for symmetric-fast, and 40/64 for original LLaDA. Against original
+LLaDA, v9 has eight method-only and four baseline-only examples (+6.25 points)
+at 18,295 versus 8,192 NFE. MBPP required its task-specific execution channel:
+the generic lm-eval aggregate incorrectly reported zero. The immutable
+`mbpp_prompt_assertion_execution_v2` audit independently executes the current
+prompt assertions by two code paths and gives v9 16/50, symmetric-fast 14/50,
+and original LLaDA 18/50. All IDs, prompt/target hashes, generations, NFE and
+residual-mask checks pass. Thus v9 is positive on HumanEval, MATH-50 and
+GSM8K-64 but not a universal MBPP winner; v11 remains the accuracy candidate
+because its guard preserves complete trajectories and had already produced
+nine MBPP recoveries without a loss on a separate 100-task slice.
+
+Evaluator commits `5806899` and `88b60af` add versioned baseline-compatible
+MBPP sample-log auditing and queued v11/v12 post-hoc execution comparisons.
+The v15 speed child in commit `e3b67c1` combines v12's lazy public guard with
+an admissible longitudinal early stop: while generating the accuracy path,
+uncommitted tokens receive the optimistic maximum log-probability zero; if
+even that bound cannot clear the inherited one-nat path gate, the remaining
+path and verifier are skipped. It adds no threshold and must reproduce v11
+exactly before any speed claim. Its queue waits for v14, then screens
+HumanEval-32 and GSM8K-64 on both GPUs before HumanEval-164, MATH-50 and
+MBPP-100. The preregistered queue root is
+`/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard/results/experiment_queues/admissible_lazy_guard_20260719_v1`.
+
 ## Deprecated (cleaned 2026-07-13)
 
 Trajectory / lateral-response / agreement / ceiling-bug evals were removed from `results/` (local + AutoDL `dlm-seq-flow`).  
