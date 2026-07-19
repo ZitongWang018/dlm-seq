@@ -6,6 +6,10 @@ llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_c
 parent_root=${PARENT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
 parent_queue_id=${PARENT_QUEUE_ID:-best_framework_full4_20260719_v1}
 queue_id=${ATTENTION_QUEUE_ID:-early_localized_evidence_conflict_repair_20260719_v2}
+profile=${PROFILE:-trajectory_early_localized_evidence_conflict_repair}
+run_prefix=${RUN_PREFIX:-v18}
+preregistration=${PREREGISTRATION:-early_localized_evidence_conflict_repair_preregistration_20260719_v2.json}
+leakage_auditor=${LEAKAGE_AUDITOR:-audit_generation_leakage_v2.py}
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
 run_base=${llada_root}/results/best_symmetric_benchmarks/${queue_id}
 parent_queue=${parent_root}/results/experiment_queues/${parent_queue_id}
@@ -103,8 +107,8 @@ cd "${llada_root}"
 if [[ ! -s "${frozen}" ]]; then
   sha256sum generate.py eval_llada.py differential_selector.py \
     run_best_symmetric_benchmark.sh compare_paired_task_runs.py \
-    audit_generation_leakage.py audit_mbpp_assertions.py slice_audit_records.py \
-    early_localized_evidence_conflict_repair_preregistration_20260719_v2.json \
+    "${leakage_auditor}" audit_mbpp_assertions.py slice_audit_records.py \
+    "${preregistration}" \
     tests/test_attention_stability.py tests/test_differential_selector.py \
     "${controller}" >"${frozen}"
 fi
@@ -112,8 +116,8 @@ verify
 /root/miniconda3/bin/python -m py_compile generate.py eval_llada.py \
   differential_selector.py compare_paired_task_runs.py audit_mbpp_assertions.py
 bash -n "${runner}" "${controller}"
-run_stage leakage_static /root/miniconda3/bin/python audit_generation_leakage.py \
-  --source-root "${llada_root}" --expected-profile trajectory_early_localized_evidence_conflict_repair \
+run_stage leakage_static /root/miniconda3/bin/python "${leakage_auditor}" \
+  --source-root "${llada_root}" --expected-profile "${profile}" \
   --output "${queue_root}/leakage/static.json"
 
 echo "waiting_for_parent_queue=${parent_queue}"
@@ -133,14 +137,13 @@ mkdir -p "${queue_root}/parents"
 /root/miniconda3/bin/python slice_audit_records.py \
   "$(records "${parent_gsm}")" "${queue_root}/parents/gsm_dev64.jsonl" --start 0 --end 64
 
-profile=trajectory_early_localized_evidence_conflict_repair
-( run_gpu he_v18_full164 0 "${runner}" humaneval 0 128 \
-    "${profile}" 0.004 trace he_v18_full164 164 256 ) & p0=$!
-( run_gpu mbpp_v18_dev100 1 "${runner}" mbpp 0 128 \
-    "${profile}" 0.004 trace mbpp_v18_dev100 100 256 ) & p1=$!
+( run_gpu "he_${run_prefix}_full164" 0 "${runner}" humaneval 0 128 \
+    "${profile}" 0.004 trace "he_${run_prefix}_full164" 164 256 ) & p0=$!
+( run_gpu "mbpp_${run_prefix}_dev100" 1 "${runner}" mbpp 0 128 \
+    "${profile}" 0.004 trace "mbpp_${run_prefix}_dev100" 100 256 ) & p1=$!
 wait "${p0}"; wait "${p1}"
-he_full=${run_base}/humaneval/he_v18_full164
-mbpp_dev=${run_base}/mbpp/mbpp_v18_dev100
+he_full=${run_base}/humaneval/he_${run_prefix}_full164
+mbpp_dev=${run_base}/mbpp/mbpp_${run_prefix}_dev100
 compare_pair he_full164 "$(records "${parent_he}")" "$(records "${he_full}")" \
   "${parent_he}/run_config.txt" "${he_full}/run_config.txt"
 run_stage mbpp_dev_assertions /root/miniconda3/bin/python audit_mbpp_assertions.py \
@@ -168,13 +171,13 @@ PY
 then reject "code_domain_gate"; fi
 touch "${queue_root}/CODE_DOMAIN_GATE_PASS"
 
-( run_gpu math_v18_dev50 0 "${runner}" localleap_math500 0 128 \
-    "${profile}" 0.004 trace math_v18_dev50 50 256 ) & p0=$!
-( run_gpu gsm_v18_dev64 1 "${runner}" gsm8k 0 128 \
-    "${profile}" 0.004 trace gsm_v18_dev64 64 256 ) & p1=$!
+( run_gpu "math_${run_prefix}_dev50" 0 "${runner}" localleap_math500 0 128 \
+    "${profile}" 0.004 trace "math_${run_prefix}_dev50" 50 256 ) & p0=$!
+( run_gpu "gsm_${run_prefix}_dev64" 1 "${runner}" gsm8k 0 128 \
+    "${profile}" 0.004 trace "gsm_${run_prefix}_dev64" 64 256 ) & p1=$!
 wait "${p0}"; wait "${p1}"
-math_dev=${run_base}/localleap_math500/math_v18_dev50
-gsm_dev=${run_base}/gsm8k/gsm_v18_dev64
+math_dev=${run_base}/localleap_math500/math_${run_prefix}_dev50
+gsm_dev=${run_base}/gsm8k/gsm_${run_prefix}_dev64
 compare_pair math_dev50 "${queue_root}/parents/math_dev50.jsonl" "$(records "${math_dev}")" \
   "${parent_math}/run_config.txt" "${math_dev}/run_config.txt"
 compare_pair gsm_dev64 "${queue_root}/parents/gsm_dev64.jsonl" "$(records "${gsm_dev}")" \
@@ -194,16 +197,16 @@ PY
 then reject "math_gsm_development_gate"; fi
 touch "${queue_root}/CROSS_TASK_GATE_PASS" "${queue_root}/FULL_PROMOTION_PASS"
 
-( run_gpu math_v18_full500 0 "${runner}" localleap_math500 0 128 \
-    "${profile}" 0.004 trace math_v18_full500
-  run_gpu mbpp_v18_full500 0 "${runner}" mbpp 0 128 \
-    "${profile}" 0.004 trace mbpp_v18_full500 ) & p0=$!
-( run_gpu gsm_v18_full1319 1 "${runner}" gsm8k 0 128 \
-    "${profile}" 0.004 trace gsm_v18_full1319 ) & p1=$!
+( run_gpu "math_${run_prefix}_full500" 0 "${runner}" localleap_math500 0 128 \
+    "${profile}" 0.004 trace "math_${run_prefix}_full500"
+  run_gpu "mbpp_${run_prefix}_full500" 0 "${runner}" mbpp 0 128 \
+    "${profile}" 0.004 trace "mbpp_${run_prefix}_full500" ) & p0=$!
+( run_gpu "gsm_${run_prefix}_full1319" 1 "${runner}" gsm8k 0 128 \
+    "${profile}" 0.004 trace "gsm_${run_prefix}_full1319" ) & p1=$!
 wait "${p0}"; wait "${p1}"
-math_full=${run_base}/localleap_math500/math_v18_full500
-gsm_full=${run_base}/gsm8k/gsm_v18_full1319
-mbpp_full=${run_base}/mbpp/mbpp_v18_full500
+math_full=${run_base}/localleap_math500/math_${run_prefix}_full500
+gsm_full=${run_base}/gsm8k/gsm_${run_prefix}_full1319
+mbpp_full=${run_base}/mbpp/mbpp_${run_prefix}_full500
 compare_pair math_full500 "$(records "${parent_math}")" "$(records "${math_full}")" \
   "${parent_math}/run_config.txt" "${math_full}/run_config.txt"
 compare_pair gsm_full1319 "$(records "${parent_gsm}")" "$(records "${gsm_full}")" \
@@ -215,10 +218,12 @@ compare_pair mbpp_full500 "${parent_queue}/mbpp_assertion/method/audit_records.j
   "${queue_root}/mbpp_assertion/full500/audit_records.jsonl" \
   "${parent_mbpp}/run_config.txt" "${mbpp_full}/run_config.txt"
 
-if ! /root/miniconda3/bin/python - "${queue_root}" <<'PY'
+if ! /root/miniconda3/bin/python - "${queue_root}" "${profile}" "${run_prefix}" <<'PY'
 import json,sys
 from pathlib import Path
 root=Path(sys.argv[1])
+profile=sys.argv[2]
+run_prefix=sys.argv[3]
 names=("he_full164","math_full500","gsm_full1319","mbpp_full500")
 rows={name:json.load(open(root/"paired"/name/"paired_summary.json")) for name in names}
 for name,x in rows.items():
@@ -228,9 +233,9 @@ for name,x in rows.items():
     assert x["method_total_nfe"] <= 1.05 * x["baseline_total_nfe"], (name,x)
 assert sum(x["method_correct"] for x in rows.values()) > sum(x["baseline_correct"] for x in rows.values()), rows
 summary={
-    "schema":"early_localized_evidence_conflict_repair_full4_v2",
+    "schema":f"{run_prefix}_localized_repair_full4_v1",
     "single_algorithm":True,
-    "profile":"trajectory_early_localized_evidence_conflict_repair",
+    "profile":profile,
     "accepted":True,
     "tasks":rows,
 }
@@ -240,10 +245,10 @@ then reject "full4_nonregression_gate"; fi
 
 for item in "humaneval:${he_full}" "math500:${math_full}" "gsm8k:${gsm_full}" "mbpp:${mbpp_full}"; do
   name=${item%%:*}; run=${item#*:}
-  run_stage "leakage_${name}" /root/miniconda3/bin/python audit_generation_leakage.py \
+  run_stage "leakage_${name}" /root/miniconda3/bin/python "${leakage_auditor}" \
     --source-root "${llada_root}" --run-root "${run}" \
     --expected-profile "${profile}" --output "${queue_root}/leakage/${name}.json"
 done
 
 touch "${queue_root}/ACCEPTED" "${queue_root}/DONE"
-echo "early_localized_evidence_conflict_repair_queue_complete"
+echo "localized_evidence_conflict_repair_queue_complete profile=${profile}"

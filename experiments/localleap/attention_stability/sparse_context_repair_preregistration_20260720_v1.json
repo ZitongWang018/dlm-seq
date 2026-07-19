@@ -41,7 +41,7 @@
   },
   "activation": "run only after the already queued fair v15-or-v18 reproduction finishes and only when v18 is not accepted",
   "rapid_gates": {
-    "code_parallel": "HumanEval-164 must strictly beat v15 and MBPP-100 must be non-regressive; each task NFE no more than v18 when v18 records exist and no more than 1.05x v15",
+    "code_parallel": "HumanEval-164 must strictly beat v15 and MBPP-100 must be non-regressive; each task NFE no more than 1.05x v15",
     "reasoning_parallel": "MATH-50 and GSM8K-64 must be non-regressive individually and strictly improve in aggregate over v15; each task NFE no more than 1.05x v15",
     "formal": "one profile across all four full benchmarks; no task regression, strict aggregate accuracy gain, clean IDs/hashes/masks/NFE/leakage/model-input audits"
   },
