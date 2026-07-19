@@ -1,4 +1,4 @@
-from audit_mbpp_assertions import audit_record
+from audit_mbpp_assertions import audit_record, trace_from_sample
 
 
 def make_trace(generation, prompt):
@@ -50,9 +50,58 @@ def test_prompt_hash_mismatch_is_rejected():
         raise AssertionError("prompt hash mismatch was accepted")
 
 
+def test_lm_eval_sample_adapter_preserves_generation_and_identity():
+    task = dict(
+        TASK,
+        absolute_index=7,
+        decoded_generation="def square(x): return x*x",
+        raw_gold="def square(x): return x*x",
+        nfe=128,
+    )
+    sample = {
+        "doc": {"task_id": "mbpp_0"},
+        "arguments": {"gen_args_0": {"arg_0": PROMPT}},
+        "resps": [[task["decoded_generation"]]],
+        "prompt_hash": "p",
+        "target_hash": "t",
+        "filter": "none",
+    }
+    trace = trace_from_sample(sample, task)
+    assert trace["task_id"] == "mbpp_0"
+    assert trace["absolute_index"] == 7
+    assert trace["decoded_generation"] == task["decoded_generation"]
+    assert audit_record(trace, task)["correct"] is True
+
+
+def test_lm_eval_sample_adapter_rejects_generation_drift():
+    task = dict(
+        TASK,
+        absolute_index=0,
+        decoded_generation="def square(x): return x*x",
+        raw_gold="def square(x): return x*x",
+        nfe=128,
+    )
+    sample = {
+        "doc": {"task_id": "mbpp_0"},
+        "arguments": {"gen_args_0": {"arg_0": PROMPT}},
+        "resps": [["def square(x): return 0"]],
+        "prompt_hash": "p",
+        "target_hash": "t",
+        "filter": "none",
+    }
+    try:
+        trace_from_sample(sample, task)
+    except ValueError as error:
+        assert "generation mismatch" in str(error)
+    else:
+        raise AssertionError("generation drift was accepted")
+
+
 if __name__ == "__main__":
     test_correct_program_passes_both_execution_paths()
     test_wrong_program_is_not_repaired_by_the_evaluator()
     test_syntax_error_is_separate_from_a_correctness_pass()
     test_prompt_hash_mismatch_is_rejected()
-    print("4 MBPP assertion-audit tests passed")
+    test_lm_eval_sample_adapter_preserves_generation_and_identity()
+    test_lm_eval_sample_adapter_rejects_generation_drift()
+    print("6 MBPP assertion-audit tests passed")
