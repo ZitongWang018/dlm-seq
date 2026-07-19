@@ -23,6 +23,11 @@
 - Rejected additional MATH final-answer majority variants on indices 0--24:
   plain majority lost two correct answers and gained none; evidence-gated
   majority changed one neutral example and gained none.
+- Added and queued an explicit outcome-set arbiter for MATH/GSM. It removes
+  duplicate candidate answers, asks one normal dLLM pass to solve independently,
+  and can only select an already generated complete trajectory. MATH 0--15 and
+  GSM 0--15 are development; MATH 25--49 and GSM 32--63 were registered as
+  holdouts before per-record inspection.
 
 ## 2026-07-16 — Return to best symmetric parent and broaden benchmarks
 

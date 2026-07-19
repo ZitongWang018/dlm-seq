@@ -160,10 +160,15 @@ Queue roots are:
 
 - `/root/autodl-tmp/LocalLeap/llada_slot_lazy_public_guard/results/experiment_queues/lazy_public_guard_exact_20260719_v1`
 - `/root/autodl-tmp/LocalLeap/llada_slot_public_verifier/results/experiment_queues/public_full_draft_rapid_20260719_v1`
+- `/root/autodl-tmp/LocalLeap/llada_slot_outcome_arbiter/results/experiment_queues/outcome_arbiter_rapid_20260719_v1`
 
 Relevant commits are `73aebeb`, `bfcad98`, `54e8e01`, `310258b`, and
-`f98f080`. Frozen v9/v11 sources must never be edited, and development/formal
-records must remain separate.
+`f98f080`. The outcome-arbiter implementation and queue are `fc20ff8` and
+`d23172f`: only when complete attention trajectories disagree, one additional
+normal dLLM pass sees the de-duplicated candidate-answer set and may select only
+an existing complete trajectory. It is preregistered on MATH/GSM development
+subsets before separate holdouts. Frozen sources must never be edited, and
+development/formal records must remain separate.
 
 ## Deprecated (cleaned 2026-07-13)
 
