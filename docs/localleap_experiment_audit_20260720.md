@@ -193,7 +193,7 @@ results are retained because they constrain the next design.
 | Confirmed bidirectional | A path-time evidence gate and full-draft verifier must favor the same path | v9 cross-task parent |
 | Public guard v11 | Original trajectory may override only by strictly more prompt-visible checks | best code accuracy parent, HE 58/164 and MBPP 40/100 |
 | Lazy public guard v12 | Skip original trajectory when the public-check decision is already fixed | MBPP exact to v11, NFE 41,475 to 37,763, wall 1.083x |
-| Admissible early abort v15 | Stop the accuracy path when even zero-loss future commits cannot clear the evidence gate | exact-output speed descendant; current full4 method |
+| Admissible early abort v15 | Stop the accuracy path when even zero-loss future commits cannot clear the evidence gate | exact-output speed descendant; cross-task rejected by fresh GSM full result |
 | Localized evidence conflict repair v18 | On evidence/verifier disagreement, preserve common tokens, re-denoise one strongest opposing block, then require the same verifier/public guard | preregistered, waiting for full4 |
 | Sparse context repair v19 | Keep v18's single block but preserve every parent token supported under both complete draft contexts; re-denoise only the non-unanimous frontier | frozen before v18 results; runs only if v18 is rejected |
 
@@ -206,6 +206,16 @@ examples and one task had already exhausted its visible checks. Seven of the
 eight also take the admissible early abort and select the fast path. However,
 the same signatures occur much more often among wins and shared failures, so
 they are not a defensible correctness oracle.
+
+The full GSM trace makes the limitation sharper. The original trajectory was
+generated on 0/1319 records because every prompt lacked public examples; the
+method therefore chose only the accuracy path (197 records) or fast path
+(1,122 records). Both strata have the same paired deficit of 14. Zero-draft-
+disagreement records lose 17 net pairs and nonzero-disagreement records lose
+11; early-abort and no-abort strata also both lose. Thus neither the path name,
+early abort, disagreement count, nor the existing block-evidence sign supplies
+a safe threshold fix. The failure is candidate-family coverage: the original
+anchor is absent exactly where prompt-visible execution evidence is absent.
 
 This rules out another label-fitted threshold or unconditional third-trajectory
 fallback. The already tested full-draft mean/Pareto verifier produced no

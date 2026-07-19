@@ -292,3 +292,10 @@
   This is an algorithm-level cross-task rejection, not an evaluator failure.
   V15 remains a code/speed parent but cannot be the final unified winner;
   v18/v19 must repair the GSM regression to be promoted.
+- Added a stable-ID post-generation trace-feature auditor with two regression
+  tests. It never reads gold answers or generated text and refuses to overwrite
+  outputs. On GSM, the original candidate was generated 0/1319 times; accuracy
+  and fast selection strata each have paired balance -14, while zero and
+  nonzero disagreement strata are -17 and -11. The failure is candidate-family
+  coverage rather than one tunable threshold, so no post-hoc selector sweep is
+  justified.
