@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 
-VERSION = "localleap_paired_task_audit_v3"
+VERSION = "localleap_paired_task_audit_v4"
 
 
 def read_jsonl(path):
@@ -141,9 +141,15 @@ def main():
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
-    if source_comparison["mismatches"] and not args.allow_source_drift:
+    source_set_drift = (
+        source_comparison["baseline_only"] or source_comparison["method_only"]
+    )
+    if (source_comparison["mismatches"] or source_set_drift) and not args.allow_source_drift:
         raise SystemExit(
-            f"source hash mismatch: {source_comparison['mismatches']}"
+            "source manifest mismatch: "
+            f"changed={source_comparison['mismatches']} "
+            f"baseline_only={source_comparison['baseline_only']} "
+            f"method_only={source_comparison['method_only']}"
         )
 
     baseline = index_records(read_jsonl(args.baseline_records))
@@ -164,6 +170,10 @@ def main():
             raise SystemExit(f"prompt hash mismatch: {stable_id}")
         if left["target_hash"] != right["target_hash"]:
             raise SystemExit(f"target hash mismatch: {stable_id}")
+        if not left.get("evaluator_version") or not right.get("evaluator_version"):
+            raise SystemExit(f"missing evaluator version: {stable_id}")
+        if left["evaluator_version"] != right["evaluator_version"]:
+            raise SystemExit(f"evaluator version mismatch: {stable_id}")
         paired.append(
             {
                 "stable_task_id": stable_id,
@@ -216,13 +226,17 @@ def main():
         "prompt_hash_mismatches": 0,
         "target_hash_mismatches": 0,
         "duplicate_or_missing_ids": 0,
-        "source_hashes_verified": not source_comparison["mismatches"],
+        "source_hashes_verified": not source_comparison["mismatches"] and not source_set_drift,
         "source_drift_explicitly_allowed": bool(args.allow_source_drift),
         "source_hash_file_count": len(source_comparison["common"]),
         "source_hash_mismatches": len(source_comparison["mismatches"]),
         "source_hash_mismatch_files": source_comparison["mismatches"],
         "baseline_only_source_files": source_comparison["baseline_only"],
         "method_only_source_files": source_comparison["method_only"],
+        "evaluator_version_mismatches": 0,
+        "record_evaluator_versions": sorted(
+            {row["evaluator_version"] for row in baseline.values()}
+        ),
     }
 
     output = Path(args.output_dir)

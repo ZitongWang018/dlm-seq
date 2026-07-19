@@ -57,6 +57,48 @@ from outcome_arbiter import (
 import json
 import hashlib
 import time
+
+
+RUNTIME_INPUT_SCHEMA = "localleap_runtime_model_input_v1"
+
+
+def canonical_json_hash(value):
+    payload = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def runtime_stable_task_id(document, absolute_index):
+    for key in ("task_id", "id", "problem_id", "unique_id"):
+        if document.get(key) is not None:
+            return str(document[key])
+    return f"index_{absolute_index}"
+
+
+def build_runtime_input_record(absolute_index, document, question, user_input, input_ids):
+    token_ids = [int(token_id) for token_id in input_ids]
+    implicit_attention_mask = [1] * len(token_ids)
+    return {
+        "schema": RUNTIME_INPUT_SCHEMA,
+        "absolute_index": int(absolute_index),
+        "stable_task_id": runtime_stable_task_id(document, absolute_index),
+        "raw_prompt_hash": hashlib.sha256(question.encode("utf-8")).hexdigest(),
+        "model_input_text_hash": hashlib.sha256(user_input.encode("utf-8")).hexdigest(),
+        "model_input_token_ids_hash": canonical_json_hash(token_ids),
+        "model_input_token_count": len(token_ids),
+        "implicit_attention_mask_hash": canonical_json_hash(implicit_attention_mask),
+        "document_hash": canonical_json_hash(document),
+        "tokenizer_call": {
+            "add_special_tokens": "transformers_default_true",
+            "attention_mask": "implicit_all_ones",
+            "chat_template": "single_user_add_generation_prompt"
+            if user_input != question
+            else "raw_base_model_prompt",
+        },
+    }
+
+
 def set_seed(seed):
     torch.manual_seed(seed)
     random.seed(seed)
@@ -129,6 +171,7 @@ class LLaDAEvalHarness(LM):
         save_dir=None,
         show_speed=False,
         integrate_speed=False,
+        runtime_input_trace_dir=None,
         dependency_threshold=None,
         dependency_trace_dir=None,
         dependency_diagnostics_dir=None,
@@ -189,10 +232,19 @@ class LLaDAEvalHarness(LM):
         model_kwargs = {}
         if self.accelerator is not None:
             model_kwargs.update({'device_map': {'': f'{self.accelerator.device}'}})
-        config = AutoConfig.from_pretrained(model_path)
+        config = AutoConfig.from_pretrained(
+            model_path, trust_remote_code=True, local_files_only=True
+        )
         config.flash_attention = True
 
-        self.model = LLaDAModelLM.from_pretrained(model_path, trust_remote_code=True, torch_dtype=torch.bfloat16, config=config, **model_kwargs)
+        self.model = LLaDAModelLM.from_pretrained(
+            model_path,
+            trust_remote_code=True,
+            local_files_only=True,
+            torch_dtype=torch.bfloat16,
+            config=config,
+            **model_kwargs,
+        )
         self.model.eval()
         self.model_path = model_path
 
@@ -208,7 +260,9 @@ class LLaDAEvalHarness(LM):
             self._world_size = 1
 
         self.mask_id = mask_id
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path, trust_remote_code=True, local_files_only=True
+        )
 
         self.mc_num = mc_num
         self.batch_size = int(batch_size)
@@ -232,6 +286,7 @@ class LLaDAEvalHarness(LM):
         self.save_dir = save_dir
         self.show_speed = show_speed
         self.integrate_speed = integrate_speed
+        self.runtime_input_trace_dir = runtime_input_trace_dir
         self.dependency_threshold = dependency_threshold
         self.dependency_trace_dir = dependency_trace_dir
         self.dependency_diagnostics_dir = dependency_diagnostics_dir
@@ -528,6 +583,19 @@ class LLaDAEvalHarness(LM):
             else:
                 user_input = question
                 input_ids = self.tokenizer(user_input)['input_ids']
+
+            if self.runtime_input_trace_dir is not None:
+                os.makedirs(self.runtime_input_trace_dir, exist_ok=True)
+                runtime_input_path = os.path.join(
+                    self.runtime_input_trace_dir, f"rank_{self.rank}.jsonl"
+                )
+                runtime_input_record = build_runtime_input_record(
+                    i, req.doc, question, user_input, input_ids
+                )
+                with open(runtime_input_path, "a", encoding="utf-8") as handle:
+                    handle.write(
+                        json.dumps(runtime_input_record, ensure_ascii=False) + "\n"
+                    )
 
             stop_tokens = req.args[1]['until']
             input_ids = torch.tensor(input_ids).to(self.device).unsqueeze(0)  # [1, prompt_len]

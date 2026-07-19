@@ -227,6 +227,7 @@ queue_root=${llada_root}/results/experiment_queues/${queue_id}
 run_root=${llada_root}/results/best_symmetric_benchmarks/${queue_id}/${task}/${run_tag}
 trace_dir=${run_root}/trace
 diagnostics_dir=${run_root}/step_diagnostics
+runtime_input_dir=${run_root}/runtime_inputs
 audit_dir=${run_root}/audit
 output_dir=${run_root}/lm_eval
 log_file=${queue_root}/${run_tag}.log
@@ -236,7 +237,7 @@ if [[ -e "${run_root}/DONE" ]]; then
   echo "completed run already exists; skipping: ${run_root}"
   exit 0
 fi
-mkdir -p "${queue_root}" "${run_root}" "${audit_dir}" "${output_dir}"
+mkdir -p "${queue_root}" "${run_root}" "${audit_dir}" "${output_dir}" "${runtime_input_dir}"
 
 export PATH=/root/miniconda3/bin:${PATH}
 source /root/miniconda3/etc/profile.d/conda.sh
@@ -244,6 +245,7 @@ conda activate base
 export HF_HOME=/root/autodl-tmp/.cache/huggingface
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 export HF_ALLOW_CODE_EVAL=1
 export HF_DATASETS_TRUST_REMOTE_CODE=true
 unset TRANSFORMERS_CACHE || true
@@ -263,7 +265,7 @@ if [[ "${profile}" != "baseline" ]]; then
   fi
 fi
 
-model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_length},steps=${steps},block_length=${block_length},remasking=low_confidence,early_stop=False,show_speed=True,integrate_speed=False${dependency_args}${trace_args}"
+model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_length},steps=${steps},block_length=${block_length},remasking=low_confidence,early_stop=False,show_speed=True,integrate_speed=False,runtime_input_trace_dir=${runtime_input_dir}${dependency_args}${trace_args}"
 {
   echo "schema=best_symmetric_benchmark_v2"
   echo "queue_id=${queue_id}"
@@ -278,6 +280,8 @@ model_args="model_path=/root/autodl-tmp/model/LLaDA/instruct,gen_length=${gen_le
   echo "seeds=0,1234,1234,1234"
   echo "model_args=${model_args}"
   echo "start=$(date --iso-8601=seconds)"
+  echo "cuda_visible_devices=${CUDA_VISIBLE_DEVICES:-unset}"
+  nvidia-smi --query-gpu=index,name,uuid,driver_version,memory.total --format=csv,noheader
   git -C /root/autodl-tmp/dlm-seq-flow rev-parse HEAD
   sha256sum generate.py eval_llada.py differential_selector.py model/modeling_llada.py validate_step_diagnostics.py \
     audit_attention_stability.py audit_lm_eval_task.py compare_paired_task_runs.py \
@@ -305,6 +309,9 @@ fi
 samples=$(find "${output_dir}" -type f -name "samples_${task}_*.jsonl" | sort | tail -1)
 results_json=$(find "${output_dir}" -type f -name 'results_*.json' | sort | tail -1)
 [[ -n "${samples}" && -n "${results_json}" ]]
+runtime_input_trace=${runtime_input_dir}/rank_0.jsonl
+[[ -s "${runtime_input_trace}" ]]
+[[ $(wc -l < "${runtime_input_trace}") -eq ${expected_records} ]]
 
 if [[ "${profile}" != "baseline" ]]; then
   trace=${trace_dir}/rank_0.jsonl

@@ -1,0 +1,44 @@
+{
+  "schema": "strict_unified_three_arm_preregistration_v1",
+  "registered_at": "2026-07-20T02:15:00+08:00",
+  "objective": "Fresh, offline, same-freeze evaluation of one globally selected algorithm against original low-confidence and symmetric_fast on all four benchmarks.",
+  "candidate_selection_order": [
+    "trajectory_early_sparse_context_repair if v19 passes its preregistered full4 gate",
+    "trajectory_early_localized_evidence_conflict_repair if v18 passes its preregistered full4 gate",
+    "trajectory_early_lazy_confirmed_public_guard otherwise"
+  ],
+  "single_algorithm": true,
+  "task_specific_routing": false,
+  "protocol": {
+    "model": "LLaDA-8B-Instruct local frozen checkpoint",
+    "steps": 128,
+    "gen_length": 256,
+    "block_length": 32,
+    "temperature": 0.0,
+    "fewshot": {
+      "humaneval": 0,
+      "math500": 0,
+      "gsm8k": 0,
+      "mbpp": 0
+    },
+    "seeds": [0, 1234, 1234, 1234],
+    "offline_only": true
+  },
+  "arms": {
+    "baseline": "original low-confidence",
+    "candidate": "one selected task-unified profile",
+    "fast_comparator": "symmetric_fast tau=0.004; comparator only"
+  },
+  "fairness": {
+    "all_arms_fresh_after_one_pre-run_artifact_manifest": true,
+    "runtime_model_input_ids_are_hashed_inside_generate_until": true,
+    "baseline_and_candidate_run_simultaneously_per_task": true,
+    "candidate_gpu_assignment_is_balanced_across_tasks": true,
+    "fast_wall_time_is_diagnostic_only": true,
+    "paper_values_are_separate_from_local_arms": true
+  },
+  "leakage_scope": {
+    "hidden_answers_or_hidden_tests_may_not_enter_generation_or_selection": true,
+    "benchmark_reuse_is_reported_as_selection_bias_not_clean_holdout": true
+  }
+}
