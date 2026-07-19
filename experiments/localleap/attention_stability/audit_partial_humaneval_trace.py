@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from humaneval_execution import check_correctness
 
 
-VERSION = "humaneval_partial_trace_execution_health_v1"
+VERSION = "humaneval_partial_trace_execution_health_v2"
 
 
 def read_jsonl(path):
@@ -31,17 +31,18 @@ def index(rows, identity, label):
     return output
 
 
-def build_check_program(generation, doc):
-    return (
-        doc["prompt"]
-        + generation
-        + "\n"
-        + doc["test"]
-        + f"\ncheck({doc['entry_point']})\n"
+def build_check_program(generation, sample, sanitize_fn):
+    """Mirror postprocess_code.py before invoking the same executor."""
+    doc = sample["doc"]
+    extracted = generation.split("```python\n", 1)[-1].split("```")[0]
+    prediction = sanitize_fn(
+        doc["prompt"] + "\n" + extracted,
+        doc["entry_point"],
     )
+    return prediction + "\n" + sample["target"]
 
 
-def audit(trace_rows, sample_rows, timeout):
+def audit(trace_rows, sample_rows, timeout, sanitize_fn):
     traces = index(trace_rows, lambda row: str(row.get("task_id") or ""), "trace")
     samples = index(
         sample_rows,
@@ -60,7 +61,7 @@ def audit(trace_rows, sample_rows, timeout):
             raise ValueError(f"prompt text mismatch: {task_id}")
         generation = trace["decoded_generation"]
         result = check_correctness(
-            build_check_program(generation, sample["doc"]),
+            build_check_program(generation, sample, sanitize_fn),
             timeout,
             task_id,
             int(trace["absolute_index"]),
@@ -106,11 +107,17 @@ def main():
     parser.add_argument("--trace", required=True)
     parser.add_argument("--samples", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--runtime-root", required=True)
     parser.add_argument("--timeout", type=float, default=3.0)
     args = parser.parse_args()
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=False)
-    records, summary = audit(read_jsonl(args.trace), read_jsonl(args.samples), args.timeout)
+    sys.path.insert(0, str(Path(args.runtime_root).resolve()))
+    from sanitize import sanitize
+
+    records, summary = audit(
+        read_jsonl(args.trace), read_jsonl(args.samples), args.timeout, sanitize
+    )
     with (output / "audit_records.jsonl").open("w", encoding="utf-8") as handle:
         for row in records:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
