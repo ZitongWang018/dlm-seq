@@ -9,6 +9,7 @@ from generate import (
     score_shared_skeleton_candidates,
     score_bidirectional_block_candidates,
     select_confirmed_bidirectional_block,
+    select_localized_conflict_block,
     commit_mean_cannot_reach_threshold,
     select_attention_stability_tokens,
     select_likelihood_trajectory,
@@ -166,6 +167,32 @@ def test_confirmed_block_requires_path_and_counterfactual_agreement():
     ) == "fast"
 
 
+def test_localized_conflict_block_uses_the_strongest_opposing_block():
+    blocks = [
+        {
+            "block_start": 0,
+            "block_end": 32,
+            "candidate_scores": {"fast": -0.30, "accuracy": -0.20},
+        },
+        {
+            "block_start": 32,
+            "block_end": 64,
+            "candidate_scores": {"fast": -0.50, "accuracy": -0.10},
+        },
+        {
+            "block_start": 64,
+            "block_end": 96,
+            "candidate_scores": {"fast": -0.10, "accuracy": -0.30},
+        },
+    ]
+    assert select_localized_conflict_block(
+        blocks, verifier_supports_accuracy=True
+    )["block_start"] == 32
+    assert select_localized_conflict_block(
+        blocks, verifier_supports_accuracy=False
+    )["block_start"] == 64
+
+
 def test_commit_mean_abort_uses_an_optimistic_zero_logprob_bound():
     assert commit_mean_cannot_reach_threshold(
         committed_logprob_sum=-20.0,
@@ -224,7 +251,7 @@ def test_early_confirmed_mode_returns_fast_without_final_verifier():
     }
 
 
-def test_evidence_conflict_repairs_only_the_disagreement_locus():
+def test_localized_evidence_conflict_repairs_only_the_opposing_block():
     original_attention = generate_module.generate_attention_stability
     original_score = generate_module.score_bidirectional_block_candidates
     original_repair = generate_module.repair_draft_disagreements
@@ -243,7 +270,13 @@ def test_evidence_conflict_repairs_only_the_disagreement_locus():
         names = kwargs.get("candidate_names", ("fast", "accuracy"))
         if names == ("parent", "repair"):
             return {"parent": -0.20, "repair": -0.05}, 1, 1, []
-        return {"fast": -0.10, "accuracy": -0.20}, 1, 1, []
+        scores = {"fast": -0.10, "accuracy": -0.20}
+        return scores, 1, 1, [{
+            "block_start": 0,
+            "block_end": 1,
+            "disagreement_token_count": 1,
+            "candidate_scores": scores,
+        }]
 
     def fake_repair(**kwargs):
         repair_calls.append(kwargs)
@@ -263,7 +296,7 @@ def test_evidence_conflict_repairs_only_the_disagreement_locus():
             steps=128,
             gen_length=1,
             block_length=32,
-            selection_mode="evidence_conflict_repair",
+            selection_mode="localized_evidence_conflict_repair",
         )
     finally:
         generate_module.generate_attention_stability = original_attention
@@ -288,7 +321,7 @@ def test_evidence_conflict_repairs_only_the_disagreement_locus():
     }
 
 
-def test_evidence_conflict_skips_repair_when_both_evidence_sources_agree():
+def test_localized_conflict_skips_repair_when_evidence_sources_agree():
     original_attention = generate_module.generate_attention_stability
     original_score = generate_module.score_bidirectional_block_candidates
     original_repair = generate_module.repair_draft_disagreements
@@ -303,7 +336,13 @@ def test_evidence_conflict_skips_repair_when_both_evidence_sources_agree():
         }
 
     def fake_score(*args, **kwargs):
-        return {"fast": -0.20, "accuracy": -0.10}, 1, 1, []
+        scores = {"fast": -0.20, "accuracy": -0.10}
+        return scores, 1, 1, [{
+            "block_start": 0,
+            "block_end": 1,
+            "disagreement_token_count": 1,
+            "candidate_scores": scores,
+        }]
 
     def fail_repair(**kwargs):
         raise AssertionError("repair should be gated by evidence conflict")
@@ -319,7 +358,7 @@ def test_evidence_conflict_skips_repair_when_both_evidence_sources_agree():
             steps=128,
             gen_length=1,
             block_length=32,
-            selection_mode="evidence_conflict_repair",
+            selection_mode="localized_evidence_conflict_repair",
         )
     finally:
         generate_module.generate_attention_stability = original_attention

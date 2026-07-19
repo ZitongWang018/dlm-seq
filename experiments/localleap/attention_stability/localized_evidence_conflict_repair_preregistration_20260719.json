@@ -1,0 +1,68 @@
+{
+  "preregistration_version": "localized_evidence_conflict_repair_v1",
+  "registered_at": "2026-07-19T21:54:00+08:00",
+  "method_profile": "trajectory_localized_evidence_conflict_repair",
+  "single_algorithm": true,
+  "parent": "confirmed bidirectional tau=0.004 plus strict prompt-visible public guard",
+  "one_change": {
+    "trigger": "exclusive disagreement between one-nat commit-path evidence and bidirectional full-draft verification",
+    "localization": "choose the single generation block with the largest verifier margin opposing path evidence",
+    "branch": "preserve the parent everywhere else; re-mask and top1-rediffuse only fast/accuracy disagreements inside that block",
+    "acceptance": "accept only when bidirectional parent-versus-repair verification strictly prefers the repaired draft",
+    "code_guard": "reject a repair that regresses prompt-visible checks or loses compile validity on a pass tie"
+  },
+  "offline_scope_audit": {
+    "source": "already-consumed v9 traces only; no new benchmark correctness or generations",
+    "humaneval": {
+      "conflict_rate": "60/164",
+      "all_disagreements_mean": 175.8,
+      "localized_block_mean": 23.466666666666665,
+      "localized_fraction": 0.1334850208570345
+    },
+    "math_0_49": {
+      "conflict_rate": "17/50",
+      "all_disagreements_mean": 209.11764705882354,
+      "localized_block_mean": 25.294117647058822,
+      "localized_fraction": 0.1209563994374121
+    },
+    "gsm8k_0_63": {
+      "conflict_rate": "22/64",
+      "all_disagreements_mean": 187.9090909090909,
+      "localized_block_mean": 25.227272727272727,
+      "localized_fraction": 0.13425253991291727
+    }
+  },
+  "generation_inputs_allowed": [
+    "prompt tokens",
+    "model logits and attention-derived dependency",
+    "complete fast and accuracy trajectory tokens",
+    "checks and examples literally present in the prompt"
+  ],
+  "generation_inputs_forbidden": [
+    "raw_gold",
+    "normalized_gold",
+    "reference solution",
+    "hidden tests",
+    "correctness labels",
+    "post-hoc benchmark outcomes"
+  ],
+  "data_lineage": {
+    "humaneval_0_31": "consumed development set; rapid gate only",
+    "humaneval_32_163": "repeated-use exploratory evidence, not clean holdout",
+    "math_0_49": "consumed development set",
+    "gsm8k_0_63": "consumed development set",
+    "mbpp_0_99": "consumed development set",
+    "math_50_499": "candidate-frozen suffix; no correctness inspected before freeze",
+    "gsm8k_64_1318": "candidate-frozen suffix; no correctness inspected before freeze",
+    "mbpp_100_499": "candidate-frozen suffix; no correctness inspected before freeze"
+  },
+  "rapid_gates": {
+    "humaneval_0_31": "strict paired accuracy win over parent",
+    "math_0_49_and_gsm8k_0_63": "non-regressive individually and strict combined win",
+    "humaneval_full164": "strict paired accuracy win, explicitly repeated-use exploratory",
+    "mbpp_0_99": "non-regressive against parent"
+  },
+  "formal_rule": "one unified profile on all four benchmarks; no task regression, strict aggregate gain, clean identity/hash/mask/NFE audits",
+  "fallback": "retain the unified v15 exact-speed framework if any registered gate fails",
+  "freeze_contract": "queue records source commit and sha256 before current full4 MATH/GSM/MBPP correctness is inspected or any v17 model stage starts; HumanEval is explicitly repeated-use"
+}

@@ -1211,6 +1211,31 @@ def select_confirmed_bidirectional_block(
     )
 
 
+def select_localized_conflict_block(
+    block_records,
+    verifier_supports_accuracy,
+):
+    """Locate the single block that most strongly opposes path evidence."""
+    target = "accuracy" if verifier_supports_accuracy else "fast"
+    other = "fast" if verifier_supports_accuracy else "accuracy"
+    opposing = [
+        record
+        for record in block_records
+        if float(record["candidate_scores"][target])
+        > float(record["candidate_scores"][other])
+    ]
+    if not opposing:
+        raise ValueError("global verifier support requires an opposing block")
+    return max(
+        opposing,
+        key=lambda record: (
+            float(record["candidate_scores"][target])
+            - float(record["candidate_scores"][other]),
+            -int(record["block_start"]),
+        ),
+    )
+
+
 @torch.no_grad()
 def generate_trajectory_likelihood_selection(
     model,
@@ -1381,7 +1406,7 @@ def generate_trajectory_likelihood_selection(
         "confirmed_bidirectional_block",
         "early_confirmed_bidirectional_block",
         "confirmed_bidirectional_public_guard",
-        "evidence_conflict_repair",
+        "localized_evidence_conflict_repair",
     }:
         if accuracy_early_aborted:
             selected_name = "fast"
@@ -1403,7 +1428,7 @@ def generate_trajectory_likelihood_selection(
             "confirmed_bidirectional_block",
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
-            "evidence_conflict_repair",
+            "localized_evidence_conflict_repair",
         } and not accuracy_early_aborted:
             selected_name = select_confirmed_bidirectional_block(
                 bidirectional_block_scores,
@@ -1415,7 +1440,7 @@ def generate_trajectory_likelihood_selection(
                 ("fast", "accuracy"),
                 key=lambda name: bidirectional_block_scores[name],
             )
-        if selection_mode == "evidence_conflict_repair":
+        if selection_mode == "localized_evidence_conflict_repair":
             pre_repair_selected_name = selected_name
             path_supports_accuracy = (
                 float(accuracy_summary["commit_logprob_mean"])
@@ -1431,9 +1456,22 @@ def generate_trajectory_likelihood_selection(
             repair_accepted = False
             repair_changed_positions = 0
             repair_details = None
+            repair_target_block = None
             if evidence_conflict and bidirectional_block_disagreements > 0:
+                repair_target_block = select_localized_conflict_block(
+                    bidirectional_block_records,
+                    verifier_supports_accuracy,
+                )
                 disagreement_mask = fast_x != accuracy_x
                 disagreement_mask[:, : prompt.shape[1]] = False
+                block_start = int(prompt.shape[1]) + int(
+                    repair_target_block["block_start"]
+                )
+                block_end = int(prompt.shape[1]) + int(
+                    repair_target_block["block_end"]
+                )
+                disagreement_mask[:, :block_start] = False
+                disagreement_mask[:, block_end:] = False
                 repaired_x, repair_nfe, repair_details = (
                     repair_draft_disagreements(
                         model=model,
@@ -1492,6 +1530,7 @@ def generate_trajectory_likelihood_selection(
                 "repair_generated": repair_details is not None,
                 "repair_accepted": bool(repair_accepted),
                 "repair_changed_positions": int(repair_changed_positions),
+                "repair_target_block": repair_target_block,
                 "repair_nfe": int(repair_nfe),
                 "repair_selector_nfe": int(repair_selector_nfe),
                 "repair_candidate_scores": repair_candidate_scores,
@@ -1524,7 +1563,7 @@ def generate_trajectory_likelihood_selection(
         "confirmed_bidirectional_block",
         "early_confirmed_bidirectional_block",
         "confirmed_bidirectional_public_guard",
-        "evidence_conflict_repair",
+        "localized_evidence_conflict_repair",
     }:
         disagreement_count = bidirectional_block_disagreements
         scored_disagreement_count = bidirectional_block_disagreements
@@ -1553,8 +1592,8 @@ def generate_trajectory_likelihood_selection(
     )
     summary = {
         "decoder": (
-            "trajectory_evidence_conflict_repair_v16"
-            if selection_mode == "evidence_conflict_repair"
+            "trajectory_localized_evidence_conflict_repair_v17"
+            if selection_mode == "localized_evidence_conflict_repair"
             else "trajectory_confirmed_bidirectional_public_guard_v11"
             if selection_mode == "confirmed_bidirectional_public_guard"
             else "trajectory_early_confirmed_bidirectional_block_v10"
@@ -1587,8 +1626,8 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "repair_disagreement_locus_only_when_path_and_verifier_conflict"
-            if selection_mode == "evidence_conflict_repair"
+            "repair_strongest_opposing_block_only_on_evidence_conflict"
+            if selection_mode == "localized_evidence_conflict_repair"
             else "confirmed_bidirectional_then_strict_public_example_baseline_guard"
             if selection_mode == "confirmed_bidirectional_public_guard"
             else "optimistic_path_bound_then_confirmed_bidirectional_block"
@@ -1661,7 +1700,7 @@ def generate_trajectory_likelihood_selection(
             "confirmed_bidirectional_block",
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
-            "evidence_conflict_repair",
+            "localized_evidence_conflict_repair",
         }
         else None,
         "pre_repair_selected_name": pre_repair_selected_name,
@@ -1702,7 +1741,7 @@ def generate_trajectory_likelihood_selection(
                     "confirmed_bidirectional_block",
                     "early_confirmed_bidirectional_block",
                     "confirmed_bidirectional_public_guard",
-                    "evidence_conflict_repair",
+                    "localized_evidence_conflict_repair",
                 }
                 else {}
             ),
@@ -1711,7 +1750,7 @@ def generate_trajectory_likelihood_selection(
                     "repair": int(repair_nfe),
                     "repair_selector": int(repair_selector_nfe),
                 }
-                if selection_mode == "evidence_conflict_repair"
+                if selection_mode == "localized_evidence_conflict_repair"
                 else {}
             ),
             **(
