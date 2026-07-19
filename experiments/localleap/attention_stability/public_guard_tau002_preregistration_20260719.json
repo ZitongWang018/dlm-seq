@@ -1,0 +1,19 @@
+{
+  "method": "v11_public_guard_tau_0.002",
+  "parent": "v11_public_guard_tau_0.004",
+  "single_change": "dependency_threshold changes from 0.004 to 0.002; all model, decoding, guard, generation, budget, prompt, evaluator, and seed settings remain identical",
+  "motivation": "Test whether a stricter horizontal dependency graph delays more strongly coupled commits long enough to improve vertically verified trajectories without adding selector complexity.",
+  "development": {
+    "benchmark": "HumanEval",
+    "absolute_indices": "0-31",
+    "parent_score": "18/32",
+    "promotion_gate": "method_correct > 18 and method_only_vs_v11 > v11_only_vs_method"
+  },
+  "holdout": {
+    "benchmark": "HumanEval",
+    "absolute_indices": "96-163",
+    "access": "only after development promotion gate passes"
+  },
+  "cross_task_promotion": "Only after HumanEval development improvement; then evaluate MATH-50 and MBPP with the same aligned settings.",
+  "formal_baseline": "original LLaDA low-confidence, steps=128, gen_length=256, block_length=32, seed=0,1234,1234,1234"
+}
