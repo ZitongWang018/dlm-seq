@@ -1,5 +1,29 @@
 # Memory
 
+## 2026-07-19
+
+- Completed formal HumanEval-164 for confirmed bidirectional v9: 55 correct,
+  versus symmetric-fast 49 and original LLaDA 42; untouched 96--163 is 14
+  versus 11/11. All identity, source, NFE, residual-mask and evaluator audits
+  passed.
+- Completed frozen v11 public-example guard replay and independent official
+  execution: 58/164, exactly matched by the second execution path; untouched
+  96--163 is 15/68. V11 has three recoveries and zero losses versus v9.
+- Completed MATH-50 promotion: v9 16, symmetric-fast 15, original LLaDA 13.
+  Automatically launched GSM8K-64 and MBPP-50 on separate GPUs.
+- Added exact lazy public-guard acceleration and its ordered audit queue. It
+  removes an original-LLaDA trajectory only when a strict guard cannot possibly
+  select it, so decoded output is provably unchanged.
+- Added a preregistered public-tie full-draft verifier screen with mean and
+  block-Pareto variants. Both reuse the v9 bidirectional verifier and add no
+  threshold, token splice, hidden test, reference answer, or generated probe.
+- Added an explicit cross-version mode to the paired evaluator. It still
+  requires stable IDs and matching prompt/target hashes, but reports source
+  drift rather than falsely claiming source identity; regression tests pass.
+- Rejected additional MATH final-answer majority variants on indices 0--24:
+  plain majority lost two correct answers and gained none; evidence-gated
+  majority changed one neutral example and gained none.
+
 ## 2026-07-16 — Return to best symmetric parent and broaden benchmarks
 
 - Formally rejected global top-K retention (HumanEval-256 64/164). The

@@ -123,6 +123,48 @@ one card and the custom attention hooks expect a single logical CUDA device.
 No queue was launched after this code change. The full audited report is
 `docs/localleap_full_experiment_report_20260717.md`.
 
+## 2026-07-19 rapid dual-GPU iteration
+
+The original LLaDA low-confidence decoder at 128 steps remains the formal
+baseline. The confirmed bidirectional block selector (`tau=0.004`, v9) is now
+formally positive on HumanEval: 55/164 versus 49/164 for symmetric-fast and
+42/164 for original LLaDA. On the preregistered untouched indices 96--163 it
+is 14/68 versus 11/68 for both controls. Full HumanEval pairing against
+symmetric-fast has six method-only cases, zero fast-only cases, and exact
+McNemar `p=0.03125`. The cost is 46,890 NFE versus 20,992 for original LLaDA.
+
+The current accuracy best is v11: preserve v9 unless original LLaDA passes
+strictly more tests already visible in the prompt. Its frozen replay and an
+independent official execution both give 58/164 on HumanEval, with three
+recoveries and zero losses versus v9. The untouched 96--163 result is 15/68
+versus v9's 14/68 and original LLaDA's 11/68. The same public-assertion guard
+was separately formal on MBPP indices 100--199: 29/100 versus 20/100 for its
+symmetric parent and 16/100 for original LLaDA, with nine recoveries and zero
+losses. Integrated v9+guard MBPP execution remains queued.
+
+MATH-50 promotion passed: v9 is 16/50, symmetric-fast is 15/50 with one
+method-only and zero fast-only example, and original LLaDA is 13/50. V9 uses
+14,501 NFE versus 6,400 for each control. The frozen parent queue is currently
+running GSM8K-64 and MBPP-50 concurrently on the two GPUs:
+`/root/autodl-tmp/LocalLeap/llada/results/experiment_queues/confirmed_bidirectional_rapid_20260719_v1`.
+
+Two ordered follow-up queues are submitted. V12 is an exact-output speed child
+that skips the third trajectory when the v9 parent already exhausts all
+prompt-visible checks; theoretical skip coverage is 50% on HumanEval dev32 and
+20% on formal MBPP100. V13 tests one additional accuracy hypothesis only after
+v12: on an incomplete public-check tie between two executable drafts, the same
+bidirectional block verifier compares both complete drafts. Mean and
+block-Pareto variants run in parallel on HumanEval 0--31 and may access the
+preregistered 96--163 holdout only after strict development improvement.
+Queue roots are:
+
+- `/root/autodl-tmp/LocalLeap/llada_slot_lazy_public_guard/results/experiment_queues/lazy_public_guard_exact_20260719_v1`
+- `/root/autodl-tmp/LocalLeap/llada_slot_public_verifier/results/experiment_queues/public_full_draft_rapid_20260719_v1`
+
+Relevant commits are `73aebeb`, `bfcad98`, `54e8e01`, `310258b`, and
+`f98f080`. Frozen v9/v11 sources must never be edited, and development/formal
+records must remain separate.
+
 ## Deprecated (cleaned 2026-07-13)
 
 Trajectory / lateral-response / agreement / ceiling-bug evals were removed from `results/` (local + AutoDL `dlm-seq-flow`).  
