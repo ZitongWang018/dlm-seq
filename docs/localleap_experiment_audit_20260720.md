@@ -225,6 +225,27 @@ The original v1 failure artifact will be preserved. A versioned recovery may
 add `RECOVERED_BY_LEAKAGE_V2` and `DONE` only if all seven generation stages are
 complete and every failure stage is exclusively `leakage_*`.
 
+### 6.1 Append-safe runtime metric supervision
+
+All four benchmark monitors tolerate one incomplete final JSONL line, so an
+active writer can be audited without copying or repairing its output. Each
+monitor checks stable identities or the expected dataset prefix, prompt and
+target hashes, duplicate or missing records, finite per-record NFE and its
+range/total, residual masks, extraction failures, and a Wilson interval for the
+current score. Intermediate scores are health signals only: after a source is
+frozen, they cannot select parameters, change the decoder, or expose a formal
+label to a later candidate.
+
+| Benchmark monitor | Independent evaluation path | Validated result |
+|---|---|---:|
+| HumanEval v3 | Prompt-visible generation plus sandboxed hidden tests; hidden outcomes are post-generation health data only | 58/164, NFE 43,147 |
+| MATH-500 v1 | Frozen Prism-aligned answer extraction and normalization | 167/500, NFE 119,799; one extraction failure |
+| GSM8K v1 | `lm-eval` flexible numeric extraction and exact match | Latest active checkpoint: 548/820 (66.83%), clean |
+| MBPP v1 | Prompt-visible assertions executed by two independent paths; canonical solutions and challenge tests remain unavailable to selection | 40/100, NFE 32,731 |
+
+These monitors validate records already emitted by generation. They are not
+decoder features and do not make the final method a task-specific composition.
+
 ## 7. Paper-reported reference values
 
 These are quotations of paper tables, not local reproductions.
