@@ -1,0 +1,56 @@
+{
+  "preregistration_version": "sparse_context_repair_v19_20260720_v2",
+  "registered_at": "2026-07-20T02:55:00+08:00",
+  "method_profile": "trajectory_early_sparse_context_repair",
+  "single_algorithm": true,
+  "parent": "v18 early localized evidence-conflict repair, itself an exact-abort descendant of v15 tau=0.004",
+  "one_change": {
+    "unchanged": "retain v15 admissible early abort, the two horizontal trajectories, vertical commit evidence, one bidirectionally selected conflict block, full-draft repair verification, and prompt-visible code guard",
+    "problem": "v18 re-masks every fast/accuracy disagreement in its selected block, including tokens that both external full-draft contexts already support for the selected parent",
+    "sparse_frontier": "within that one block, preserve a parent token only when it has strictly higher log probability than the alternative under both complete external draft contexts; re-mask every other disagreement",
+    "no_new_threshold": "the rule uses sign agreement only and introduces no tuned scalar or task-conditioned branch"
+  },
+  "thought_axes": {
+    "vertical": "the admissible bound and path-time commit evidence decide whether a completed accuracy trajectory can still matter",
+    "horizontal": "two complete drafts localize a conflict and require cross-context unanimity before a parent token becomes immutable",
+    "error_control": "the repair cannot rewrite a disagreement already supported for the parent by both full-draft contexts"
+  },
+  "generation_inputs_allowed": [
+    "prompt tokens",
+    "model logits and attention-derived dependency",
+    "fast and non-aborted accuracy trajectory tokens",
+    "prompt-visible examples or assertions"
+  ],
+  "generation_inputs_forbidden": [
+    "raw_gold",
+    "normalized_gold",
+    "reference solution",
+    "hidden tests",
+    "correctness labels",
+    "post-generation benchmark outcomes"
+  ],
+  "data_lineage": {
+    "implementation_and_rule": "frozen before any v18 or v19 result is available",
+    "humaneval_0_163": "repeated-use development gate only",
+    "math_0_49": "consumed development prefix",
+    "gsm8k_0_63": "consumed development prefix",
+    "mbpp_0_99": "consumed development prefix",
+    "math_50_499": "candidate-frozen suffix",
+    "gsm8k_64_1318": "candidate-frozen suffix",
+    "mbpp_100_499": "candidate-frozen suffix"
+  },
+  "activation": "run immediately after v18 reaches a clean REJECTED plus DONE decision; skip on v18 ACCEPTED and block on v18 infrastructure failure",
+  "scheduler_change_only": {
+    "method_and_gates_unchanged": true,
+    "removed_stage": "the provisional fair three-arm reproduction, because strict v5 freshly regenerates all three arms under the stronger offline protocol",
+    "registered_before_v18_result": true,
+    "reason": "avoid a duplicate four-benchmark generation pass and start the next one-change candidate at the first safe decision boundary"
+  },
+  "rapid_gates": {
+    "code_parallel": "HumanEval-164 must strictly beat v15 and MBPP-100 must be non-regressive; each task NFE no more than 1.05x v15",
+    "reasoning_parallel": "MATH-50 and GSM8K-64 must be non-regressive individually and strictly improve in aggregate over v15; each task NFE no more than 1.05x v15",
+    "formal": "one profile across all four full benchmarks; no task regression, strict aggregate accuracy gain, clean IDs/hashes/masks/NFE/leakage/model-input audits"
+  },
+  "fallback": "retain the already fair-audited v18 if accepted, otherwise retain v15 when any v19 gate fails",
+  "freeze_contract": "freeze source hashes and queue contract before any v19 model stage; never use formal suffix correctness to revise the rule"
+}

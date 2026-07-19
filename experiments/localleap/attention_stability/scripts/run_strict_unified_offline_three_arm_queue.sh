@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-strict_root=${STRICT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20}
+strict_root=${STRICT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v5}
 v15_root=${V15_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
 v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v2}
-v19_root=${V19_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_recovery_v2}
+v19_root=${V19_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v3}
 v18_id=${V18_ID:-early_localized_evidence_conflict_repair_20260719_v2}
-v19_id=${V19_ID:-sparse_context_repair_rapid_20260720_v2}
-queue_id=${ATTENTION_QUEUE_ID:-strict_unified_offline_three_arm_20260720_v1}
+v19_id=${V19_ID:-sparse_context_repair_direct_20260720_v3}
+queue_id=${ATTENTION_QUEUE_ID:-strict_unified_offline_three_arm_20260720_v5}
 queue_root=${strict_root}/results/experiment_queues/${queue_id}
 run_base=${strict_root}/results/best_symmetric_benchmarks/${queue_id}
 v18_queue=${v18_root}/results/experiment_queues/${v18_id}
