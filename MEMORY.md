@@ -257,3 +257,30 @@
   `4e33fea`; both are on GitHub main. The remote code, datasets, tokenizer,
   task/evaluator sources, reference papers/repos, and model checkpoint are
   sufficient for the registered chain to continue without Internet access.
+
+## 2026-07-20 direct offline chain v5
+
+- Removed one redundant provisional four-benchmark pass from the future
+  scheduler. After full4 recovery, v18 now runs first; v19 is skipped on v18
+  acceptance and runs unchanged only on a formal v18 rejection. This is a
+  scheduling optimization, not an algorithm or gate change, and was frozen
+  before the v18 result.
+- Built the self-contained v19 direct slot and detached controller PID 284627.
+  Its bootstrap, generic runner, and preregistration hashes pass while it waits
+  for the v18 terminal decision.
+- Built strict v5 and detached controller PID 284935. Six tests, shell and JSON
+  contracts, socket-blocked offline loading of all four complete datasets, the
+  40-file/10-Arrow manifest, six-shard model-weight hashes, and static leakage
+  audit all passed before it entered the direct-v19 wait.
+- Built full4 leakage recovery v3 and detached controller PID 285366. It
+  verifies its frozen sources while waiting and resumes only v18.
+- Safely stopped five pure-wait controllers (old full4 recovery v2,
+  provisional fair recovery, old v19, v19 recovery v2, and strict v4) afte
+  their replacements passed. Each old queue has a versioned supersession
+  marker; active GSM/MBPP generation was not touched.
+- Fresh current-host GSM8K baseline finished at 915/1319 with NFE 168,832,
+  zero duplicate IDs and NFE exactly 128 per record. V15 GSM and MBPP remained
+  active on separate GPUs at the handoff.
+- Committed and pushed the direct scheduler and regression contract as
+  `7553e99`; the five-minute monitor now points only at the v3/v18/direct-v19/
+  strict-v5 chain.

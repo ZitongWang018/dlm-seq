@@ -85,8 +85,8 @@ per-record NFE nonincrease.
 | --- | ---: | ---: | ---: | --- |
 | HumanEval | 58/164 = 35.37% | 43,147 | fresh fair baseline queued | method complete |
 | MATH-500 | 167/500 = 33.40% | 119,799 | queued after GSM8K | method complete |
-| GSM8K | in progress | in progress | fresh baseline generating in parallel | both arms active |
-| MBPP | queued | queued | queued | pending |
+| GSM8K | in progress | in progress | 915/1319 = 69.37%, NFE 168,832 | baseline complete; method active |
+| MBPP | in progress | in progress | queued | method active on the second GPU |
 
 The MATH result has 500/500 records, zero duplicate IDs, zero prompt/generation
 mismatches, zero residual masks, and per-example NFE 129--303. It must not be
@@ -353,29 +353,30 @@ dominate.
 ## 9. Active offline queue chain
 
 1. `best_framework_full4_20260719_v1`: finish v15 and current-server baseline
-   generation on all four benchmarks.
-2. `full4_leakage_recovery_20260719_v2`: versioned evaluator recovery only if
-   the legacy schema is the sole failure.
+   generation on all four benchmarks. At 03:02 +08, the fresh GSM baseline
+   completed at 915/1319 while the v15 GSM and MBPP generations remained
+   active on separate GPUs.
+2. `full4_leakage_recovery_20260720_v3`: versioned evaluator recovery only if
+   the legacy schema is the sole failure, then resume only v18. The prior v2
+   controller is preserved and marked `SUPERSEDED_BY_V3`.
 3. `early_localized_evidence_conflict_repair_20260719_v2`: v18 code gate,
    cross-task development gate, then full promotion only on strict global
    non-regression plus aggregate gain.
-4. `fair_three_arm_reproduction_20260719_v1`: current-runtime baseline,
-   globally selected accuracy method, and symmetric-fast confirmatory arm.
-5. `fair_three_arm_leakage_recovery_20260720_v2`: preserve the original fair
-   summary, reject the v1 auditor status, and issue a recovered summary only
-   after eight algorithm-trace v2 audits and all input/pair invariants pass.
-6. `sparse_context_repair_rapid_20260720_v1`: after the recovered fair result,
-   skip when v18 is accepted; otherwise run the frozen one-change v19 gates,
-   first HumanEval/MBPP in parallel and then MATH/GSM in parallel.
-7. `sparse_context_repair_rapid_20260720_v2`: infrastructure-only recovery. It
-   waits for v19 v1 and launches only if v1 fails because its source package
-   lacks the HumanEval helper files. An algorithm/CUDA/evaluator/unknown failure
-   is never auto-reclassified.
-8. `strict_unified_offline_three_arm_20260720_v4`: after the recovered v19
-   terminal decision, freshly regenerates baseline, the one globally selected
-   candidate and symmetric-fast under one pre-run manifest. Baseline and
-   candidate run simultaneously per task, and the candidate alternates GPUs
-   across the four tasks. Fast remains a comparator only.
+4. `sparse_context_repair_direct_20260720_v3`: wait directly for v18. If v18
+   passes its unified gate, mark v19 skipped; if v18 is formally rejected, run
+   the already-preregistered, unchanged one-change v19 gates. This removes a
+   redundant provisional full pass without changing an algorithm or gate.
+5. `strict_unified_offline_three_arm_20260720_v5`: after the direct v19
+   terminal decision, freshly regenerate baseline, exactly one globally
+   selected candidate, and symmetric-fast under one pre-run manifest. Baseline
+   and candidate run simultaneously per task, and the candidate alternates
+   GPUs across the four tasks. Fast remains a comparator only.
+
+The provisional fair recovery and the old v19/v19-recovery/v4 controllers were
+all pure waiters when stopped. Their artifacts remain intact with explicit
+`SUPERSEDED_*` markers. No active generation or completed result was edited.
+The direct chain saves one duplicate provisional four-benchmark evaluation;
+the v5 strict pass is the single confirmatory comparison that replaces it.
 
 The earlier strict v3 controller completed its preflight but was deliberately
 superseded before generation. Its preregistration listed v19 ahead of v18, but
@@ -387,7 +388,7 @@ had begun when it was stopped.
 The original fair queue sets offline environment variables and hashes the six
 model shards, but its accuracy arm is historical and its model-input audit is
 post-hoc reconstruction. It is therefore a useful provisional comparison, not
-the final strict fairness claim. The v20/v4 queue closes this gap by making all
+the final strict fairness claim. The v20/v5 queue closes this gap by making all
 three arms fresh after the same weight/data/task/evaluator/environment freeze,
 using explicit `local_files_only=True`, blocking socket access during cache
 preflight, and capturing the runtime input directly. The fast arm is never
@@ -409,7 +410,7 @@ loaded these exact cached views successfully:
 The tokenizer and custom config also loaded solely from the local checkpoint.
 The offline manifest contains 40 source/data/model-metadata files, including 10
 Arrow files; the six safetensor shards are hashed in a separate large-file
-manifest and reverified after evaluation. V4 passed all six protocol regression
+manifest and reverified after evaluation. V5 passed all six protocol regression
 tests and is detached from the SSH session, so loss of client or Internet
 connectivity does not stop the queued chain.
 
