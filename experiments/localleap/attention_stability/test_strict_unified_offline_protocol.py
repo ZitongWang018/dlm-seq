@@ -11,6 +11,18 @@ from freeze_offline_eval_protocol import selected_files
 
 
 class StrictUnifiedOfflineProtocolTests(unittest.TestCase):
+    def test_registered_candidate_selection_order_is_implemented(self):
+        controller = (
+            Path(__file__).parent
+            / "scripts"
+            / "run_strict_unified_offline_three_arm_queue.sh"
+        ).read_text()
+        v19_check = 'if [[ -e "${v19_queue}/ACCEPTED" ]]'
+        v18_check = 'elif [[ -e "${v18_queue}/ACCEPTED" ]]'
+        self.assertIn(v19_check, controller)
+        self.assertIn(v18_check, controller)
+        self.assertLess(controller.index(v19_check), controller.index(v18_check))
+
     def test_runtime_capture_hashes_exact_token_ids_and_chat_text(self):
         from eval_llada import build_runtime_input_record
 

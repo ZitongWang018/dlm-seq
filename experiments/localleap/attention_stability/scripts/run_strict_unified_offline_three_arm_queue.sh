@@ -173,14 +173,14 @@ wait_terminal "${v19_queue}"
 [[ -e "${v19_queue}/DONE" && ! -e "${v19_queue}/FAILED" ]] || {
   touch "${queue_root}/BLOCKED_V19_PIPELINE_FAILURE"; exit 22; }
 
-if [[ -e "${v18_queue}/ACCEPTED" ]]; then
-  candidate_profile=trajectory_early_localized_evidence_conflict_repair
-  candidate_family=v18_early_localized_evidence_conflict_repair
-  selection_reason=v18_passed_preregistered_unified_full4_gate
-elif [[ -e "${v19_queue}/ACCEPTED" ]]; then
+if [[ -e "${v19_queue}/ACCEPTED" ]]; then
   candidate_profile=trajectory_early_sparse_context_repair
   candidate_family=v19_sparse_context_repair
   selection_reason=v19_passed_preregistered_unified_full4_gate
+elif [[ -e "${v18_queue}/ACCEPTED" ]]; then
+  candidate_profile=trajectory_early_localized_evidence_conflict_repair
+  candidate_family=v18_early_localized_evidence_conflict_repair
+  selection_reason=v18_passed_preregistered_unified_full4_gate
 else
   candidate_profile=trajectory_early_lazy_confirmed_public_guard
   candidate_family=v15_admissible_exact_speed_v11_family
