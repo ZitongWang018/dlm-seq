@@ -84,8 +84,8 @@ per-record NFE nonincrease.
 | Task | Unified v15 | NFE | Current-server baseline | Status |
 | --- | ---: | ---: | ---: | --- |
 | HumanEval | 58/164 = 35.37% | 43,147 | fresh fair baseline queued | method complete |
-| MATH-500 | 167/500 = 33.40% | 119,799 | generating | method complete |
-| GSM8K | in progress | in progress | generating in parallel | active |
+| MATH-500 | 167/500 = 33.40% | 119,799 | queued after GSM8K | method complete |
+| GSM8K | in progress | in progress | generating in parallel on GPU1 | both arms active |
 | MBPP | queued | queued | queued | pending |
 
 The MATH result has 500/500 records, zero duplicate IDs, zero prompt/generation
