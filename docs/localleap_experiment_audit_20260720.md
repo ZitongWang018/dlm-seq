@@ -1,6 +1,6 @@
 # LocalLeap / LLaDA experiment audit and method genealogy
 
-**Living report, updated 2026-07-20 00:10 Asia/Shanghai.**
+**Living report, updated 2026-07-20 04:03 Asia/Shanghai.**
 
 This report separates four kinds of evidence:
 
@@ -43,14 +43,16 @@ weights, source hashes, generation settings, seed, evaluator version, and
 dataset view. Results from the previous server are not formal comparators for
 the current dual-GPU host.
 
-## 2. Current best unified method
+## 2. Current verified Pareto components; no unified winner yet
 
-The trusted accuracy family is the v11 public-guard trajectory method at
-`tau=0.004`. v15 is an admissible early-abort implementation that preserves the
-same selected output while avoiding conservative-path work that cannot change
-the final decision.
+The trusted **code accuracy parent** is the v11 public-guard trajectory method
+at `tau=0.004`. V15 is its admissible early-abort implementation: it preserves
+the selected output while avoiding conservative-path work that cannot change
+the final decision. The fresh GSM8K result below rejects both as a final
+cross-task winner. No single method is currently promoted as the unified final
+algorithm; v18, v19, and the preregistered v20 are still gated descendants.
 
-Unified v15 profile:
+V15 code/speed profile:
 
 `trajectory_early_lazy_confirmed_public_guard`
 
@@ -81,7 +83,7 @@ per-record NFE nonincrease.
 
 ### 2.2 Current full4 results
 
-| Task | Unified v15 | NFE | Current-server baseline | Status |
+| Task | v15 | NFE | Current-server baseline | Status |
 | --- | ---: | ---: | ---: | --- |
 | HumanEval | 58/164 = 35.37% | 43,147 | fresh fair baseline queued | method complete |
 | MATH-500 | 167/500 = 33.40% | 119,799 | queued after GSM8K | method complete |
@@ -350,6 +352,19 @@ and uses 0-shot HumanEval, 3-shot MBPP, and 4-shot GSM8K.
 The Base/Instruct checkpoint and few-shot differences prevent direct absolute
 accuracy claims.
 
+### Original LLaDA (arXiv:2502.09992)
+
+The original LLaDA-8B-Instruct paper reports 69.4 on GSM8K, 31.9 on a benchmark
+labelled only as `Math`, 49.4 on HumanEval, and 41.0 on MBPP. Its pure-diffusion
+protocol uses length/steps 512 for GSM/Math/HumanEval and 256 for MBPP, with
+4-shot GSM8K and MBPP. The paper does not establish that its `Math` row is
+MATH-500, so this report does not relabel 31.9 as MATH-500.
+
+The official repository later reports OpenCompass re-evaluations of 68.8,
+29.6, 47.0, and 39.6 respectively for the same four labels. This 0.6--2.4 point
+change within the official project is direct evidence that evaluator choice is
+part of the benchmark definition, not a cosmetic reporting detail.
+
 ## 8. Why the local and paper baselines differ
 
 The audit attributes the differences to multiple independent factors:
@@ -386,17 +401,25 @@ dominate.
    passes its unified gate, mark v19 skipped; if v18 is formally rejected, run
    the already-preregistered, unchanged one-change v19 gates. This removes a
    redundant provisional full pass without changing an algorithm or gate.
-5. `strict_unified_offline_three_arm_20260720_v5`: after the direct v19
-   terminal decision, freshly regenerate baseline, exactly one globally
-   selected candidate, and symmetric-fast under one pre-run manifest. Baseline
-   and candidate run simultaneously per task, and the candidate alternates
-   GPUs across the four tasks. Fast remains a comparator only.
+5. `original_anchor_pareto_rapid_20260720_v1`: if both v18 and v19 reject,
+   test one new preregistered unified method. It generates original
+   low-confidence plus one symmetric accuracy explorer, then replaces the
+   complete original draft only when the explorer strictly wins under both
+   complete external draft contexts. It has no token splicing, task routing,
+   answer extraction, test execution, or newly tuned threshold. Rapid gates are
+   HE32+GSM64 followed by MATH50+MBPP100.
+6. `strict_unified_offline_three_arm_20260720_v7`: after the v20 handoff,
+   freshly regenerate baseline, exactly one globally selected candidate, and
+   symmetric-fast under one pre-run manifest. Candidate priority is accepted
+   v19, accepted v18, then accepted v20; known-rejected v15 is not a fallback.
+   Baseline and candidate run simultaneously per task, the candidate alternates
+   GPUs, and fast remains a comparator only.
 
 The provisional fair recovery and the old v19/v19-recovery/v4 controllers were
 all pure waiters when stopped. Their artifacts remain intact with explicit
 `SUPERSEDED_*` markers. No active generation or completed result was edited.
 The direct chain saves one duplicate provisional four-benchmark evaluation;
-the v5 strict pass is the single confirmatory comparison that replaces it.
+the v7 strict pass is the single confirmatory comparison that replaces it.
 
 The earlier strict v3 controller completed its preflight but was deliberately
 superseded before generation. Its preregistration listed v19 ahead of v18, but
@@ -408,7 +431,7 @@ had begun when it was stopped.
 The original fair queue sets offline environment variables and hashes the six
 model shards, but its accuracy arm is historical and its model-input audit is
 post-hoc reconstruction. It is therefore a useful provisional comparison, not
-the final strict fairness claim. The v20/v5 queue closes this gap by making all
+the final strict fairness claim. The strict v7 queue closes this gap by making all
 three arms fresh after the same weight/data/task/evaluator/environment freeze,
 using explicit `local_files_only=True`, blocking socket access during cache
 preflight, and capturing the runtime input directly. The fast arm is never
@@ -430,9 +453,30 @@ loaded these exact cached views successfully:
 The tokenizer and custom config also loaded solely from the local checkpoint.
 The offline manifest contains 40 source/data/model-metadata files, including 10
 Arrow files; the six safetensor shards are hashed in a separate large-file
-manifest and reverified after evaluation. V5 passed all six protocol regression
+manifest and reverified after evaluation. V7 passed all six protocol regression
 tests and is detached from the SSH session, so loss of client or Internet
 connectivity does not stop the queued chain.
+
+Strict v6 is preserved as an infrastructure failure: its new source directory
+was missing three packaging helpers and it stopped before any model process.
+V7 was rebuilt from the complete v5 source package, then received the frozen
+v20/v7 changes and passed the same preflight. Strict v5 was a pure waiter when
+superseded; none of its completed preflight artifacts were overwritten.
+
+### 9.2 Why v20 is not another shared-skeleton retry
+
+The rejected v7 shared-skeleton method compared only symmetric-fast and the
+symmetric accuracy path. On HumanEval 0--9 it selected 2/10 correctly versus
+4/10 for fast, with zero recoveries and two losses. V18/v19 also inherit this
+two-candidate family and, on v15's fresh GSM trace, 1,102/1,319 records bypass
+repair through early abort or zero disagreement.
+
+Post-generation GSM analysis gives 915 correct for original, 885 for fast, 890
+for accuracy, and a three-candidate oracle of 1,057. Yet a simple majority of
+extracted final answers gives only 904, so the useful signal is not task-level
+answer voting. V20 instead restores original as the explicit anchor and uses a
+threshold-free two-context model-space Pareto test. The analysis is development
+evidence on a fully consumed public benchmark; it is not a hidden holdout.
 
 ## 10. Cached primary sources
 
@@ -465,8 +509,9 @@ The project is not complete until all of the following exist and pass:
 - strict information-leakage reports for every selected run;
 - one final globally selected profile with no task routing.
 
-Until then, v15/v11 remains the trusted unified family and later candidates are
-reported as pending or rejected rather than promoted by partial accuracy.
+Until then, v11 remains a trusted code accuracy parent and v15 a speed/code
+descendant, but neither is a trusted unified cross-task winner. Later candidates
+remain pending or rejected rather than being promoted by partial accuracy.
 
 ## 12. Strict interpretation of reproducibility and leakage
 

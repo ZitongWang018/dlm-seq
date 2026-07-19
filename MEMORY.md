@@ -299,3 +299,53 @@
   nonzero disagreement strata are -17 and -11. The failure is candidate-family
   coverage rather than one tunable threshold, so no post-hoc selector sweep is
   justified.
+
+## 2026-07-20 original-anchor Pareto handoff
+
+- Audited all three GSM trajectories after the formal v15 rejection. Fresh
+  original scores 915/1319, the fast candidate 885, and the symmetric accuracy
+  candidate 890; the three-way candidate oracle is 1057. Fast/accuracy alone
+  therefore omit useful original outcomes, while simple extracted-answer
+  majority would still regress to 904. This rules out another selector-margin
+  sweep and motivates preserving original as an explicit model-space anchor.
+- Implemented and preregistered v20 `trajectory_original_anchor_pareto` before
+  any v20 generation. It generates original low-confidence plus one symmetric
+  accuracy explorer and switches the entire output only when the explorer
+  strictly dominates under both full external draft contexts. It adds no tuned
+  threshold, token splice, task route, answer extraction, or test execution.
+- Added 50 selector/integration tests and a queue-contract regression. Compile,
+  shell/JSON checks and leakage-v2 static audit pass in the frozen versioned
+  root. Commit `694108b` is pushed to GitHub main.
+- Detached v20 controller PID 291630. It waits for v18/direct-v19, skips if one
+  is accepted, otherwise gates HE32+GSM64 and MATH50+MBPP100 using current-host
+  baselines and a 2.50x NFE ceiling before strict confirmation.
+- Replaced strict v5's known-failed v15 fallback with strict v7. V7 passed six
+  protocol tests, socket-blocked offline loading, the 40-file/10-Arrow manifest,
+  six-shard hashes and leakage audit, and waits for the v20 handoff. Strict v5
+  is marked superseded. Strict v6 is preserved as a pre-generation packaging
+  failure; it found missing helper files before any model process started.
+
+## 2026-07-20 baseline-reproduction audit
+
+- Read-only protocol audit confirms that the historical four-task baseline is
+  not one uniform benchmark protocol. HumanEval used the local sanitizer and
+  executor, MATH-500 used a custom Prism-aligned prompt/normalizer, GSM8K used
+  flexible final-number extraction, and historical MBPP used 3-shot native
+  lm-eval before a separate prompt-assertion re-evaluation. These rows remain
+  descriptive and must not be paired as a same-freeze formal control.
+- The largest score discrepancies were reproduced on identical generations:
+  HumanEval native packaging gives 4/164 versus 42/164 after audited code
+  extraction/execution; GSM8K strict extraction gives 1/1319 versus 905/1319
+  with the frozen flexible extractor; MBPP first-50 native packaging gives
+  1/50 versus 18/50 with prompt-visible assertions. Evaluator and postprocess
+  versions are therefore part of the method contract.
+- Paper baselines are protocol-separated. Prism uses temperature .7, 32 steps
+  per block and length 512 for code; SOAR's main table uses LLaDA-8B-Base and
+  nonzero few-shot settings; OTS reports a searched Gumbel temperature without
+  a disclosed independent development split; original LLaDA uses different
+  lengths/steps and 4-shot GSM8K/MBPP. None is an equal-setting substitute for
+  local `steps128/gen256/block32/temperature0/zero-shot` results.
+- Current strict v7 therefore regenerates baseline, one global candidate and a
+  comparator on the same server after one offline artifact, weight, task,
+  evaluator and runtime-input freeze. Public benchmark reuse is explicitly
+  confirmatory, not a clean hidden holdout.

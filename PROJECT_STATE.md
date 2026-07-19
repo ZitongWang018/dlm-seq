@@ -1,6 +1,6 @@
 # Project State
 
-Date: 2026-07-17
+Date: 2026-07-20
 
 Remote worktrees:
 
@@ -11,7 +11,7 @@ Remote worktrees:
 
 ### 2026-07-20 strict offline handoff
 
-The trusted unified family is v11 public guard at tau 0.004, with v15
+The trusted code family is v11 public guard at tau 0.004, with v15
 `trajectory_early_lazy_confirmed_public_guard` as an output-exact admissible
 early-abort implementation. Full current-host HumanEval is 58/164 and
 MATH-500 is 167/500 for v15. The fresh GSM8K pair is now terminal: v15 scores
@@ -21,22 +21,38 @@ leakage-v2 audit passes. V15 is therefore rejected as the final unified
 accuracy winner even though it remains a valid code/speed parent. MATH
 baseline and v15 MBPP-500 are now active on separate GPUs.
 
-The final same-freeze evaluation is
-`/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v5/results/experiment_queues/strict_unified_offline_three_arm_20260720_v5`.
-It waits for the direct v18-to-v19 gate chain, then selects exactly one global
-candidate in priority order v19, v18, v15/v11 and freshly runs baseline,
-candidate, and a comparator-only symmetric-fast arm on HumanEval-164,
+The final same-freeze evaluation is now
+`/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v7/results/experiment_queues/strict_unified_offline_three_arm_20260720_v7`.
+It waits for the direct v18-to-v19 gate chain and the preregistered v20 handoff,
+then selects exactly one global candidate in priority order v19, v18, v20 and
+freshly runs baseline, candidate, and a comparator-only symmetric-fast arm on HumanEval-164,
 MATH-500, GSM8K-1319 and MBPP-500. Six protocol tests, a socket-blocked offline
 dataset/tokenizer/model preflight, full artifact and weight manifests, and the
 static leakage-v2 audit pass. Runtime rendered text and token IDs are captured
-inside generation. The controller is detached and safe if the client o
-Internet connection disappears. The v5 controller passed all preflight stages
-and waits at
+inside generation. The controller is detached and safe if the client or
+Internet connection disappears. Known-rejected v15 is no longer a fallback;
+when no candidate passes the cross-task gate, strict v7 stops without wasting a
+four-benchmark run.
+
+V20 `trajectory_original_anchor_pareto` is a one-rule two-trajectory method:
+original low-confidence is the anchor and one symmetric accuracy path is the
+explorer. The explorer replaces the complete anchor only when disagreement
+log-probability is strictly higher under both complete external draft contexts.
+It has no task routing, answer/test execution, token splicing, or new tuned
+threshold. Its 50 selector/integration tests, queue contract, compile, shell,
+JSON and leakage-v2 preflight pass. Controller PID 291630 waits at
+`/root/autodl-tmp/LocalLeap/llada_slot_original_anchor_pareto_v20/results/experiment_queues/original_anchor_pareto_rapid_20260720_v1`;
+it skips if v18/v19 accepts, otherwise gates HumanEval-32 plus GSM8K-64 and then
+MATH-50 plus MBPP-100 before strict v7 can use it.
+
+The v18/v19 chain waits at
 `/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v3/results/experiment_queues/sparse_context_repair_direct_20260720_v3`.
 That controller skips v19 after a v18 acceptance and runs the unchanged,
 preregistered v19 only after a v18 rejection. Commit `7553e99` installs this
-direct chain. The redundant fair recovery, old v19 recovery, and strict v4
-waiters are preserved with explicit supersession markers.
+direct chain. The redundant fair recovery, old v19 recovery, strict v4 and
+strict v5 waiters are preserved with explicit supersession markers. Strict v6
+is preserved as a pre-generation packaging failure caused by three missing
+helper files; strict v7 was rebuilt from the complete v5 source package.
 
 Historical full baselines mix server, evaluator, and few-shot protocols. They
 must not be paired as formal current-host controls. Paper-reported Prism, SOAR,
