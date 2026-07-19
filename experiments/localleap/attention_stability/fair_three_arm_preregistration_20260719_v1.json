@@ -1,0 +1,54 @@
+{
+  "schema": "localleap_fair_three_arm_preregistration_v1",
+  "created": "2026-07-19",
+  "purpose": "Offline full re-evaluation after the active v15 full4 and v18 gates terminate",
+  "single_algorithm_requirement": true,
+  "task_specific_routing_forbidden": true,
+  "arms": {
+    "baseline": "original LLaDA low-confidence decoding",
+    "accuracy": "v18 only if its preregistered gate accepts, otherwise v15 exact-speed v11 descendant",
+    "fast": "symmetric_fast tau=0.004 confirmatory candidate"
+  },
+  "shared_generation": {
+    "checkpoint": "/root/autodl-tmp/model/LLaDA/instruct",
+    "steps": 128,
+    "gen_length": 256,
+    "block_length": 32,
+    "temperature": 0.0,
+    "seed_tuple": [0, 1234, 1234, 1234],
+    "remasking": "low_confidence",
+    "fewshot": {
+      "humaneval": 0,
+      "localleap_math500": 0,
+      "gsm8k": 0,
+      "mbpp": 0
+    }
+  },
+  "evaluators": {
+    "humaneval": "frozen LocalLeap sanitizer and execution evaluator",
+    "localleap_math500": "Prism-aligned frozen prompt and answer normalizer",
+    "gsm8k": "exact_match flexible-extract",
+    "mbpp": "prompt-visible assertions only, independent execution crosscheck, no hidden tests"
+  },
+  "fairness_invariants": [
+    "same current-server runtime for all three arms",
+    "same checkpoint and all weight hashes",
+    "same stable ids, raw prompts, documents, targets and evaluator versions",
+    "same actual chat-rendered input text and token-id hashes",
+    "same decoding budget except algorithm-induced NFE changes",
+    "no historical old-server result is used as the formal comparator"
+  ],
+  "accuracy_gate": {
+    "per_task_accuracy_nonregression_vs_baseline": true,
+    "strict_aggregate_accuracy_gain_vs_baseline": true
+  },
+  "fast_gate": {
+    "per_task_accuracy_nonregression_vs_baseline": true,
+    "strict_aggregate_accuracy_gain_vs_baseline": true,
+    "per_task_nfe_nonincrease": true,
+    "strict_aggregate_nfe_reduction": true,
+    "strict_aggregate_wall_reduction": true
+  },
+  "fallback": "retain the unified v11 family; do not synthesize a per-task ensemble",
+  "paper_values": "report separately only; never use paper-reported values as local records"
+}
