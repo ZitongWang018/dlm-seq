@@ -11,6 +11,11 @@ SPEC.loader.exec_module(MODULE)
 
 
 class PairedAuditTest(unittest.TestCase):
+    def test_missing_optional_log_is_reported_without_failing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing.log"
+            self.assertEqual(MODULE.log_metrics(missing), {"log_missing": True})
+
     def test_queue_uses_task_run_configs_for_baseline_audit(self):
         controller = MODULE_PATH.parent / "scripts" / "run_outcome_arbiter_queue.sh"
         text = controller.read_text(encoding="utf-8")
