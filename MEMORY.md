@@ -237,3 +237,23 @@
   added an executable regression test, and committed it as `d07effc`. Its
   optional smoke was interrupted when v12 automatically took both GPUs; the
   formal v12 jobs were preserved to avoid same-GPU contention.
+
+## 2026-07-20 strict offline queue
+
+- Audited the future branch of the strict unified controller and found that
+  implementation checked v18 before v19 even though preregistration gave v19
+  priority. No generation had started. Preserved v3 with a
+  `SUPERSEDED_BY_V4` marker, reversed the checks, and added a regression test.
+- Built and detached strict v4 (PID 280312 at launch). All six protocol tests,
+  shell contracts, JSON preregistration, socket-blocked four-dataset preflight,
+  40-file offline manifest, six-shard model-weight hashes, and static leakage
+  audit passed before it entered the v19 wait.
+- Strict v4 will freshly regenerate original low-confidence, one globally
+  selected candidate, and comparator-only symmetric-fast on all four complete
+  benchmarks. It balances candidate GPU assignment, records actual runtime
+  chat text/token hashes, requires stable-ID/prompt/target/evaluator/source
+  equality, and never performs per-task method routing.
+- Committed the priority fix as `2252c13` and the updated audit report as
+  `4e33fea`; both are on GitHub main. The remote code, datasets, tokenizer,
+  task/evaluator sources, reference papers/repos, and model checkpoint are
+  sufficient for the registered chain to continue without Internet access.

@@ -9,6 +9,32 @@ Remote worktrees:
 
 ## Current focus
 
+### 2026-07-20 strict offline handoff
+
+The trusted unified family is v11 public guard at tau 0.004, with v15
+`trajectory_early_lazy_confirmed_public_guard` as an output-exact admissible
+early-abort implementation. Full current-host HumanEval is 58/164 and
+MATH-500 is 167/500 for v15; fresh GSM8K baseline/method generation is active,
+then MATH baseline and MBPP baseline/method are queued on the two GPUs.
+
+The final same-freeze evaluation is
+`/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v4/results/experiment_queues/strict_unified_offline_three_arm_20260720_v4`.
+It waits for the registered v18/v19 gates, then selects exactly one global
+candidate in priority order v19, v18, v15/v11 and freshly runs baseline,
+candidate, and a comparator-only symmetric-fast arm on HumanEval-164,
+MATH-500, GSM8K-1319 and MBPP-500. Six protocol tests, a socket-blocked offline
+dataset/tokenizer/model preflight, full artifact and weight manifests, and the
+static leakage-v2 audit pass. Runtime rendered text and token IDs are captured
+inside generation. The controller is detached and safe if the client or
+Internet connection disappears. Strict v3 is preserved but superseded before
+generation because its delayed candidate checks did not honor the registered
+v19-before-v18 order; commit `2252c13` fixes and tests the order.
+
+Historical full baselines mix server, evaluator, and few-shot protocols. They
+must not be paired as formal current-host controls. Paper-reported Prism, SOAR,
+Order-Token Search, and original-LLaDA rows stay separate from local audited
+arms. See `docs/localleap_experiment_audit_20260720.md`.
+
 Reproduce and extend **LocalLeap** on LLaDA-Instruct (local weights), with correct HumanEval scoring via `postprocess_code.py`.
 
 See `experiments/localleap/README.md` for configs, scripts, and HE numbers.
