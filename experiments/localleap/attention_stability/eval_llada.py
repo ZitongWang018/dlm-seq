@@ -40,6 +40,7 @@ from model.modeling_llada import LLaDAModelLM
 from generate import *
 from stcc_generate import generate_stcc
 from differential_selector import (
+    decide_prompt_visible_repair_retention,
     decide_public_example_guard,
     evaluate_public_candidate,
     has_public_checks,
@@ -270,6 +271,7 @@ class LLaDAEvalHarness(LM):
             "confirmed_bidirectional_public_guard",
             "confirmed_bidirectional_lazy_public_guard",
             "early_confirmed_bidirectional_lazy_public_guard",
+            "evidence_conflict_repair_lazy_public_guard",
             "confirmed_bidirectional_public_verifier",
             "confirmed_bidirectional_public_pareto_verifier",
             "confirmed_bidirectional_outcome_arbiter",
@@ -284,6 +286,7 @@ class LLaDAEvalHarness(LM):
                 "confirmed_bidirectional_public_guard, or "
                 "confirmed_bidirectional_lazy_public_guard, "
                 "early_confirmed_bidirectional_lazy_public_guard, "
+                "evidence_conflict_repair_lazy_public_guard, "
                 "confirmed_bidirectional_public_verifier, or "
                 "confirmed_bidirectional_public_pareto_verifier, or "
                 "confirmed_bidirectional_outcome_arbiter"
@@ -598,6 +601,7 @@ class LLaDAEvalHarness(LM):
                         "confirmed_bidirectional_public_guard",
                         "confirmed_bidirectional_lazy_public_guard",
                         "early_confirmed_bidirectional_lazy_public_guard",
+                        "evidence_conflict_repair_lazy_public_guard",
                         "confirmed_bidirectional_public_verifier",
                         "confirmed_bidirectional_public_pareto_verifier",
                     }
@@ -616,6 +620,11 @@ class LLaDAEvalHarness(LM):
                         has_public_checks(question, req.doc.get("entry_point"))
                     )
                     if (
+                        requested_selection_mode
+                        == "evidence_conflict_repair_lazy_public_guard"
+                    ):
+                        effective_selection_mode = "evidence_conflict_repair"
+                    elif (
                         requested_selection_mode
                         == "early_confirmed_bidirectional_lazy_public_guard"
                     ):
@@ -788,6 +797,45 @@ class LLaDAEvalHarness(LM):
                 )
                 if public_guard_requested:
                     if public_guard_active:
+                        repair_retention = None
+                        if (
+                            requested_selection_mode
+                            == "evidence_conflict_repair_lazy_public_guard"
+                            and decode_diagnostics["selected_name"] == "repair"
+                        ):
+                            repair_name = decode_diagnostics["selected_name"]
+                            original_parent_name = decode_diagnostics[
+                                "pre_repair_selected_name"
+                            ]
+                            repair_evidence = evaluate_public_candidate(
+                                candidate_generations[repair_name],
+                                question,
+                                req.doc.get("entry_point"),
+                            )
+                            original_parent_evidence = evaluate_public_candidate(
+                                candidate_generations[original_parent_name],
+                                question,
+                                req.doc.get("entry_point"),
+                            )
+                            retained_name, repair_retention = (
+                                decide_prompt_visible_repair_retention(
+                                    repair_evidence,
+                                    original_parent_evidence,
+                                )
+                            )
+                            repair_retention.update(
+                                {
+                                    "repair_name": repair_name,
+                                    "parent_name": original_parent_name,
+                                }
+                            )
+                            if retained_name == "parent":
+                                decode_diagnostics["selected_name"] = (
+                                    original_parent_name
+                                )
+                        decode_diagnostics["repair_public_retention"] = (
+                            repair_retention
+                        )
                         parent_name = decode_diagnostics["selected_name"]
                         if lazy_public_guard_requested:
                             parent_evidence = evaluate_public_candidate(

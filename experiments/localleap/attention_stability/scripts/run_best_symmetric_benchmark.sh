@@ -121,6 +121,15 @@ case "${profile}" in
       echo "trajectory_early_lazy_confirmed_public_guard requires steps=128 block_length=32" >&2; exit 2; }
     dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=early_confirmed_bidirectional_lazy_public_guard"
     ;;
+  trajectory_evidence_conflict_repair)
+    # Generate a local branch only when path-time evidence and the independent
+    # bidirectional full-draft verifier disagree. Preserve all common tokens,
+    # re-denoise only the disagreement locus, and retain the branch only when
+    # the same verifier prefers it. Prompt-visible checks are non-regressive.
+    [[ "${steps}" == "128" && "${block_length}" == "32" ]] || {
+      echo "trajectory_evidence_conflict_repair requires steps=128 block_length=32" >&2; exit 2; }
+    dependency_args=",dependency_threshold=${tau},dependency_mode=symmetric,dependency_likelihood_selection=True,dependency_likelihood_selection_mode=evidence_conflict_repair_lazy_public_guard"
+    ;;
   trajectory_public_full_draft_verifier)
     # On an incomplete public-check tie, compare the two complete drafts by
     # masking each disagreement block under both external draft contexts.

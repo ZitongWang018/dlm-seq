@@ -1,0 +1,55 @@
+{
+  "preregistration_version": "evidence_conflict_repair_v1",
+  "registered_at": "2026-07-19T21:24:00+08:00",
+  "method_profile": "trajectory_evidence_conflict_repair",
+  "single_algorithm": true,
+  "parent": {
+    "accuracy_rule": "confirmed bidirectional tau=0.004",
+    "public_guard": "strict prompt-visible checks only",
+    "speed_descendant": "admissible early/lazy guard v15"
+  },
+  "one_change": {
+    "trigger": "exclusive disagreement between one-nat commit-path evidence and bidirectional full-draft verification",
+    "branch": "preserve all tokens shared by fast and accuracy trajectories; re-mask and top1-rediffuse only their disagreement positions",
+    "acceptance": "accept the repaired draft only when the same bidirectional block verifier strictly prefers it to the pre-repair parent",
+    "code_guard": "when prompt-visible checks exist, reject a repair that has fewer visible passes or loses compile validity on a pass tie"
+  },
+  "generation_inputs_allowed": [
+    "prompt tokens",
+    "model logits",
+    "model attention-derived dependency",
+    "complete generated trajectory tokens",
+    "checks and examples literally present in the prompt"
+  ],
+  "generation_inputs_forbidden": [
+    "raw_gold",
+    "normalized_gold",
+    "reference solution",
+    "hidden tests",
+    "correctness labels",
+    "post-hoc benchmark outcomes"
+  ],
+  "data_lineage": {
+    "humaneval_0_31": "consumed development set; rapid gate only",
+    "humaneval_32_163": "repeated-use exploratory set; never described as clean holdout",
+    "math_0_49": "consumed development set",
+    "gsm8k_0_63": "consumed development set",
+    "mbpp_0_99": "consumed development set",
+    "math_50_499": "candidate-frozen suffix; no correctness inspected before freeze",
+    "gsm8k_64_1318": "candidate-frozen suffix; no correctness inspected before freeze",
+    "mbpp_100_499": "candidate-frozen suffix; no correctness inspected before freeze"
+  },
+  "rapid_gates": {
+    "humaneval_0_31": "strictly exceed v11 18/32 with positive paired gain-minus-loss",
+    "math_0_49": "non-regressive against v9 16/50",
+    "gsm8k_0_63": "non-regressive against v9 44/64",
+    "math_plus_gsm": "strictly exceed the parent combined 60/114",
+    "mbpp_0_99": "non-regressive against v11 40/100 before suffix promotion"
+  },
+  "formal_rule": {
+    "accuracy": "no benchmark regression and a strict aggregate gain; HumanEval full is explicitly repeated-use exploratory evidence",
+    "integrity": "stable identity join, matching prompt and target hashes, zero duplicate or missing ids, zero residual masks, finite NFE, independent aggregate recomputation",
+    "fallback": "if v16 fails any registered gate, keep the single v15 exact-speed framework; do not compose task-specific methods"
+  },
+  "freeze_contract": "queue manifest records the source commit and sha256 hashes; no source edit after the first model stage starts"
+}

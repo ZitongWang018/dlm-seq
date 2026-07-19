@@ -1,5 +1,6 @@
 from differential_selector import (
     build_type_probes,
+    decide_prompt_visible_repair_retention,
     prompt_examples,
     select_differential_candidate,
 )
@@ -50,6 +51,54 @@ def test_timeout_or_invalid_candidate_loses_to_valid_candidate():
     selected, diagnostics = select_differential_candidate(candidates, "", "f")
     assert selected == 1
     assert diagnostics["compile_valid"][2] is False
+
+
+def test_prompt_visible_repair_retention_rejects_fewer_passes():
+    repair = {
+        "visible_check_count": 2,
+        "visible_checks_passed": 1,
+        "compile_valid": True,
+    }
+    parent = {
+        "visible_check_count": 2,
+        "visible_checks_passed": 2,
+        "compile_valid": True,
+    }
+    selected, diagnostics = decide_prompt_visible_repair_retention(
+        repair, parent
+    )
+    assert selected == "parent"
+    assert diagnostics["retained_repair"] is False
+    assert diagnostics["uses_hidden_tests"] is False
+
+
+def test_prompt_visible_repair_retention_uses_compile_on_a_pass_tie():
+    repair = {
+        "visible_check_count": 2,
+        "visible_checks_passed": 0,
+        "compile_valid": False,
+    }
+    parent = {
+        "visible_check_count": 2,
+        "visible_checks_passed": 0,
+        "compile_valid": True,
+    }
+    selected, _ = decide_prompt_visible_repair_retention(repair, parent)
+    assert selected == "parent"
+
+
+def test_prompt_visible_repair_retention_keeps_an_exact_tie():
+    repair = {
+        "visible_check_count": 1,
+        "visible_checks_passed": 1,
+        "compile_valid": True,
+    }
+    parent = dict(repair)
+    selected, diagnostics = decide_prompt_visible_repair_retention(
+        repair, parent
+    )
+    assert selected == "repair"
+    assert diagnostics["retained_repair"] is True
 
 
 if __name__ == "__main__":

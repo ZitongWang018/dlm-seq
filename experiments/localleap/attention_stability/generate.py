@@ -1287,6 +1287,11 @@ def generate_trajectory_likelihood_selection(
     bidirectional_block_scores = None
     bidirectional_block_nfe = 0
     bidirectional_block_records = None
+    evidence_conflict_repair_summary = None
+    repair_nfe = 0
+    repair_selector_nfe = 0
+    repair_candidate_scores = None
+    pre_repair_selected_name = None
     disagreement_count_for_coverage = None
     extra_invalidations_for_coverage = None
     revision_coverage = None
@@ -1376,6 +1381,7 @@ def generate_trajectory_likelihood_selection(
         "confirmed_bidirectional_block",
         "early_confirmed_bidirectional_block",
         "confirmed_bidirectional_public_guard",
+        "evidence_conflict_repair",
     }:
         if accuracy_early_aborted:
             selected_name = "fast"
@@ -1397,6 +1403,7 @@ def generate_trajectory_likelihood_selection(
             "confirmed_bidirectional_block",
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
+            "evidence_conflict_repair",
         } and not accuracy_early_aborted:
             selected_name = select_confirmed_bidirectional_block(
                 bidirectional_block_scores,
@@ -1408,6 +1415,91 @@ def generate_trajectory_likelihood_selection(
                 ("fast", "accuracy"),
                 key=lambda name: bidirectional_block_scores[name],
             )
+        if selection_mode == "evidence_conflict_repair":
+            pre_repair_selected_name = selected_name
+            path_supports_accuracy = (
+                float(accuracy_summary["commit_logprob_mean"])
+                - float(fast_summary["commit_logprob_mean"])
+            ) * int(block_length) > 1.0
+            verifier_supports_accuracy = (
+                float(bidirectional_block_scores["accuracy"])
+                > float(bidirectional_block_scores["fast"])
+            )
+            evidence_conflict = (
+                path_supports_accuracy != verifier_supports_accuracy
+            )
+            repair_accepted = False
+            repair_changed_positions = 0
+            repair_details = None
+            if evidence_conflict and bidirectional_block_disagreements > 0:
+                disagreement_mask = fast_x != accuracy_x
+                disagreement_mask[:, : prompt.shape[1]] = False
+                repaired_x, repair_nfe, repair_details = (
+                    repair_draft_disagreements(
+                        model=model,
+                        draft=candidate_ids[pre_repair_selected_name],
+                        disagreement_mask=disagreement_mask,
+                        prompt_length=prompt.shape[1],
+                        dependency_threshold=dependency_threshold,
+                        steps=steps,
+                        gen_length=gen_length,
+                        block_length=block_length,
+                        temperature=temperature,
+                        remasking=remasking,
+                        mask_id=mask_id,
+                        temporal_mode="top1",
+                    )
+                )
+                candidate_ids["repair"] = repaired_x
+                repair_changed_positions = int(
+                    (
+                        repaired_x
+                        != candidate_ids[pre_repair_selected_name]
+                    ).sum().item()
+                )
+                if repair_changed_positions > 0:
+                    (
+                        repair_candidate_scores,
+                        _,
+                        repair_selector_nfe,
+                        repair_verifier_blocks,
+                    ) = score_bidirectional_block_candidates(
+                        model,
+                        {
+                            "parent": candidate_ids[pre_repair_selected_name],
+                            "repair": repaired_x,
+                        },
+                        prompt_length=prompt.shape[1],
+                        block_length=block_length,
+                        mask_id=mask_id,
+                        candidate_names=("parent", "repair"),
+                    )
+                    repair_accepted = (
+                        float(repair_candidate_scores["repair"])
+                        > float(repair_candidate_scores["parent"])
+                    )
+                    if repair_accepted:
+                        selected_name = "repair"
+                else:
+                    repair_verifier_blocks = []
+            else:
+                repair_verifier_blocks = None
+            evidence_conflict_repair_summary = {
+                "triggered": bool(evidence_conflict),
+                "path_supports_accuracy": bool(path_supports_accuracy),
+                "verifier_supports_accuracy": bool(verifier_supports_accuracy),
+                "parent_name": pre_repair_selected_name,
+                "repair_generated": repair_details is not None,
+                "repair_accepted": bool(repair_accepted),
+                "repair_changed_positions": int(repair_changed_positions),
+                "repair_nfe": int(repair_nfe),
+                "repair_selector_nfe": int(repair_selector_nfe),
+                "repair_candidate_scores": repair_candidate_scores,
+                "repair_verifier_blocks": repair_verifier_blocks,
+                "repair": repair_details,
+                "uses_hidden_tests": False,
+                "uses_reference_solution": False,
+            }
     else:
         selected_name = select_likelihood_trajectory(
             candidate_summaries,
@@ -1432,12 +1524,17 @@ def generate_trajectory_likelihood_selection(
         "confirmed_bidirectional_block",
         "early_confirmed_bidirectional_block",
         "confirmed_bidirectional_public_guard",
+        "evidence_conflict_repair",
     }:
         disagreement_count = bidirectional_block_disagreements
         scored_disagreement_count = bidirectional_block_disagreements
     for value in candidate_summaries.values():
         value.pop("_commit_logprob_by_position", None)
-    selected_summary = candidate_summaries[selected_name]
+    selected_summary = candidate_summaries[
+        pre_repair_selected_name
+        if selected_name == "repair"
+        else selected_name
+    ]
     selected_steps = selected_summary.pop("_step_records", None)
     fast_summary.pop("_step_records", None)
     accuracy_summary.pop("_step_records", None)
@@ -1456,7 +1553,9 @@ def generate_trajectory_likelihood_selection(
     )
     summary = {
         "decoder": (
-            "trajectory_confirmed_bidirectional_public_guard_v11"
+            "trajectory_evidence_conflict_repair_v16"
+            if selection_mode == "evidence_conflict_repair"
+            else "trajectory_confirmed_bidirectional_public_guard_v11"
             if selection_mode == "confirmed_bidirectional_public_guard"
             else "trajectory_early_confirmed_bidirectional_block_v10"
             if selection_mode == "early_confirmed_bidirectional_block"
@@ -1488,7 +1587,9 @@ def generate_trajectory_likelihood_selection(
             )
         ),
         "selection_rule": (
-            "confirmed_bidirectional_then_strict_public_example_baseline_guard"
+            "repair_disagreement_locus_only_when_path_and_verifier_conflict"
+            if selection_mode == "evidence_conflict_repair"
+            else "confirmed_bidirectional_then_strict_public_example_baseline_guard"
             if selection_mode == "confirmed_bidirectional_public_guard"
             else "optimistic_path_bound_then_confirmed_bidirectional_block"
             if selection_mode == "early_confirmed_bidirectional_block"
@@ -1532,7 +1633,11 @@ def generate_trajectory_likelihood_selection(
             * int(block_length)
         ),
         "selected_name": selected_name,
-        "selected_score": float(selection_candidate_scores[selected_name]),
+        "selected_score": float(
+            repair_candidate_scores["repair"]
+            if selected_name == "repair"
+            else selection_candidate_scores[selected_name]
+        ),
         "candidate_scores": mean_candidate_scores,
         "selection_candidate_scores": selection_candidate_scores,
         "disagreement_token_count": disagreement_count,
@@ -1556,8 +1661,11 @@ def generate_trajectory_likelihood_selection(
             "confirmed_bidirectional_block",
             "early_confirmed_bidirectional_block",
             "confirmed_bidirectional_public_guard",
+            "evidence_conflict_repair",
         }
         else None,
+        "pre_repair_selected_name": pre_repair_selected_name,
+        "evidence_conflict_repair": evidence_conflict_repair_summary,
         "accuracy_early_abort": {
             "triggered": accuracy_early_aborted,
             "threshold": accuracy_abort_threshold,
@@ -1594,7 +1702,16 @@ def generate_trajectory_likelihood_selection(
                     "confirmed_bidirectional_block",
                     "early_confirmed_bidirectional_block",
                     "confirmed_bidirectional_public_guard",
+                    "evidence_conflict_repair",
                 }
+                else {}
+            ),
+            **(
+                {
+                    "repair": int(repair_nfe),
+                    "repair_selector": int(repair_selector_nfe),
+                }
+                if selection_mode == "evidence_conflict_repair"
                 else {}
             ),
             **(
@@ -1614,7 +1731,9 @@ def generate_trajectory_likelihood_selection(
         + accuracy_nfe
         + (baseline_nfe or 0)
         + shared_skeleton_nfe
-        + bidirectional_block_nfe,
+        + bidirectional_block_nfe
+        + repair_nfe
+        + repair_selector_nfe,
         summary,
     )
 
@@ -2384,6 +2503,8 @@ def repair_draft_disagreements(
     temperature=0.0,
     remasking="low_confidence",
     mask_id=126336,
+    temporal_mode="response_credit",
+    temporal_topk=4,
 ):
     """Re-denoise only positions where two complete drafts disagree.
 
@@ -2402,6 +2523,8 @@ def repair_draft_disagreements(
     num_blocks = gen_length // block_length
     if steps % num_blocks != 0:
         raise ValueError("steps must be divisible by the number of blocks")
+    if temporal_mode not in {"top1", "response_credit"}:
+        raise ValueError("repair temporal_mode must be top1 or response_credit")
 
     x = draft.clone()
     mutable = disagreement_mask.clone().to(dtype=torch.bool, device=x.device)
@@ -2411,7 +2534,12 @@ def repair_draft_disagreements(
     baseline_budget = max(1, int(np.ceil(block_length / block_steps)))
     nfe = 0
     summary = {
-        "decoder": "response_credit_disagreement_repair_v1",
+        "decoder": (
+            "top1_disagreement_repair_v2"
+            if temporal_mode == "top1"
+            else "response_credit_disagreement_repair_v1"
+        ),
+        "temporal_mode": temporal_mode,
         "disagreement_positions": int(mutable.sum().item()),
         "agreement_positions": int(gen_length - mutable.sum().item()),
         "repair_nfe": 0,
@@ -2453,8 +2581,8 @@ def repair_draft_disagreements(
                 previous_top1=previous_top1,
                 previous_selected=previous_selected,
                 previous_topk_ids=previous_topk_ids,
-                temporal_mode="response_credit",
-                temporal_topk=4,
+                temporal_mode=temporal_mode,
+                temporal_topk=temporal_topk,
                 prune_stable_conflicts=True,
                 fill_budget=True,
                 previous_response_credit=previous_response_credit,

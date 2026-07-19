@@ -224,6 +224,115 @@ def test_early_confirmed_mode_returns_fast_without_final_verifier():
     }
 
 
+def test_evidence_conflict_repairs_only_the_disagreement_locus():
+    original_attention = generate_module.generate_attention_stability
+    original_score = generate_module.score_bidirectional_block_candidates
+    original_repair = generate_module.repair_draft_disagreements
+    repair_calls = []
+
+    def fake_attention(**kwargs):
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2]]), 128, {
+                "commit_logprob_mean": -0.20,
+            }
+        return torch.tensor([[1, 8]]), 140, {
+            "commit_logprob_mean": -0.10,
+        }
+
+    def fake_score(*args, **kwargs):
+        names = kwargs.get("candidate_names", ("fast", "accuracy"))
+        if names == ("parent", "repair"):
+            return {"parent": -0.20, "repair": -0.05}, 1, 1, []
+        return {"fast": -0.10, "accuracy": -0.20}, 1, 1, []
+
+    def fake_repair(**kwargs):
+        repair_calls.append(kwargs)
+        return torch.tensor([[1, 9]]), 3, {
+            "temporal_mode": kwargs["temporal_mode"],
+            "residual_mask_count": 0,
+        }
+
+    generate_module.generate_attention_stability = fake_attention
+    generate_module.score_bidirectional_block_candidates = fake_score
+    generate_module.repair_draft_disagreements = fake_repair
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=1,
+            block_length=32,
+            selection_mode="evidence_conflict_repair",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+        generate_module.score_bidirectional_block_candidates = original_score
+        generate_module.repair_draft_disagreements = original_repair
+
+    assert output.tolist() == [[1, 9]]
+    assert nfe == 273
+    assert len(repair_calls) == 1
+    assert repair_calls[0]["temporal_mode"] == "top1"
+    assert repair_calls[0]["disagreement_mask"].tolist() == [[False, True]]
+    assert summary["pre_repair_selected_name"] == "fast"
+    assert summary["selected_name"] == "repair"
+    assert summary["evidence_conflict_repair"]["triggered"] is True
+    assert summary["evidence_conflict_repair"]["repair_accepted"] is True
+    assert summary["candidate_nfe"] == {
+        "fast": 128,
+        "accuracy": 140,
+        "bidirectional_block_selector": 1,
+        "repair": 3,
+        "repair_selector": 1,
+    }
+
+
+def test_evidence_conflict_skips_repair_when_both_evidence_sources_agree():
+    original_attention = generate_module.generate_attention_stability
+    original_score = generate_module.score_bidirectional_block_candidates
+    original_repair = generate_module.repair_draft_disagreements
+
+    def fake_attention(**kwargs):
+        if kwargs["prune_stable_conflicts"]:
+            return torch.tensor([[1, 2]]), 128, {
+                "commit_logprob_mean": -0.20,
+            }
+        return torch.tensor([[1, 8]]), 140, {
+            "commit_logprob_mean": -0.10,
+        }
+
+    def fake_score(*args, **kwargs):
+        return {"fast": -0.20, "accuracy": -0.10}, 1, 1, []
+
+    def fail_repair(**kwargs):
+        raise AssertionError("repair should be gated by evidence conflict")
+
+    generate_module.generate_attention_stability = fake_attention
+    generate_module.score_bidirectional_block_candidates = fake_score
+    generate_module.repair_draft_disagreements = fail_repair
+    try:
+        output, nfe, summary = generate_trajectory_likelihood_selection(
+            model=object(),
+            prompt=torch.tensor([[1]]),
+            dependency_threshold=0.004,
+            steps=128,
+            gen_length=1,
+            block_length=32,
+            selection_mode="evidence_conflict_repair",
+        )
+    finally:
+        generate_module.generate_attention_stability = original_attention
+        generate_module.score_bidirectional_block_candidates = original_score
+        generate_module.repair_draft_disagreements = original_repair
+
+    assert output.tolist() == [[1, 8]]
+    assert nfe == 269
+    assert summary["selected_name"] == "accuracy"
+    assert summary["evidence_conflict_repair"]["triggered"] is False
+    assert summary["evidence_conflict_repair"]["repair_generated"] is False
+
+
 def test_public_guard_mode_retains_baseline_candidate_for_external_guard():
     original_attention = generate_module.generate_attention_stability
     original_generate = generate_module.generate

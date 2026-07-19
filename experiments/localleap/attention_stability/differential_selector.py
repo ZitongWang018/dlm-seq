@@ -271,6 +271,36 @@ def evaluate_public_candidate(
     }
 
 
+def decide_prompt_visible_repair_retention(
+    repair_evidence: Dict[str, Any],
+    parent_evidence: Dict[str, Any],
+) -> Tuple[str, Dict[str, Any]]:
+    """Reject a local repair only when prompt-visible evidence regresses."""
+    if int(repair_evidence["visible_check_count"]) != int(
+        parent_evidence["visible_check_count"]
+    ):
+        raise ValueError("repair and parent public-check counts must match")
+    repair_rank = (
+        int(repair_evidence["visible_checks_passed"]),
+        int(bool(repair_evidence["compile_valid"])),
+    )
+    parent_rank = (
+        int(parent_evidence["visible_checks_passed"]),
+        int(bool(parent_evidence["compile_valid"])),
+    )
+    retained_repair = repair_rank >= parent_rank
+    return ("repair" if retained_repair else "parent"), {
+        "selector": "prompt_visible_nonregression_v1",
+        "selected_name": "repair" if retained_repair else "parent",
+        "retained_repair": retained_repair,
+        "repair_evidence": repair_evidence,
+        "parent_evidence": parent_evidence,
+        "uses_generated_probes": False,
+        "uses_hidden_tests": False,
+        "uses_reference_solution": False,
+    }
+
+
 def decide_public_example_guard(
     baseline_evidence: Optional[Dict[str, Any]],
     parent_evidence: Dict[str, Any],
