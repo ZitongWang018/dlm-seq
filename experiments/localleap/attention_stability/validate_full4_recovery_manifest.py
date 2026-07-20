@@ -21,7 +21,8 @@ REQUIRED_GENERATION_STAGES = {
 
 
 def validate(manifest: Path, queue_root: Path) -> dict[str, object]:
-    rows = list(csv.DictReader(manifest.open(), delimiter="\t"))
+    with manifest.open() as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
     done = {row["stage"] for row in rows if row["status"] == "DONE"}
     missing = sorted(REQUIRED_GENERATION_STAGES - done)
     if missing:
