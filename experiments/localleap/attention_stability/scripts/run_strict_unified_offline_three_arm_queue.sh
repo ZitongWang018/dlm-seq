@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-strict_root=${STRICT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v6}
+strict_root=${STRICT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_strict_unified_v20_v10}
 v15_root=${V15_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
-v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v2}
-v19_root=${V19_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v3}
-v20_root=${V20_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_original_anchor_pareto_v20}
-v18_id=${V18_ID:-early_localized_evidence_conflict_repair_20260719_v2}
-v19_id=${V19_ID:-sparse_context_repair_direct_20260720_v3}
-v20_id=${V20_ID:-original_anchor_pareto_rapid_20260720_v1}
-queue_id=${ATTENTION_QUEUE_ID:-strict_unified_offline_three_arm_20260720_v6}
+v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v3}
+v19_root=${V19_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v4}
+v20_root=${V20_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_original_anchor_pareto_v20_direct_v4}
+v18_id=${V18_ID:-early_localized_evidence_conflict_repair_20260720_v3}
+v19_id=${V19_ID:-sparse_context_repair_direct_20260720_v4}
+v20_id=${V20_ID:-original_anchor_pareto_direct_20260720_v4}
+queue_id=${ATTENTION_QUEUE_ID:-strict_unified_offline_three_arm_20260720_v10}
 queue_root=${strict_root}/results/experiment_queues/${queue_id}
 run_base=${strict_root}/results/best_symmetric_benchmarks/${queue_id}
 v18_queue=${v18_root}/results/experiment_queues/${v18_id}
@@ -176,6 +176,13 @@ echo "waiting_for_v20_handoff_terminal=${v20_queue}"
 wait_terminal "${v20_queue}"
 [[ -e "${v20_queue}/DONE" && ! -e "${v20_queue}/FAILED" ]] || {
   touch "${queue_root}/BLOCKED_V20_PIPELINE_FAILURE"; exit 22; }
+
+if [[ ! -e "${v20_queue}/ACCEPTED" ]]; then
+  echo "waiting_for_repair_chain_terminal=${v19_queue}"
+  wait_terminal "${v19_queue}"
+  [[ -e "${v19_queue}/DONE" && ! -e "${v19_queue}/FAILED" ]] || {
+    touch "${queue_root}/BLOCKED_REPAIR_CHAIN_FAILURE"; exit 23; }
+fi
 
 if [[ -e "${v19_queue}/ACCEPTED" ]]; then
   candidate_profile=trajectory_early_sparse_context_repair

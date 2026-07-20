@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v3}
+llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v4}
 parent_root=${PARENT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
-v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v2}
+v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v3}
 parent_queue_id=${PARENT_QUEUE_ID:-best_framework_full4_20260719_v1}
-v18_queue_id=${V18_QUEUE_ID:-early_localized_evidence_conflict_repair_20260719_v2}
-queue_id=${ATTENTION_QUEUE_ID:-sparse_context_repair_direct_20260720_v3}
+v18_queue_id=${V18_QUEUE_ID:-early_localized_evidence_conflict_repair_20260720_v3}
+queue_id=${ATTENTION_QUEUE_ID:-sparse_context_repair_direct_20260720_v4}
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
 v18_queue=${v18_root}/results/experiment_queues/${v18_queue_id}
 bootstrap=${llada_root}/scripts/run_sparse_context_repair_direct_after_v18.sh
@@ -21,6 +21,7 @@ trap 'rc=$?; echo "bootstrap_error rc=${rc} line=${LINENO}"; touch "${queue_root
 export PATH=/root/miniconda3/bin:${PATH}
 export HF_HOME=/root/autodl-tmp/.cache/huggingface
 export HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export HF_EVALUATE_OFFLINE=1
 export HF_ALLOW_CODE_EVAL=1
 
 bootstrap_hashes=${queue_root}/bootstrap_sources.sha256

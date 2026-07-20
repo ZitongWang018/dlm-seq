@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 
 source_root=${SOURCE_ROOT:-/root/autodl-tmp/dlm-seq-flow/experiments/localleap/attention_stability}
-llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v2}
+llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v3}
 parent_root=${PARENT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
 parent_queue_id=${PARENT_QUEUE_ID:-best_framework_full4_20260719_v1}
-queue_id=${ATTENTION_QUEUE_ID:-early_localized_evidence_conflict_repair_20260719_v2}
+queue_id=${ATTENTION_QUEUE_ID:-early_localized_evidence_conflict_repair_20260720_v3}
 profile=${PROFILE:-trajectory_early_localized_evidence_conflict_repair}
 run_prefix=${RUN_PREFIX:-v18}
 preregistration=${PREREGISTRATION:-early_localized_evidence_conflict_repair_preregistration_20260719_v2.json}
@@ -99,7 +99,9 @@ export PATH=/root/miniconda3/bin:${PATH}
 source /root/miniconda3/etc/profile.d/conda.sh
 conda activate base
 export HF_HOME=/root/autodl-tmp/.cache/huggingface
-export HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 HF_ALLOW_CODE_EVAL=1
+export HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export HF_EVALUATE_OFFLINE=1 HF_ALLOW_CODE_EVAL=1
+unset HF_ENDPOINT TRANSFORMERS_CACHE || true
 cd "${llada_root}"
 [[ "${run_base}" == */"${queue_id}" ]] || exit 20
 [[ -s "${manifest}" ]] || printf 'stage\tstatus\tstart\tfinish\texit_code_or_note\n' >"${manifest}"
@@ -107,15 +109,21 @@ cd "${llada_root}"
 if [[ ! -s "${frozen}" ]]; then
   sha256sum generate.py eval_llada.py differential_selector.py \
     run_best_symmetric_benchmark.sh compare_paired_task_runs.py \
-    "${leakage_auditor}" audit_mbpp_assertions.py slice_audit_records.py \
+    "${leakage_auditor}" audit_mbpp_assertions.py slice_audit_by_index.py \
+    postprocess_code.py humaneval_execution.py sanitize.py \
     "${preregistration}" \
     tests/test_attention_stability.py tests/test_differential_selector.py \
+    test_localized_repair_queue_contract.py test_slice_audit_by_index.py \
     "${controller}" >"${frozen}"
 fi
 verify
 /root/miniconda3/bin/python -m py_compile generate.py eval_llada.py \
   differential_selector.py compare_paired_task_runs.py audit_mbpp_assertions.py
 bash -n "${runner}" "${controller}"
+run_stage queue_contract /root/miniconda3/bin/python \
+  test_localized_repair_queue_contract.py
+run_stage slice_contract /root/miniconda3/bin/python \
+  test_slice_audit_by_index.py
 run_stage leakage_static /root/miniconda3/bin/python "${leakage_auditor}" \
   --source-root "${llada_root}" --expected-profile "${profile}" \
   --output "${queue_root}/leakage/static.json"
@@ -132,9 +140,9 @@ for root in "${parent_he}" "${parent_math}" "${parent_gsm}" "${parent_mbpp}"; do
 done
 
 mkdir -p "${queue_root}/parents"
-/root/miniconda3/bin/python slice_audit_records.py \
+/root/miniconda3/bin/python slice_audit_by_index.py \
   "$(records "${parent_math}")" "${queue_root}/parents/math_dev50.jsonl" --start 0 --end 50
-/root/miniconda3/bin/python slice_audit_records.py \
+/root/miniconda3/bin/python slice_audit_by_index.py \
   "$(records "${parent_gsm}")" "${queue_root}/parents/gsm_dev64.jsonl" --start 0 --end 64
 
 ( run_gpu "he_${run_prefix}_full164" 0 "${runner}" humaneval 0 128 \
@@ -149,7 +157,7 @@ compare_pair he_full164 "$(records "${parent_he}")" "$(records "${he_full}")" \
 run_stage mbpp_dev_assertions /root/miniconda3/bin/python audit_mbpp_assertions.py \
   --samples "$(sample_file "${mbpp_dev}")" --task-records "$(records "${mbpp_dev}")" \
   --output-dir "${queue_root}/mbpp_assertion/dev100"
-/root/miniconda3/bin/python slice_audit_records.py \
+/root/miniconda3/bin/python slice_audit_by_index.py \
   "${parent_queue}/mbpp_assertion/method/audit_records.jsonl" \
   "${queue_root}/parents/mbpp_dev100.jsonl" --start 0 --end 100
 compare_pair mbpp_dev100 "${queue_root}/parents/mbpp_dev100.jsonl" \
