@@ -15,6 +15,7 @@ def main():
 
     assert controller.count("slice_audit_by_index.py") >= 4
     assert "slice_audit_records.py" not in controller
+    assert "runner=${llada_root}/scripts/run_best_symmetric_benchmark.sh" in controller
     assert "test_slice_audit_by_index.py" in controller
     assert "run_stage selector_tests" in controller
     assert "run_stage differential_selector_tests" in controller

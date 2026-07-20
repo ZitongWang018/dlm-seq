@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v4}
+llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_sparse_context_repair_v19_direct_v5}
 parent_root=${PARENT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
-v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v3}
+v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v4}
 parent_queue_id=${PARENT_QUEUE_ID:-best_framework_full4_20260719_v1}
-v18_queue_id=${V18_QUEUE_ID:-early_localized_evidence_conflict_repair_20260720_v3}
-queue_id=${ATTENTION_QUEUE_ID:-sparse_context_repair_direct_20260720_v4}
+v18_queue_id=${V18_QUEUE_ID:-early_localized_evidence_conflict_repair_20260720_v4}
+queue_id=${ATTENTION_QUEUE_ID:-sparse_context_repair_direct_20260720_v5}
 queue_root=${llada_root}/results/experiment_queues/${queue_id}
 v18_queue=${v18_root}/results/experiment_queues/${v18_queue_id}
 bootstrap=${llada_root}/scripts/run_sparse_context_repair_direct_after_v18.sh

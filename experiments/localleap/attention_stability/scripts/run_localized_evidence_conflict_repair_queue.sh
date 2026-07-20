@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 
 source_root=${SOURCE_ROOT:-/root/autodl-tmp/dlm-seq-flow/experiments/localleap/attention_stability}
-llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v3}
+llada_root=${LLADA_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v4}
 parent_root=${PARENT_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_admissible_lazy_guard}
 parent_queue_id=${PARENT_QUEUE_ID:-best_framework_full4_20260719_v1}
-queue_id=${ATTENTION_QUEUE_ID:-early_localized_evidence_conflict_repair_20260720_v3}
+queue_id=${ATTENTION_QUEUE_ID:-early_localized_evidence_conflict_repair_20260720_v4}
 profile=${PROFILE:-trajectory_early_localized_evidence_conflict_repair}
 run_prefix=${RUN_PREFIX:-v18}
 preregistration=${PREREGISTRATION:-early_localized_evidence_conflict_repair_preregistration_20260719_v2.json}
@@ -14,7 +14,7 @@ queue_root=${llada_root}/results/experiment_queues/${queue_id}
 run_base=${llada_root}/results/best_symmetric_benchmarks/${queue_id}
 parent_queue=${parent_root}/results/experiment_queues/${parent_queue_id}
 parent_runs=${parent_root}/results/best_symmetric_benchmarks/${parent_queue_id}
-runner=${llada_root}/run_best_symmetric_benchmark.sh
+runner=${llada_root}/scripts/run_best_symmetric_benchmark.sh
 controller=${llada_root}/scripts/run_localized_evidence_conflict_repair_queue.sh
 pairer=${llada_root}/compare_paired_task_runs.py
 manifest=${queue_root}/formal_manifest.tsv
@@ -108,7 +108,7 @@ cd "${llada_root}"
 
 if [[ ! -s "${frozen}" ]]; then
   sha256sum generate.py eval_llada.py differential_selector.py \
-    run_best_symmetric_benchmark.sh compare_paired_task_runs.py \
+    scripts/run_best_symmetric_benchmark.sh compare_paired_task_runs.py \
     "${leakage_auditor}" audit_mbpp_assertions.py slice_audit_by_index.py \
     postprocess_code.py humaneval_execution.py sanitize.py \
     "${preregistration}" \
