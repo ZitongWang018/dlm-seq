@@ -10,12 +10,13 @@ original_he=${ORIGINAL_HE:-/root/autodl-tmp/LocalLeap/llada/results/best_symmetr
 v18_root=${V18_ROOT:-/root/autodl-tmp/LocalLeap/llada_slot_early_localized_conflict_repair_v2}
 v18_id=${V18_ID:-early_localized_evidence_conflict_repair_20260719_v2}
 v18_queue=${v18_root}/results/experiment_queues/${v18_id}
-recovery_id=${RECOVERY_ID:-full4_leakage_recovery_20260720_v3}
+recovery_id=${RECOVERY_ID:-full4_leakage_recovery_20260720_v4}
 queue_root=${llada_root}/results/experiment_queues/${recovery_id}
 controller=${canonical_root}/scripts/run_full4_leakage_recovery_and_resume_v3.sh
 leakage_auditor=${canonical_root}/audit_generation_leakage_v2.py
 mbpp_auditor=/root/autodl-tmp/dlm-seq-flow/experiments/localleap/attention_stability_dev_admissible_lazy_guard/audit_mbpp_assertions.py
 pairer=${llada_root}/compare_paired_task_runs.py
+recovery_validator=${canonical_root}/validate_full4_recovery_manifest.py
 manifest=${queue_root}/recovery_manifest.tsv
 frozen=${queue_root}/frozen_sources.sha256
 
@@ -35,7 +36,9 @@ if [[ ! -s "${frozen}" ]]; then
   ( cd "${llada_root}" && sha256sum generate.py eval_llada.py differential_selector.py \
       compare_paired_task_runs.py postprocess_code.py humaneval_execution.py sanitize.py ) >"${frozen}"
   sha256sum "${controller}" "${leakage_auditor}" "${mbpp_auditor}" \
-    "${canonical_root}/test_audit_generation_leakage_v2.py" >>"${frozen}"
+    "${canonical_root}/test_audit_generation_leakage_v2.py" \
+    "${recovery_validator}" \
+    "${canonical_root}/test_validate_full4_recovery_manifest.py" >>"${frozen}"
 fi
 verify() { ( cd "${llada_root}" && sha256sum -c "${frozen}" >/dev/null ); }
 append_manifest() { printf '%s\n' "$1" >>"${manifest}"; }
@@ -84,20 +87,10 @@ wait_parent_terminal() {
   while kill -0 "${pid}" 2>/dev/null; do sleep 2; done
 }
 validate_recoverable_failure() {
-  /root/miniconda3/bin/python - "${full4_queue}/formal_manifest.tsv" <<'PY'
-import csv,sys
-rows=list(csv.DictReader(open(sys.argv[1]),delimiter="\t"))
-required={
- "he_method_full164","gsm_method_full1319","math_baseline_full500",
- "mbpp_baseline_full500","math_method_full500","gsm_baseline_full1319",
- "mbpp_method_full500",
-}
-done={row["stage"] for row in rows if row["status"]=="DONE"}
-missing=sorted(required-done)
-assert not missing, ("generation_incomplete",missing)
-failed=[row["stage"] for row in rows if row["status"]=="FAILED"]
-assert failed and all(stage.startswith("leakage_") for stage in failed), failed
-PY
+  /root/miniconda3/bin/python "${recovery_validator}" \
+    --manifest "${full4_queue}/formal_manifest.tsv" \
+    --queue-root "${full4_queue}" \
+    --output "${queue_root}/recovery_validation.json"
 }
 compare_pair() {
   local label=$1 baseline_records=$2 method_records=$3 baseline_config=$4 method_config=$5 allow=${6:-false}
@@ -110,11 +103,15 @@ compare_pair() {
 }
 resume_v18() {
   if [[ ! -e "${v18_queue}/DONE" && ! -e "${v18_queue}/FAILED" ]]; then
-    nohup env SOURCE_ROOT="${canonical_root}" LLADA_ROOT="${v18_root}" \
-      PARENT_ROOT="${llada_root}" PARENT_QUEUE_ID="${full4_id}" ATTENTION_QUEUE_ID="${v18_id}" \
-      bash "${v18_root}/scripts/run_localized_evidence_conflict_repair_queue.sh" \
-      >"${v18_queue}/launcher_recovery_v2.log" 2>&1 &
-    printf '%s\n' "$!" >"${v18_queue}/launcher_recovery_v2.pid"
+    local existing_pid=""
+    [[ -s "${v18_queue}/controller.pid" ]] && existing_pid=$(cat "${v18_queue}/controller.pid")
+    if [[ -z "${existing_pid}" ]] || ! kill -0 "${existing_pid}" 2>/dev/null; then
+      nohup env SOURCE_ROOT="${canonical_root}" LLADA_ROOT="${v18_root}" \
+        PARENT_ROOT="${llada_root}" PARENT_QUEUE_ID="${full4_id}" ATTENTION_QUEUE_ID="${v18_id}" \
+        bash "${v18_root}/scripts/run_localized_evidence_conflict_repair_queue.sh" \
+        >"${v18_queue}/launcher_recovery_v4.log" 2>&1 &
+      printf '%s\n' "$!" >"${v18_queue}/launcher_recovery_v4.pid"
+    fi
   fi
   printf 'reason=strict_v5_replaces_provisional_three_arm\nrecorded=%s\n' \
     "$(date --iso-8601=seconds)" >"${queue_root}/SKIPPED_REDUNDANT_FAIR"
@@ -125,6 +122,7 @@ resume_v18() {
 verify
 /root/miniconda3/bin/python -m py_compile "${leakage_auditor}"
 PYTHONPATH="${canonical_root}" /root/miniconda3/bin/python "${canonical_root}/test_audit_generation_leakage_v2.py"
+PYTHONPATH="${canonical_root}" /root/miniconda3/bin/python "${canonical_root}/test_validate_full4_recovery_manifest.py"
 bash -n "${controller}"
 echo "waiting_for_full4_terminal=${full4_queue}"
 wait_parent_terminal
