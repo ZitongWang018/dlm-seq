@@ -46,6 +46,11 @@ def main():
     assert "TRANSFORMERS_OFFLINE=1" in wrapper
     assert "PROFILE=trajectory_early_sparse_context_repair" in wrapper
     assert "RUN_PREFIX=v19" in wrapper
+    direct = (
+        ROOT / "scripts" / "run_sparse_context_repair_direct_after_v18.sh"
+    ).read_text(encoding="utf-8")
+    assert '"${queue_root}/FAILED"; exit 22' in direct
+    assert '"${queue_root}/FAILED"; exit 23' in direct
     print("sparse context repair queue contract passed")
 
 

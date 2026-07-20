@@ -175,13 +175,15 @@ run_stage leakage_static /root/miniconda3/bin/python "${leakage_auditor}" \
 echo "waiting_for_v20_handoff_terminal=${v20_queue}"
 wait_terminal "${v20_queue}"
 [[ -e "${v20_queue}/DONE" && ! -e "${v20_queue}/FAILED" ]] || {
-  touch "${queue_root}/BLOCKED_V20_PIPELINE_FAILURE"; exit 22; }
+  touch "${queue_root}/BLOCKED_V20_PIPELINE_FAILURE" \
+    "${queue_root}/FAILED"; exit 22; }
 
 if [[ ! -e "${v20_queue}/ACCEPTED" ]]; then
   echo "waiting_for_repair_chain_terminal=${v19_queue}"
   wait_terminal "${v19_queue}"
   [[ -e "${v19_queue}/DONE" && ! -e "${v19_queue}/FAILED" ]] || {
-    touch "${queue_root}/BLOCKED_REPAIR_CHAIN_FAILURE"; exit 23; }
+    touch "${queue_root}/BLOCKED_REPAIR_CHAIN_FAILURE" \
+      "${queue_root}/FAILED"; exit 23; }
 fi
 
 if [[ -e "${v19_queue}/ACCEPTED" ]]; then

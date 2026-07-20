@@ -48,7 +48,8 @@ bash -n "${bootstrap}" "${generic}"
 echo "waiting_for_v18_queue=${v18_queue}"
 wait_terminal "${v18_queue}"
 [[ -e "${v18_queue}/DONE" && ! -e "${v18_queue}/FAILED" ]] || {
-  touch "${queue_root}/BLOCKED_V18_INFRASTRUCTURE_FAILURE"; exit 22; }
+  touch "${queue_root}/BLOCKED_V18_INFRASTRUCTURE_FAILURE" \
+    "${queue_root}/FAILED"; exit 22; }
 
 if [[ -e "${v18_queue}/ACCEPTED" ]]; then
   printf 'reason=v18_already_passed_unified_gate\nfinished=%s\n' \
@@ -57,7 +58,8 @@ if [[ -e "${v18_queue}/ACCEPTED" ]]; then
   exit 0
 fi
 [[ -e "${v18_queue}/REJECTED" ]] || {
-  touch "${queue_root}/BLOCKED_V18_TERMINAL_WITHOUT_DECISION"; exit 23; }
+  touch "${queue_root}/BLOCKED_V18_TERMINAL_WITHOUT_DECISION" \
+    "${queue_root}/FAILED"; exit 23; }
 
 verify_bootstrap
 echo "launching_sparse_context_repair_direct_after_v18_rejection"

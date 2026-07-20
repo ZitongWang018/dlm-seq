@@ -26,6 +26,7 @@ class StrictUnifiedOfflineProtocolTests(unittest.TestCase):
         self.assertIn("HF_EVALUATE_OFFLINE=1", controller)
         repair_wait = 'waiting_for_repair_chain_terminal=${v19_queue}'
         self.assertIn(repair_wait, controller)
+        self.assertIn('"${queue_root}/FAILED"; exit 23', controller)
         self.assertLess(controller.index(repair_wait), controller.index(v19_check))
         self.assertLess(controller.index(v19_check), controller.index(v18_check))
         self.assertLess(controller.index(v18_check), controller.index(v20_check))
