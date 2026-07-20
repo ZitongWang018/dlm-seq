@@ -120,9 +120,10 @@ verify
 /root/miniconda3/bin/python -m py_compile generate.py eval_llada.py \
   differential_selector.py compare_paired_task_runs.py audit_mbpp_assertions.py
 bash -n "${runner}" "${controller}"
-run_stage source_tests env PYTHONPATH="${llada_root}" \
-  /root/miniconda3/bin/python -m unittest \
-  tests/test_attention_stability.py tests/test_differential_selector.py
+run_stage selector_tests env PYTHONPATH="${llada_root}" \
+  /root/miniconda3/bin/python tests/test_attention_stability.py
+run_stage differential_selector_tests env PYTHONPATH="${llada_root}" \
+  /root/miniconda3/bin/python tests/test_differential_selector.py
 run_stage queue_contract /root/miniconda3/bin/python \
   test_localized_repair_queue_contract.py
 run_stage slice_contract /root/miniconda3/bin/python \
