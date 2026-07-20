@@ -43,6 +43,7 @@ source /root/miniconda3/etc/profile.d/conda.sh
 conda activate base
 export HF_HOME=/root/autodl-tmp/.cache/huggingface
 export HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export HF_EVALUATE_OFFLINE=1
 export HF_ALLOW_CODE_EVAL=1 HF_DATASETS_TRUST_REMOTE_CODE=true
 unset HF_ENDPOINT TRANSFORMERS_CACHE || true
 

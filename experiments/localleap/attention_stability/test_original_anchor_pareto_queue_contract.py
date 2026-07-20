@@ -29,6 +29,7 @@ def main():
 
     for required in (
         "TRANSFORMERS_OFFLINE=1",
+        "HF_EVALUATE_OFFLINE=1",
         "waiting_for_direct_v19_terminal",
         "he_anchor_baseline_dev32",
         "he_anchor_pareto_dev32",
