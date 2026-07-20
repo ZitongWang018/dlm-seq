@@ -21,7 +21,7 @@ runner=${llada_root}/scripts/run_best_symmetric_benchmark.sh
 pairer=${llada_root}/compare_paired_task_runs.py
 leakage=${llada_root}/audit_generation_leakage_v2.py
 mbpp_auditor=${llada_root}/audit_mbpp_assertions.py
-slicer=${llada_root}/slice_audit_records.py
+slicer=${llada_root}/slice_audit_by_index.py
 preregistration=${llada_root}/original_anchor_pareto_preregistration_20260720_v1.json
 manifest=${queue_root}/formal_manifest.tsv
 frozen=${queue_root}/frozen_sources.sha256
@@ -107,10 +107,11 @@ compare_pair() {
 if [[ ! -s "${frozen}" ]]; then
   ( cd "${llada_root}" && sha256sum \
       generate.py eval_llada.py differential_selector.py compare_paired_task_runs.py \
-      audit_generation_leakage_v2.py audit_mbpp_assertions.py slice_audit_records.py \
+      audit_generation_leakage_v2.py audit_mbpp_assertions.py slice_audit_by_index.py \
       scripts/run_best_symmetric_benchmark.sh \
       scripts/run_original_anchor_pareto_after_repairs.sh \
       tests/test_attention_stability.py test_original_anchor_pareto_queue_contract.py \
+      test_slice_audit_by_index.py \
       original_anchor_pareto_preregistration_20260720_v1.json ) >"${frozen}"
 fi
 verify
@@ -120,23 +121,30 @@ run_stage selector_tests env PYTHONPATH="${llada_root}" /root/miniconda3/bin/pyt
   "${llada_root}/tests/test_attention_stability.py"
 run_stage queue_contract env PYTHONPATH="${llada_root}" /root/miniconda3/bin/python \
   "${llada_root}/test_original_anchor_pareto_queue_contract.py"
+run_stage slice_contract env PYTHONPATH="${llada_root}" /root/miniconda3/bin/python \
+  "${llada_root}/test_slice_audit_by_index.py"
 run_stage shell_contract bash -n "${controller}" "${runner}"
 run_stage preregistration /root/miniconda3/bin/python -m json.tool "${preregistration}"
 run_stage leakage_static /root/miniconda3/bin/python "${leakage}" \
   --source-root "${llada_root}" --output "${queue_root}/leakage/static.json"
 
-echo "waiting_for_direct_v19_terminal=${v19_queue}"
-wait_terminal "${v19_queue}"
-[[ -e "${v19_queue}/DONE" && ! -e "${v19_queue}/FAILED" ]] || {
-  touch "${queue_root}/BLOCKED_REPAIR_PIPELINE_FAILURE"; exit 22; }
-if [[ -e "${v19_queue}/ACCEPTED" || -e "${v18_queue}/ACCEPTED" ]]; then
-  printf 'reason=an_existing_preregistered_unified_candidate_passed\nfinished=%s\n' \
-    "$(date --iso-8601=seconds)" >"${queue_root}/SKIPPED_EXISTING_CANDIDATE"
-  touch "${queue_root}/DONE"
-  exit 0
+if [[ "${BYPASS_REPAIR_WAIT:-false}" == true ]]; then
+  printf 'reason=user_prioritized_highest_expected_unified_performance\nstarted=%s\n' \
+    "$(date --iso-8601=seconds)" >"${queue_root}/DIRECT_USER_PRIORITY_START"
+else
+  echo "waiting_for_direct_v19_terminal=${v19_queue}"
+  wait_terminal "${v19_queue}"
+  [[ -e "${v19_queue}/DONE" && ! -e "${v19_queue}/FAILED" ]] || {
+    touch "${queue_root}/BLOCKED_REPAIR_PIPELINE_FAILURE"; exit 22; }
+  if [[ -e "${v19_queue}/ACCEPTED" || -e "${v18_queue}/ACCEPTED" ]]; then
+    printf 'reason=an_existing_preregistered_unified_candidate_passed\nfinished=%s\n' \
+      "$(date --iso-8601=seconds)" >"${queue_root}/SKIPPED_EXISTING_CANDIDATE"
+    touch "${queue_root}/DONE"
+    exit 0
+  fi
+  [[ -e "${v19_queue}/REJECTED" && -e "${v18_queue}/REJECTED" ]] || {
+    touch "${queue_root}/BLOCKED_REPAIR_PIPELINE_NO_DECISION"; exit 23; }
 fi
-[[ -e "${v19_queue}/REJECTED" && -e "${v18_queue}/REJECTED" ]] || {
-  touch "${queue_root}/BLOCKED_REPAIR_PIPELINE_NO_DECISION"; exit 23; }
 
 mkdir -p "${queue_root}/parents" "${queue_root}/paired" "${queue_root}/leakage"
 math_parent=${parent_runs}/localleap_math500/math_baseline_full500
