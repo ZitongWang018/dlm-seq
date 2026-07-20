@@ -16,6 +16,7 @@ def main():
     assert controller.count("slice_audit_by_index.py") >= 4
     assert "slice_audit_records.py" not in controller
     assert "test_slice_audit_by_index.py" in controller
+    assert "run_stage source_tests" in controller
     assert "HF_DATASETS_OFFLINE=1" in controller
     assert "HF_HUB_OFFLINE=1" in controller
     assert "TRANSFORMERS_OFFLINE=1" in controller
